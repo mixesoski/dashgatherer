@@ -4,6 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -63,12 +70,27 @@ const Index = () => {
             <div className="space-y-4">
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
               <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-              <Button 
-                onClick={handleDeleteCredentials}
-                variant="destructive"
-              >
-                Remove Garmin Connection
-              </Button>
+              <div className="flex justify-center gap-4">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" className="gap-2">
+                        <RefreshCw className="h-4 w-4" />
+                        Sync Garmin
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Coming Soon</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <Button 
+                  onClick={handleDeleteCredentials}
+                  variant="destructive"
+                >
+                  Remove Garmin Connection
+                </Button>
+              </div>
             </div>
           ) : (
             <>
