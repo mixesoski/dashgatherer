@@ -10,4 +10,15 @@ __pycache__/
 .Python
 env/
 venv/
-.venv/ 
+.venv/
+
+# Generated files
+trimp_chart.png
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+dist/ 
