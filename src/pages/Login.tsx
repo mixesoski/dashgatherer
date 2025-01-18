@@ -8,12 +8,15 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user is already logged in
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
         navigate("/");
       }
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   return (
