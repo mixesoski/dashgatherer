@@ -1,69 +1,46 @@
-# Welcome to your Lovable project
+# Garmin TRIMP Data Fetcher
 
-## Project info
+Simple Python script to fetch Training Impulse (TRIMP) values from Garmin Connect activities for the last 9 days.
 
-**URL**: https://lovable.dev/projects/b517f268-2dee-41b5-963d-5ba7555908cb
+## Setup
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/b517f268-2dee-41b5-963d-5ba7555908cb) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+1. Create a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-**Edit a file directly in GitHub**
+2. Install requirements:
+```bash
+pip install -r requirements.txt
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3. Create `.env` file with your Garmin credentials:
+```
+GARMIN_EMAIL=your.email@example.com
+GARMIN_PASSWORD=your_password
+```
 
-**Use GitHub Codespaces**
+## Usage
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Run the script:
+```bash
+python garmin_trimp.py
+```
 
-## What technologies are used for this project?
+The script will:
+- Connect to Garmin Connect using your credentials
+- Fetch activities from the last 9 days
+- Extract TRIMP values from each activity
+- Display activity details including:
+  - Activity name
+  - Date and time
+  - Activity type
+  - TRIMP value
+- Double TRIMP values for strength training activities
 
-This project is built with .
+## Notes
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/b517f268-2dee-41b5-963d-5ba7555908cb) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+- Requires Garmin Connect account with TRIMP data available
+- TRIMP values are typically available for activities recorded with compatible Garmin devices
+- Uses garminconnect library to access Garmin Connect API

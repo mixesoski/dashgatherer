@@ -1,4 +1,6 @@
 garminconnect>=0.1.49
 python-dotenv
+supabase>=2.0.0
 pandas
-matplotlib 
+matplotlib
+requests 
