@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "@/integrations/supabase/client"
 
 const formSchema = z.object({
-  username: z.string().min(1, "Username is required"),
+  email: z.string().min(1, "Email is required").email("Invalid email format"),
   password: z.string().min(1, "Password is required"),
 })
 
@@ -29,7 +29,7 @@ export function GarminCredentialsForm() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      username: "",
+      email: "",
       password: "",
     },
   })
@@ -47,7 +47,7 @@ export function GarminCredentialsForm() {
         .from('garmin_credentials')
         .upsert({ 
           user_id: user.id,
-          username: values.username,
+          email: values.email,
           password: values.password
         })
 
@@ -71,12 +71,16 @@ export function GarminCredentialsForm() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
               control={form.control}
-              name="username"
+              name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Garmin Username</FormLabel>
+                  <FormLabel>Garmin Email</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter your Garmin username" {...field} />
+                    <Input 
+                      type="email"
+                      placeholder="Enter your Garmin email" 
+                      {...field} 
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
