@@ -14,9 +14,9 @@ const Index = () => {
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 means no rows returned
+      if (error) {
         throw error;
       }
 
