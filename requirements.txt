@@ -1,0 +1,4 @@
+garminconnect>=0.1.49
+python-dotenv
+pandas
+matplotlib 
