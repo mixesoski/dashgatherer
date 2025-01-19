@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
+import { subMonths, startOfDay } from 'date-fns';
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -20,6 +23,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
+  const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 1));
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
@@ -89,8 +93,8 @@ const Index = () => {
   };
 
   const handleSync = async () => {
-    if (!userId) {
-      toast.error('No user logged in');
+    if (!userId || !startDate) {
+      toast.error('No user logged in or start date not selected');
       return;
     }
 
@@ -100,6 +104,7 @@ const Index = () => {
       const { data: { user } } = await supabase.auth.getUser();
       console.log('Current user:', user);
       console.log('Using userId:', userId);
+      console.log('Start date:', startDate);
       
       if (!user || user.id !== userId) {
         toast.error('User authentication error', { id: toastId });
@@ -111,7 +116,10 @@ const Index = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId: user.id })
+        body: JSON.stringify({ 
+          userId: user.id,
+          startDate: startDate.toISOString()
+        })
       });
 
       console.log('Raw response:', response);
@@ -151,7 +159,7 @@ const Index = () => {
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
               <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
               {showButtons && (
-                <div className="flex justify-center gap-4">
+                <div className="flex justify-center gap-4 items-center">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -165,6 +173,19 @@ const Index = () => {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-500">Start from:</span>
+                    <DatePicker
+                      selected={startDate}
+                      onChange={(date: Date) => setStartDate(startOfDay(date))}
+                      maxDate={new Date()}
+                      minDate={subMonths(new Date(), 4)}
+                      className="px-3 py-2 border rounded-md text-sm"
+                      dateFormat="yyyy-MM-dd"
+                      placeholderText="Select start date"
+                    />
+                  </div>
                 </div>
               )}
               {garminData && garminData.length > 0 && (

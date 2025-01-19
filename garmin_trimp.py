@@ -43,9 +43,10 @@ def get_garmin_credentials(user_id):
     credentials = response.data[0]
     return credentials['email'], credentials['password']
 
-def get_trimp_values(api, user_id):
+def get_trimp_values(api, user_id, start_date=None):
     try:
         print(f"\nStarting get_trimp_values for user_id: {user_id}")
+        print(f"Start date: {start_date}")
         print(f"Supabase URL: {SUPABASE_URL}")
         print(f"Supabase key starts with: {SUPABASE_KEY[:10]}...")
         
@@ -77,9 +78,14 @@ def get_trimp_values(api, user_id):
             print(f"Full error details: {traceback.format_exc()}")
             raise
 
-        # Get dates for last 9 days
+        # Get dates range
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=9)
+        if start_date:
+            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        else:
+            start_date = end_date - timedelta(days=9)
+        
+        print(f"\nFetching activities from {start_date.date()} to {end_date.date()}")
         
         # Create a dictionary to store daily activities and TRIMP values
         daily_data = {}
@@ -94,8 +100,6 @@ def get_trimp_values(api, user_id):
                 'activities': []
             }
             current_date += timedelta(days=1)
-        
-        print(f"\nFetching activities from {start_date.date()} to {end_date.date()}")
         
         # Get activities
         activities = api.get_activities_by_date(
@@ -240,7 +244,7 @@ def list_available_users():
     except Exception as e:
         print(f"Error fetching users: {str(e)}")
 
-def main(user_id=None):
+def main(user_id=None, start_date=None):
     try:
         if user_id:
             print(f"\nProcessing data for user ID: {user_id}")
@@ -273,7 +277,7 @@ def main(user_id=None):
                 raise
         
         # Get TRIMP data and save to Supabase
-        df = get_trimp_values(client, user_id)
+        df = get_trimp_values(client, user_id, start_date)
         
         if len(df) == 0:
             print("No activities found!")
@@ -324,4 +328,5 @@ def main(user_id=None):
 if __name__ == "__main__":
     import sys
     user_id = sys.argv[1] if len(sys.argv) > 1 else None
-    main(user_id) 
+    start_date = sys.argv[2] if len(sys.argv) > 2 else None
+    main(user_id, start_date) 

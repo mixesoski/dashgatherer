@@ -13,16 +13,17 @@ def sync_garmin():
         print(f"Request headers: {dict(request.headers)}")
         print(f"Request body: {request.get_data(as_text=True)}")
         
-        data = request.json
+        data = request.get_json()
         user_id = data.get('userId')
+        start_date = data.get('startDate')
         
         print(f"Extracted user_id: {user_id}")
         
         if not user_id:
             print("No user_id provided")
-            return jsonify({'error': 'No user ID provided'}), 400
+            return jsonify({'success': False, 'error': 'No user ID provided'})
         
-        result = garmin_main(user_id)
+        result = garmin_main(user_id, start_date)
         print(f"Processing result: {result}")
         
         return jsonify(result)
