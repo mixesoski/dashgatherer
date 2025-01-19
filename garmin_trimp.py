@@ -122,7 +122,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 .eq('user_id', user_id)\
                 .gte('date', start_date.isoformat())\
                 .lte('date', end_date.isoformat())\
-                .order('date')\
+                .order('date', { ascending: True })\
                 .execute()
 
             print(f"\nFound {len(existing_response.data)} records in Supabase")
@@ -138,7 +138,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                     .select('*')\
                     .eq('user_id', user_id)\
                     .lt('date', start_date.isoformat())\
-                    .order('date', {'ascending': False})\
+                    .order('date', { ascending: False })\
                     .limit(1)\
                     .execute()
 
