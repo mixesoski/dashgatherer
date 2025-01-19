@@ -37,9 +37,14 @@ interface Props {
 }
 
 export const GarminChart = ({ data, email }: Props) => {
+  console.log('GarminChart data:', data); // Debug log
+  
   const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  console.log('Sorted data:', sortedData); // Debug log
   
   const latestData = sortedData[sortedData.length - 1];
+  console.log('Latest data:', latestData); // Debug log
+  
   const status = latestData.tsb < 0 ? 'Zmęczenie' : 'Wypoczęty';
   
   const chartData = {
