@@ -12,12 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useEffect, useState } from 'react';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -141,16 +136,6 @@ const Index = () => {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
-  const chartConfig = {
-    trimp: {
-      label: "TRIMP",
-      theme: {
-        light: "#0ea5e9",
-        dark: "#38bdf8",
-      },
-    },
-  };
-
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -192,25 +177,24 @@ const Index = () => {
                 <div className="mt-8">
                   <h2 className="text-2xl font-semibold mb-4">Your TRIMP Data</h2>
                   <div className="w-full h-[400px] bg-white rounded-lg shadow p-4">
-                    <ChartContainer config={chartConfig}>
-                      <LineChart data={garminData}>
-                        <XAxis 
-                          dataKey="date" 
-                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                        />
-                        <YAxis />
-                        <ChartTooltip>
-                          <ChartTooltipContent />
-                        </ChartTooltip>
-                        <Line 
-                          type="monotone" 
-                          dataKey="trimp" 
-                          stroke="var(--color-trimp)" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ChartContainer>
+                    <LineChart width={800} height={300} data={garminData}>
+                      <XAxis 
+                        dataKey="date" 
+                        tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                      />
+                      <YAxis />
+                      <RechartsTooltip 
+                        labelFormatter={(value) => new Date(value).toLocaleDateString()}
+                        formatter={(value: number) => [`${value}`, 'TRIMP']}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="trimp" 
+                        stroke="#0ea5e9" 
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </LineChart>
                   </div>
                 </div>
               )}
