@@ -11,6 +11,8 @@ import {
   Filler,
   InteractionMode
 } from 'chart.js';
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -35,9 +37,11 @@ interface GarminData {
 interface Props {
   data: GarminData[];
   email: string;
+  onUpdate: () => Promise<void>;
+  isUpdating?: boolean;
 }
 
-export const GarminChart = ({ data, email }: Props) => {
+export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   console.log('GarminChart data:', data);
   
   const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -149,9 +153,21 @@ export const GarminChart = ({ data, email }: Props) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col space-y-2">
-        <h2 className="text-2xl font-bold">{email}</h2>
-        <p className="text-gray-600">Training load balance over time</p>
+      <div className="flex justify-between items-center">
+        <div className="flex flex-col">
+          <h2 className="text-2xl font-bold">{email}</h2>
+          <p className="text-gray-600">Training load balance over time</p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={onUpdate}
+          disabled={isUpdating}
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${isUpdating ? 'animate-spin' : ''}`} />
+          Update Chart
+        </Button>
       </div>
       
       <div className="relative">

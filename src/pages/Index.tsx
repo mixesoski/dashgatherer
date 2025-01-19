@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
-import { subMonths, startOfDay } from 'date-fns';
+import { subMonths, startOfDay, subDays } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 
 // Get the API URL from environment variable or fallback to localhost for development
@@ -24,6 +24,7 @@ const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
@@ -141,6 +142,48 @@ const Index = () => {
     }
   };
 
+  const handleUpdate = async () => {
+    if (!userId) return;
+    
+    try {
+      setIsUpdating(true);
+      const toastId = toast.loading('Checking for new activities...');
+      
+      // Get last 9 days
+      const startDate = subDays(new Date(), 9);
+      
+      const response = await fetch(`${API_URL}/api/sync-garmin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          userId,
+          startDate: startDate.toISOString(),
+          updateOnly: true // New flag to indicate update mode
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        if (data.newActivities > 0) {
+          toast.success(`Added ${data.newActivities} new activities!`, { id: toastId });
+          await refetchGarminData();
+        } else {
+          toast.success('No new activities found', { id: toastId });
+        }
+      } else {
+        toast.error(data.error || 'Update failed', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error updating:', error);
+      toast.error('Error updating data');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
@@ -197,7 +240,9 @@ const Index = () => {
               {garminData && garminData.length > 0 && (
                 <GarminChart 
                   data={garminData} 
-                  email={garminCredentials.email} 
+                  email={garminCredentials.email}
+                  onUpdate={handleUpdate}
+                  isUpdating={isUpdating}
                 />
               )}
             </div>
