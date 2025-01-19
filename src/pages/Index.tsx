@@ -46,7 +46,7 @@ const Index = () => {
         .from('garmin_data')
         .select('*')
         .eq('user_id', userId)
-        .limit(1);
+        .order('date', { ascending: true });
 
       if (error) {
         throw error;

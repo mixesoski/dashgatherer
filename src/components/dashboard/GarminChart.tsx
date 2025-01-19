@@ -14,13 +14,16 @@ interface GarminChartProps {
 }
 
 export const GarminChart = ({ data }: GarminChartProps) => {
+  // Sort data by date to ensure proper chronological order
+  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return (
     <div className="mt-8">
       <h2 className="text-2xl font-semibold mb-4">Your TRIMP Data</h2>
       <div className="w-full h-[500px] bg-white rounded-lg shadow p-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={data}
+            data={sortedData}
             margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
           >
             <defs>
@@ -77,7 +80,7 @@ export const GarminChart = ({ data }: GarminChartProps) => {
               dataKey="trimp"
               stroke="#0ea5e9"
               strokeWidth={2}
-              dot={false}
+              dot={{ r: 4, fill: "#0ea5e9", stroke: "white", strokeWidth: 2 }}
               activeDot={{ r: 6, fill: "#0ea5e9", stroke: "white", strokeWidth: 2 }}
             />
           </LineChart>
