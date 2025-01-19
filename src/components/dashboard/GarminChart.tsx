@@ -7,7 +7,8 @@ import {
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 } from 'chart.js';
 
 ChartJS.register(
@@ -17,7 +18,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 interface GarminData {
@@ -40,52 +42,93 @@ export const GarminChart = ({ data }: Props) => {
     labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
       {
-        label: 'TRIMP',
-        data: sortedData.map(d => d.trimp),
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
-      },
-      {
-        label: 'Fatigue (ATL)',
+        label: 'Acute Load (ATL)',
         data: sortedData.map(d => d.atl),
-        borderColor: 'rgb(255, 99, 132)',
-        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+        borderColor: 'rgb(59, 130, 246)', // Blue
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        fill: true,
+        tension: 0.4,
       },
       {
-        label: 'Fitness (CTL)',
-        data: sortedData.map(d => d.ctl),
-        borderColor: 'rgb(54, 162, 235)',
-        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-      },
-      {
-        label: 'Form (TSB)',
+        label: 'Stress Balance (TSB)',
         data: sortedData.map(d => d.tsb),
-        borderColor: 'rgb(75, 192, 75)',
-        backgroundColor: 'rgba(75, 192, 75, 0.5)',
+        borderColor: 'rgb(239, 68, 68)', // Red
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: 'Chronic Load (CTL)',
+        data: sortedData.map(d => d.ctl),
+        borderColor: 'rgb(234, 179, 8)', // Yellow
+        backgroundColor: 'rgba(234, 179, 8, 0.1)',
+        fill: true,
+        tension: 0.4,
       }
     ]
   };
 
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: 'bottom' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 20,
+        },
       },
       title: {
         display: true,
-        text: 'Training Metrics',
+        text: 'Training load balance over time',
+        align: 'start' as const,
+        padding: {
+          bottom: 30
+        },
+        font: {
+          size: 16,
+          weight: 'normal' as const
+        }
       },
     },
     scales: {
+      x: {
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)'
+        },
+        ticks: {
+          maxRotation: 45,
+          minRotation: 45
+        }
+      },
       y: {
-        beginAtZero: true
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.05)'
+        },
+        ticks: {
+          callback: (value: number) => Math.round(value * 10) / 10
+        }
       }
+    },
+    elements: {
+      point: {
+        radius: 0
+      },
+      line: {
+        borderWidth: 2
+      }
+    },
+    interaction: {
+      intersect: false,
+      mode: 'index'
     }
   };
 
   return (
-    <div className="w-full h-96">
+    <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
       <Line data={chartData} options={options} />
     </div>
   );
