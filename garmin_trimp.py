@@ -78,10 +78,12 @@ def get_trimp_values(api, user_id, start_date=None):
             print(f"Full error details: {traceback.format_exc()}")
             raise
 
-        # Get dates range
-        end_date = datetime.now()
+        # Get dates range and ensure they're timezone-naive
+        end_date = datetime.now().replace(tzinfo=None)
         if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            # Convert to datetime and remove timezone info
+            start_date = datetime.fromisoformat(start_date.replace('Z', ''))
+            start_date = start_date.replace(tzinfo=None)
         else:
             start_date = end_date - timedelta(days=9)
         
@@ -95,7 +97,7 @@ def get_trimp_values(api, user_id, start_date=None):
         while current_date <= end_date:
             date_str = current_date.strftime("%Y-%m-%d")
             daily_data[date_str] = {
-                'date': current_date.replace(hour=12),  # Set to noon to avoid timezone issues
+                'date': current_date.replace(hour=12, tzinfo=None),  # Set to noon and remove timezone
                 'trimp': 0,
                 'activities': []
             }
