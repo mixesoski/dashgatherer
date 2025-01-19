@@ -177,8 +177,8 @@ def get_trimp_values(api, user_id):
                 (daily_data[current_date]['trimp'] - daily_data[prev_date]['ctl']) / 42
             )
             
-            # TSB = CTL - ATL
-            daily_data[current_date]['tsb'] = daily_data[current_date]['ctl'] - daily_data[current_date]['atl']
+            # TSB = previous_CTL - previous_ATL
+            daily_data[current_date]['tsb'] = daily_data[prev_date]['ctl'] - daily_data[prev_date]['atl']
         
         # Save daily data to Supabase
         data = []
