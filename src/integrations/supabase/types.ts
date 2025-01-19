@@ -36,6 +36,33 @@ export type Database = {
         }
         Relationships: []
       }
+      garmin_data: {
+        Row: {
+          activity: string | null
+          created_at: string
+          date: string | null
+          id: number
+          trimp: number | null
+          user_id: string | null
+        }
+        Insert: {
+          activity?: string | null
+          created_at?: string
+          date?: string | null
+          id?: number
+          trimp?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          activity?: string | null
+          created_at?: string
+          date?: string | null
+          id?: number
+          trimp?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
