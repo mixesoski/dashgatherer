@@ -111,7 +111,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
         print(f"Found {len(activities)} activities")
         
         if update_only:
-            # Get existing activities from Supabase for the date range
+            # Get existing data from last 9 days
             existing_response = supabase.table('garmin_data')\
                 .select('*')\
                 .eq('user_id', user_id)\
@@ -119,7 +119,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                 .lte('date', end_date.isoformat())\
                 .order('date')\
                 .execute()
-            
+
             if existing_response.data:
                 # Get the day before start_date for initial metrics
                 prev_day_response = supabase.table('garmin_data')\
@@ -129,25 +129,63 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                     .order('date', {'ascending': False})\
                     .limit(1)\
                     .execute()
-                
+
+                # Initialize daily_data with existing activities
+                for record in existing_response.data:
+                    date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
+                    daily_data[date_str]['trimp'] = record['trimp']
+                    daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
+
+                # Set initial metrics from previous day
                 if prev_day_response.data:
                     prev_metrics = prev_day_response.data[0]
                     first_date = sorted(daily_data.keys())[0]
-                    # Initialize metrics with previous day's values
                     daily_data[first_date]['atl'] = prev_metrics['atl']
                     daily_data[first_date]['ctl'] = prev_metrics['ctl']
                     daily_data[first_date]['tsb'] = prev_metrics['tsb']
                 
-                # Delete and recalculate all data in the date range
-                supabase.table('garmin_data')\
-                    .delete()\
-                    .eq('user_id', user_id)\
-                    .gte('date', start_date.isoformat())\
-                    .lte('date', end_date.isoformat())\
-                    .execute()
-                
-                print(f"Recalculating metrics for date range: {start_date.date()} to {end_date.date()}")
-                return pd.DataFrame(existing_response.data)
+                # Recalculate metrics for all days
+                sorted_dates = sorted(daily_data.keys())
+                for i in range(1, len(sorted_dates)):
+                    current_date = sorted_dates[i]
+                    prev_date = sorted_dates[i-1]
+                    
+                    # ATL calculation
+                    daily_data[current_date]['atl'] = (
+                        daily_data[prev_date]['atl'] + 
+                        (daily_data[current_date]['trimp'] - daily_data[prev_date]['atl']) / 7
+                    )
+                    
+                    # CTL calculation
+                    daily_data[current_date]['ctl'] = (
+                        daily_data[prev_date]['ctl'] + 
+                        (daily_data[current_date]['trimp'] - daily_data[prev_date]['ctl']) / 42
+                    )
+                    
+                    # TSB calculation
+                    daily_data[current_date]['tsb'] = daily_data[prev_date]['ctl'] - daily_data[prev_date]['atl']
+
+                # Update records in Supabase
+                for date_str, day_data in daily_data.items():
+                    activity_data = {
+                        'user_id': user_id,
+                        'date': day_data['date'].isoformat(),
+                        'trimp': float(day_data['trimp']),
+                        'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day',
+                        'atl': round(float(day_data['atl']), 1),
+                        'ctl': round(float(day_data['ctl']), 1),
+                        'tsb': round(float(day_data['tsb']), 1)
+                    }
+                    
+                    # Update existing record
+                    supabase.table('garmin_data')\
+                        .update(activity_data)\
+                        .eq('user_id', user_id)\
+                        .eq('date', day_data['date'].isoformat())\
+                        .execute()
+                    
+                print(f"Recalculated and updated metrics for date range: {start_date.date()} to {end_date.date()}")
+                return pd.DataFrame(list(daily_data.values()))
             else:
                 print("No data found in date range")
                 return pd.DataFrame()
