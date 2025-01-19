@@ -8,7 +8,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  InteractionMode
 } from 'chart.js';
 
 ChartJS.register(
@@ -142,7 +143,7 @@ export const GarminChart = ({ data, email }: Props) => {
     },
     interaction: {
       intersect: false,
-      mode: 'index'
+      mode: 'index' as InteractionMode
     }
   };
 
