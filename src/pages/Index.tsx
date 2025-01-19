@@ -1,46 +1,27 @@
-import { Button } from "@/components/ui/button";
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { MoreVertical, RefreshCw, User, KeyRound, Settings } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuLabel,
-  ContextMenuGroup,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { Button } from "@/components/ui/button";
 import { useEffect, useState } from 'react';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  Tooltip as RechartsTooltip, 
-  CartesianGrid,
-  Area,
-  ResponsiveContainer
-} from "recharts";
+import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
+import { GarminChart } from "@/components/dashboard/GarminChart";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 const Index = () => {
-  const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
 
-  const { data: garminCredentials, isLoading } = useQuery({
+  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -73,7 +54,6 @@ const Index = () => {
   });
 
   useEffect(() => {
-    // Get current user's ID when component mounts
     const getCurrentUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -82,11 +62,6 @@ const Index = () => {
     };
     getCurrentUser();
   }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/login");
-  };
 
   const handleDeleteCredentials = async () => {
     const { error } = await supabase
@@ -100,17 +75,7 @@ const Index = () => {
     }
 
     toast.success("Garmin credentials deleted successfully");
-    window.location.reload();
-  };
-
-  const handleChangePassword = () => {
-    toast.info("Password change functionality coming soon");
-    navigate("/settings/password");
-  };
-
-  const handleUpdateProfile = () => {
-    toast.info("Profile update functionality coming soon");
-    navigate("/settings/profile");
+    await refetchCredentials();
   };
 
   const handleSync = async () => {
@@ -122,7 +87,6 @@ const Index = () => {
     try {
       const toastId = toast.loading('Syncing Garmin data...');
       
-      // Get current user to verify
       const { data: { user } } = await supabase.auth.getUser();
       console.log('Current user:', user);
       console.log('Using userId:', userId);
@@ -166,47 +130,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-end mb-8 gap-2">
-          <ContextMenu>
-            <ContextMenuTrigger>
-              <Button variant="outline" size="icon" className="hover:bg-accent">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </ContextMenuTrigger>
-            <ContextMenuContent className="w-64">
-              <ContextMenuLabel className="font-semibold">Profile Settings</ContextMenuLabel>
-              <ContextMenuGroup>
-                <ContextMenuItem 
-                  onClick={handleUpdateProfile}
-                  className="flex items-center cursor-pointer"
-                >
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Update Profile</span>
-                </ContextMenuItem>
-                <ContextMenuItem 
-                  onClick={handleChangePassword}
-                  className="flex items-center cursor-pointer"
-                >
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  <span>Change Password</span>
-                </ContextMenuItem>
-              </ContextMenuGroup>
-              <ContextMenuSeparator />
-              <ContextMenuLabel className="font-semibold">Garmin Integration</ContextMenuLabel>
-              <ContextMenuGroup>
-                <ContextMenuItem
-                  className="text-destructive flex items-center cursor-pointer"
-                  onClick={handleDeleteCredentials}
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Remove Garmin Connection</span>
-                </ContextMenuItem>
-              </ContextMenuGroup>
-            </ContextMenuContent>
-          </ContextMenu>
-          <Button onClick={handleLogout} variant="outline">
-            Logout
-          </Button>
+        <div className="flex justify-end mb-8">
+          <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
         <div className="text-center mb-12">
@@ -233,79 +158,7 @@ const Index = () => {
                 </div>
               )}
               {garminData && garminData.length > 0 && (
-                <div className="mt-8">
-                  <h2 className="text-2xl font-semibold mb-4">Your TRIMP Data</h2>
-                  <div className="w-full h-[500px] bg-white rounded-lg shadow p-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={garminData}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                      >
-                        <defs>
-                          <linearGradient id="trimpareacolor" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.1}/>
-                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid 
-                          strokeDasharray="3 3" 
-                          vertical={false} 
-                          stroke="#f0f0f0"
-                        />
-                        <XAxis 
-                          dataKey="date" 
-                          tickFormatter={(value) => {
-                            const date = new Date(value);
-                            return date.toLocaleDateString('en-US', { 
-                              month: '2-digit', 
-                              day: '2-digit' 
-                            });
-                          }}
-                          stroke="#94a3b8"
-                          tick={{ fontSize: 12 }}
-                          axisLine={{ stroke: '#e2e8f0' }}
-                        />
-                        <YAxis 
-                          stroke="#94a3b8"
-                          tick={{ fontSize: 12 }}
-                          axisLine={{ stroke: '#e2e8f0' }}
-                        />
-                        <RechartsTooltip
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px',
-                            padding: '8px'
-                          }}
-                          labelFormatter={(value) => {
-                            const date = new Date(value);
-                            return date.toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            });
-                          }}
-                          formatter={(value: number) => [`${value}`, 'TRIMP']}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="trimp"
-                          stroke="none"
-                          fillOpacity={1}
-                          fill="url(#trimpareacolor)"
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="trimp" 
-                          stroke="#0ea5e9"
-                          strokeWidth={2}
-                          dot={false}
-                          activeDot={{ r: 6, fill: "#0ea5e9", stroke: "white", strokeWidth: 2 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                <GarminChart data={garminData} />
               )}
             </div>
           ) : (
