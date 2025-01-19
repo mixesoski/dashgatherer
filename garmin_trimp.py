@@ -113,13 +113,14 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
         if update_only:
             # Get existing activities from Supabase for the date range
             existing_response = supabase.table('garmin_data')\
-                .select('date')\
+                .select('*')\
                 .eq('user_id', user_id)\
                 .gte('date', start_date.isoformat())\
                 .lte('date', end_date.isoformat())\
+                .order('date', {'ascending': True})\
                 .execute()
             
-            existing_dates = {datetime.fromisoformat(record['date']).strftime("%Y-%m-%d") 
+            existing_dates = {datetime.fromisoformat(record['date']).strftime("%Y-%m-%d"): record 
                             for record in existing_response.data}
             
             # Only process new activities
@@ -130,8 +131,40 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                 if date_str not in existing_dates:
                     new_activities.append(activity)
             
-            activities = new_activities
-            print(f"Found {len(activities)} new activities")
+            if new_activities:
+                # Get the date before the oldest new activity for initial metrics
+                oldest_new_date = min(datetime.strptime(act['startTimeLocal'], "%Y-%m-%d %H:%M:%S") 
+                                    for act in new_activities)
+                oldest_new_date_str = oldest_new_date.strftime("%Y-%m-%d")
+                
+                # Get previous day's metrics
+                prev_day_response = supabase.table('garmin_data')\
+                    .select('*')\
+                    .eq('user_id', user_id)\
+                    .lt('date', oldest_new_date.isoformat())\
+                    .order('date', {'ascending': False})\
+                    .limit(1)\
+                    .execute()
+                
+                if prev_day_response.data:
+                    prev_metrics = prev_day_response.data[0]
+                    # Initialize metrics with previous day's values
+                    daily_data[oldest_new_date_str]['atl'] = prev_metrics['atl']
+                    daily_data[oldest_new_date_str]['ctl'] = prev_metrics['ctl']
+                    daily_data[oldest_new_date_str]['tsb'] = prev_metrics['tsb']
+                
+                # Delete existing data from the oldest new date onwards
+                supabase.table('garmin_data')\
+                    .delete()\
+                    .eq('user_id', user_id)\
+                    .gte('date', oldest_new_date.isoformat())\
+                    .execute()
+                
+                activities = new_activities
+                print(f"Found {len(activities)} new activities")
+            else:
+                print("No new activities found")
+                return pd.DataFrame()
         
         # Process each activity
         for activity in activities:
@@ -225,8 +258,27 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
             print(f"Saving data for {date_str}: {activity_data}")
             
             try:
-                response = supabase.table('garmin_data').insert(activity_data).execute()
-                print(f"Saved to Supabase: {date_str}")
+                # Sprawdź czy data już istnieje
+                existing = supabase.table('garmin_data')\
+                    .select('id')\
+                    .eq('user_id', user_id)\
+                    .eq('date', day_data['date'].isoformat())\
+                    .execute()
+
+                if existing.data:
+                    # Jeśli istnieje, zaktualizuj
+                    response = supabase.table('garmin_data')\
+                        .update(activity_data)\
+                        .eq('id', existing.data[0]['id'])\
+                        .execute()
+                    print(f"Updated existing record for: {date_str}")
+                else:
+                    # Jeśli nie istnieje, dodaj nowy
+                    response = supabase.table('garmin_data')\
+                        .insert(activity_data)\
+                        .execute()
+                    print(f"Inserted new record for: {date_str}")
+                
                 data.append(activity_data)
             except Exception as e:
                 print(f"Error saving to Supabase: {str(e)}")
