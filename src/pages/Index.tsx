@@ -4,13 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { MoreVertical, RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { useEffect, useState } from 'react';
 import { 
   LineChart, 
@@ -148,7 +154,22 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-end mb-8">
+        <div className="flex justify-end mb-8 gap-2">
+          <ContextMenu>
+            <ContextMenuTrigger>
+              <Button variant="outline" size="icon">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem
+                className="text-destructive"
+                onClick={handleDeleteCredentials}
+              >
+                Remove Garmin Connection
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
           <Button onClick={handleLogout} variant="outline">
             Logout
           </Button>
@@ -174,12 +195,6 @@ const Index = () => {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                  <Button 
-                    onClick={handleDeleteCredentials}
-                    variant="destructive"
-                  >
-                    Remove Garmin Connection
-                  </Button>
                 </div>
               )}
               {garminData && garminData.length > 0 && (
