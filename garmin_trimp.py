@@ -117,53 +117,39 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                 .eq('user_id', user_id)\
                 .gte('date', start_date.isoformat())\
                 .lte('date', end_date.isoformat())\
-                .order('date', {'ascending': True})\
+                .order('date')\
                 .execute()
             
-            existing_dates = {datetime.fromisoformat(record['date']).strftime("%Y-%m-%d"): record 
-                            for record in existing_response.data}
-            
-            # Only process new activities
-            new_activities = []
-            for activity in activities:
-                date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
-                date_str = date.strftime("%Y-%m-%d")
-                if date_str not in existing_dates:
-                    new_activities.append(activity)
-            
-            if new_activities:
-                # Get the date before the oldest new activity for initial metrics
-                oldest_new_date = min(datetime.strptime(act['startTimeLocal'], "%Y-%m-%d %H:%M:%S") 
-                                    for act in new_activities)
-                oldest_new_date_str = oldest_new_date.strftime("%Y-%m-%d")
-                
-                # Get previous day's metrics
+            if existing_response.data:
+                # Get the day before start_date for initial metrics
                 prev_day_response = supabase.table('garmin_data')\
                     .select('*')\
                     .eq('user_id', user_id)\
-                    .lt('date', oldest_new_date.isoformat())\
+                    .lt('date', start_date.isoformat())\
                     .order('date', {'ascending': False})\
                     .limit(1)\
                     .execute()
                 
                 if prev_day_response.data:
                     prev_metrics = prev_day_response.data[0]
+                    first_date = sorted(daily_data.keys())[0]
                     # Initialize metrics with previous day's values
-                    daily_data[oldest_new_date_str]['atl'] = prev_metrics['atl']
-                    daily_data[oldest_new_date_str]['ctl'] = prev_metrics['ctl']
-                    daily_data[oldest_new_date_str]['tsb'] = prev_metrics['tsb']
+                    daily_data[first_date]['atl'] = prev_metrics['atl']
+                    daily_data[first_date]['ctl'] = prev_metrics['ctl']
+                    daily_data[first_date]['tsb'] = prev_metrics['tsb']
                 
-                # Delete existing data from the oldest new date onwards
+                # Delete and recalculate all data in the date range
                 supabase.table('garmin_data')\
                     .delete()\
                     .eq('user_id', user_id)\
-                    .gte('date', oldest_new_date.isoformat())\
+                    .gte('date', start_date.isoformat())\
+                    .lte('date', end_date.isoformat())\
                     .execute()
                 
-                activities = new_activities
-                print(f"Found {len(activities)} new activities")
+                print(f"Recalculating metrics for date range: {start_date.date()} to {end_date.date()}")
+                return pd.DataFrame(existing_response.data)
             else:
-                print("No new activities found")
+                print("No data found in date range")
                 return pd.DataFrame()
         
         # Process each activity
