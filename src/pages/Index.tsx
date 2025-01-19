@@ -38,19 +38,23 @@ const Index = () => {
   });
 
   const { data: garminData, refetch: refetchGarminData } = useQuery({
-    queryKey: ['garminData'],
+    queryKey: ['garminData', userId],
     queryFn: async () => {
+      if (!userId) return null;
+      
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
-        .order('date', { ascending: true });
+        .eq('user_id', userId)
+        .limit(1);
 
       if (error) {
         throw error;
       }
 
       return data;
-    }
+    },
+    enabled: !!userId
   });
 
   useEffect(() => {
@@ -62,6 +66,12 @@ const Index = () => {
     };
     getCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (garminData && garminData.length > 0) {
+      setShowButtons(false);
+    }
+  }, [garminData]);
 
   const handleDeleteCredentials = async () => {
     const { error } = await supabase
