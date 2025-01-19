@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { MoreVertical, RefreshCw } from "lucide-react";
+import { MoreVertical, RefreshCw, User, KeyRound, Settings } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -104,13 +104,13 @@ const Index = () => {
   };
 
   const handleChangePassword = () => {
-    // This will be implemented in a future update
     toast.info("Password change functionality coming soon");
+    navigate("/settings/password");
   };
 
   const handleUpdateProfile = () => {
-    // This will be implemented in a future update
     toast.info("Profile update functionality coming soon");
+    navigate("/settings/profile");
   };
 
   const handleSync = async () => {
@@ -169,28 +169,37 @@ const Index = () => {
         <div className="flex justify-end mb-8 gap-2">
           <ContextMenu>
             <ContextMenuTrigger>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" className="hover:bg-accent">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-64">
-              <ContextMenuLabel>Profile Settings</ContextMenuLabel>
+              <ContextMenuLabel className="font-semibold">Profile Settings</ContextMenuLabel>
               <ContextMenuGroup>
-                <ContextMenuItem onClick={handleUpdateProfile}>
-                  Update Profile
+                <ContextMenuItem 
+                  onClick={handleUpdateProfile}
+                  className="flex items-center cursor-pointer"
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Update Profile</span>
                 </ContextMenuItem>
-                <ContextMenuItem onClick={handleChangePassword}>
-                  Change Password
+                <ContextMenuItem 
+                  onClick={handleChangePassword}
+                  className="flex items-center cursor-pointer"
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  <span>Change Password</span>
                 </ContextMenuItem>
               </ContextMenuGroup>
               <ContextMenuSeparator />
-              <ContextMenuLabel>Garmin Integration</ContextMenuLabel>
+              <ContextMenuLabel className="font-semibold">Garmin Integration</ContextMenuLabel>
               <ContextMenuGroup>
                 <ContextMenuItem
-                  className="text-destructive"
+                  className="text-destructive flex items-center cursor-pointer"
                   onClick={handleDeleteCredentials}
                 >
-                  Remove Garmin Connection
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Remove Garmin Connection</span>
                 </ContextMenuItem>
               </ContextMenuGroup>
             </ContextMenuContent>
@@ -199,6 +208,7 @@ const Index = () => {
             Logout
           </Button>
         </div>
+
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Welcome to Your Dashboard</h1>
           {garminCredentials ? (
