@@ -190,14 +190,6 @@ const Index = () => {
                           name: "offset",
                           options: {
                             offset: [0, 8]
-                          },
-                          fn: ({ state }) => {
-                            return {
-                              ...state,
-                              styles: {
-                                ...state.styles,
-                              }
-                            };
                           }
                         }
                       ]}
