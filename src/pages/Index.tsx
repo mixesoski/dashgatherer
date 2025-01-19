@@ -168,7 +168,10 @@ const Index = () => {
                 </div>
               )}
               {garminData && garminData.length > 0 && (
-                <GarminChart data={garminData} />
+                <GarminChart 
+                  data={garminData} 
+                  email={garminCredentials.email} 
+                />
               )}
             </div>
           ) : (
