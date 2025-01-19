@@ -1,80 +1,79 @@
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { MoreVertical, User, KeyRound, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuGroup,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface ProfileMenuProps {
-  onDeleteGarminCredentials: () => Promise<void>;
+  onDeleteGarminCredentials: () => void;
 }
 
 export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => {
   const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Error signing out");
+      return;
+    }
     navigate("/login");
   };
 
-  const handleChangePassword = () => {
-    toast.info("Password change functionality coming soon");
-  };
+  const handleDeleteAllData = async () => {
+    try {
+      const { error } = await supabase
+        .from('garmin_data')
+        .delete()
+        .neq('user_id', 'dummy_value'); // This will delete all user's data due to RLS
 
-  const handleUpdateProfile = () => {
-    toast.info("Profile update functionality coming soon");
+      if (error) {
+        console.error('Error deleting data:', error);
+        toast.error('Failed to delete data');
+        return;
+      }
+
+      toast.success('All your data has been deleted');
+      // Refresh the page to update the UI
+      window.location.reload();
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+    }
   };
 
   return (
-    <div className="flex gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" className="hover:bg-accent">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-64">
-          <DropdownMenuLabel className="font-semibold">Profile Settings</DropdownMenuLabel>
-          <DropdownMenuGroup>
-            <DropdownMenuItem 
-              onClick={handleUpdateProfile}
-              className="flex items-center cursor-pointer"
-            >
-              <User className="mr-2 h-4 w-4" />
-              <span>Update Profile</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem 
-              onClick={handleChangePassword}
-              className="flex items-center cursor-pointer"
-            >
-              <KeyRound className="mr-2 h-4 w-4" />
-              <span>Change Password</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="font-semibold">Garmin Integration</DropdownMenuLabel>
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              className="text-destructive flex items-center cursor-pointer"
-              onClick={onDeleteGarminCredentials}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Remove Garmin Connection</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Button onClick={handleLogout} variant="outline">
-        Logout
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">Menu</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56">
+        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={onDeleteGarminCredentials}
+          className="text-red-600 cursor-pointer"
+        >
+          Delete Garmin Credentials
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={handleDeleteAllData}
+          className="text-red-600 cursor-pointer"
+        >
+          Delete All My Data
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
