@@ -45,6 +45,18 @@ def get_garmin_credentials(user_id):
 
 def get_trimp_values(api, user_id):
     try:
+        print(f"\nStarting get_trimp_values for user_id: {user_id}")
+        print(f"Supabase URL: {SUPABASE_URL}")
+        print(f"Supabase key starts with: {SUPABASE_KEY[:10]}...")
+        
+        # Test Supabase connection
+        try:
+            test_response = supabase.table('garmin_data').select('*').limit(1).execute()
+            print("Supabase connection test successful")
+        except Exception as e:
+            print(f"Supabase connection test failed: {str(e)}")
+            raise
+
         # Get dates for last 9 days
         end_date = datetime.now()
         start_date = end_date - timedelta(days=9)
@@ -103,13 +115,14 @@ def get_trimp_values(api, user_id):
                 
                 # Save to Supabase
                 try:
-                    print(f"Attempting to save to Supabase: {activity_data}")  # Debug print
-                    response = supabase.table('garmin_data').upsert(activity_data).execute()
-                    print(f"Supabase response: {response}")  # Debug print
+                    print(f"Attempting to save to Supabase: {activity_data}")
+                    response = supabase.table('garmin_data').insert(activity_data).execute()  # Changed from upsert to insert
+                    print(f"Supabase insert response: {response}")
                     print(f"Saved to Supabase: {activity_name}")
                 except Exception as e:
                     print(f"Error saving to Supabase: {str(e)}")
-                    print(f"Full error details: {traceback.format_exc()}")  # Add full traceback
+                    print(f"Full error details: {traceback.format_exc()}")
+                    raise
                 
                 data.append(activity_data)
                 

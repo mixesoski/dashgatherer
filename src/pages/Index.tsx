@@ -74,20 +74,28 @@ const Index = () => {
     try {
       const toastId = toast.loading('Syncing Garmin data...');
       
-      console.log('Sending request with userId:', userId); // Debug log
+      // Get current user to verify
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user:', user);
+      console.log('Using userId:', userId);
       
+      if (!user || user.id !== userId) {
+        toast.error('User authentication error', { id: toastId });
+        return;
+      }
+
       const response = await fetch('http://localhost:5001/api/sync-garmin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId })
+        body: JSON.stringify({ userId: user.id })
       });
 
-      console.log('Raw response:', response); // Debug log
+      console.log('Raw response:', response);
       
       const data = await response.json();
-      console.log('Response data:', data); // Debug log
+      console.log('Response data:', data);
       
       if (data.success) {
         toast.success('Data synced successfully!', { id: toastId });

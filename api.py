@@ -9,16 +9,21 @@ CORS(app)
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
+        print("\n=== Starting API request ===")
+        print(f"Request headers: {dict(request.headers)}")
+        print(f"Request body: {request.get_data(as_text=True)}")
+        
         data = request.json
         user_id = data.get('userId')
         
+        print(f"Extracted user_id: {user_id}")
+        
         if not user_id:
+            print("No user_id provided")
             return jsonify({'error': 'No user ID provided'}), 400
         
-        print(f"Processing request for user_id: {user_id}")  # Debug print
-        
         result = garmin_main(user_id)
-        print(f"Processing result: {result}")  # Debug print
+        print(f"Processing result: {result}")
         
         return jsonify(result)
     except Exception as e:
