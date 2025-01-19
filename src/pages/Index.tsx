@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/tooltip";
 import { useEffect, useState } from 'react'
 
+// Get the API URL from environment variable or fallback to localhost for development
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
 const Index = () => {
   const navigate = useNavigate();
   const [userId, setUserId] = useState<string | null>(null)
@@ -84,7 +87,7 @@ const Index = () => {
         return;
       }
 
-      const response = await fetch('http://localhost:5001/api/sync-garmin', {
+      const response = await fetch(`${API_URL}/api/sync-garmin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -39,25 +39,25 @@ export type Database = {
       garmin_data: {
         Row: {
           activity: string | null
-          created_at: string
+          created_at: string | null
           date: string | null
-          id: number
+          id: string
           trimp: number | null
           user_id: string | null
         }
         Insert: {
           activity?: string | null
-          created_at?: string
+          created_at?: string | null
           date?: string | null
-          id?: number
+          id?: string
           trimp?: number | null
           user_id?: string | null
         }
         Update: {
           activity?: string | null
-          created_at?: string
+          created_at?: string | null
           date?: string | null
-          id?: number
+          id?: string
           trimp?: number | null
           user_id?: string | null
         }
