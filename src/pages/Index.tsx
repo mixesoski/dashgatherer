@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -159,17 +160,19 @@ const Index = () => {
               <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
               {showButtons && (
                 <div className="flex justify-center gap-4 items-center">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
-                        <RefreshCw className="h-4 w-4" />
-                        Sync Garmin
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Sync Garmin activities and TRIMP data</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
+                          <RefreshCw className="h-4 w-4" />
+                          Sync Garmin
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Sync Garmin activities and TRIMP data</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-500">Start from:</span>
@@ -187,6 +190,14 @@ const Index = () => {
                           name: "offset",
                           options: {
                             offset: [0, 8]
+                          },
+                          fn: ({ state }) => {
+                            return {
+                              ...state,
+                              styles: {
+                                ...state.styles,
+                              }
+                            };
                           }
                         }
                       ]}
