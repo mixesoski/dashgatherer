@@ -14,8 +14,8 @@ import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
-import "react-datepicker/dist/react-datepicker.css";
 import { subMonths, startOfDay } from 'date-fns';
+import "react-datepicker/dist/react-datepicker.css";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -181,9 +181,18 @@ const Index = () => {
                       onChange={(date: Date) => setStartDate(startOfDay(date))}
                       maxDate={new Date()}
                       minDate={subMonths(new Date(), 4)}
-                      className="px-3 py-2 border rounded-md text-sm"
+                      className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       dateFormat="yyyy-MM-dd"
                       placeholderText="Select start date"
+                      popperPlacement="bottom-end"
+                      popperModifiers={[
+                        {
+                          name: "offset",
+                          options: {
+                            offset: [0, 8]
+                          }
+                        }
+                      ]}
                     />
                   </div>
                 </div>
