@@ -81,6 +81,20 @@ def get_trimp_values(api, user_id):
         end_date = datetime.now()
         start_date = end_date - timedelta(days=9)
         
+        # Create a dictionary to store daily activities and TRIMP values
+        daily_data = {}
+        
+        # Initialize all days with 0 TRIMP
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            daily_data[date_str] = {
+                'date': current_date.replace(hour=12),  # Set to noon to avoid timezone issues
+                'trimp': 0,
+                'activities': []
+            }
+            current_date += timedelta(days=1)
+        
         print(f"\nFetching activities from {start_date.date()} to {end_date.date()}")
         
         # Get activities
@@ -91,7 +105,6 @@ def get_trimp_values(api, user_id):
         print(f"Found {len(activities)} activities")
         
         # Process each activity
-        data = []
         for activity in activities:
             try:
                 activity_id = activity['activityId']
@@ -123,28 +136,11 @@ def get_trimp_values(api, user_id):
                         print("Doubled TRIMP for strength training")
                 
                 date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
+                date_str = date.strftime("%Y-%m-%d")
                 
-                activity_data = {
-                    'user_id': user_id,
-                    'date': date.isoformat(),
-                    'trimp': float(trimp),
-                    'activity': str(activity_name)
-                }
-                
-                print(f"Formatted data for Supabase: {activity_data}")  # Debug print
-                
-                # Save to Supabase
-                try:
-                    print(f"Attempting to save to Supabase: {activity_data}")
-                    response = supabase.table('garmin_data').insert(activity_data).execute()  # Changed from upsert to insert
-                    print(f"Supabase insert response: {response}")
-                    print(f"Saved to Supabase: {activity_name}")
-                except Exception as e:
-                    print(f"Error saving to Supabase: {str(e)}")
-                    print(f"Full error details: {traceback.format_exc()}")
-                    raise
-                
-                data.append(activity_data)
+                # Add TRIMP to daily total and append activity name
+                daily_data[date_str]['trimp'] += trimp
+                daily_data[date_str]['activities'].append(activity_name)
                 
                 print(f"Date: {date}")
                 print(f"Activity: {activity_name}")
@@ -154,6 +150,27 @@ def get_trimp_values(api, user_id):
             except Exception as e:
                 print(f"Error processing activity {activity_id}: {e}")
                 continue
+        
+        # Save daily data to Supabase
+        data = []
+        for date_str, day_data in daily_data.items():
+            activity_data = {
+                'user_id': user_id,
+                'date': day_data['date'].isoformat(),
+                'trimp': float(day_data['trimp']),
+                'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day'
+            }
+            
+            print(f"Saving data for {date_str}: {activity_data}")
+            
+            try:
+                response = supabase.table('garmin_data').insert(activity_data).execute()
+                print(f"Saved to Supabase: {date_str}")
+                data.append(activity_data)
+            except Exception as e:
+                print(f"Error saving to Supabase: {str(e)}")
+                print(f"Full error details: {traceback.format_exc()}")
+                raise
         
         return pd.DataFrame(data)
                 
