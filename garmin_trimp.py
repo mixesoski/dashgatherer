@@ -1,5 +1,7 @@
 from garminconnect import Garmin
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import os
@@ -112,6 +114,11 @@ def get_trimp_values(api):
         return pd.DataFrame(columns=['date', 'trimp', 'activity_type', 'activity_name'])
 
 def create_trimp_chart(df):
+    # Use Agg backend which doesn't require GUI
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    
     plt.figure(figsize=(12, 6))
     plt.plot(df['date'], df['trimp'], marker='o')
     plt.title('TRIMP Values Over Last 9 Days')
@@ -123,7 +130,7 @@ def create_trimp_chart(df):
     
     # Save the chart
     plt.savefig('trimp_chart.png')
-    plt.close()
+    plt.close('all')  # Make sure to close all figures
 
 def list_available_users():
     try:
@@ -136,13 +143,15 @@ def list_available_users():
     except Exception as e:
         print(f"Error fetching users: {str(e)}")
 
-def main():
+def main(user_id=None):
     try:
-        # List available users first
-        list_available_users()
-        
-        # Get user_id from input
-        user_id = input("Enter user ID to fetch TRIMP data: ")
+        if user_id:
+            print(f"\nProcessing data for user ID: {user_id}")
+        else:
+            # List available users first
+            list_available_users()
+            # Get user_id from input if not provided
+            user_id = input("Enter user ID to fetch TRIMP data: ")
         
         # Get credentials from Supabase
         email, password = get_garmin_credentials(user_id)
@@ -187,10 +196,30 @@ def main():
         create_trimp_chart(df)
         print("\nChart has been created successfully!")
         
+        return {
+            'success': True,
+            'message': 'Data fetched successfully',
+            'summary': {
+                'total_activities': len(df),
+                'total_trimp': round(df['trimp'].sum(), 1),
+                'avg_trimp': round(df['trimp'].mean(), 1),
+                'date_range': {
+                    'start': df['date'].min().strftime('%Y-%m-%d'),
+                    'end': df['date'].max().strftime('%Y-%m-%d')
+                }
+            }
+        }
+        
     except Exception as e:
         print(f"An error occurred: {e}")
         import traceback
         print(traceback.format_exc())
+        return {
+            'success': False,
+            'error': str(e)
+        }
 
 if __name__ == "__main__":
-    main() 
+    import sys
+    user_id = sys.argv[1] if len(sys.argv) > 1 else None
+    main(user_id) 

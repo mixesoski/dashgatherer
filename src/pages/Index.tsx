@@ -11,9 +11,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useEffect, useState } from 'react'
 
 const Index = () => {
   const navigate = useNavigate();
+  const [userId, setUserId] = useState<string | null>(null)
 
   const { data: garminCredentials, isLoading } = useQuery({
     queryKey: ['garminCredentials'],
@@ -30,6 +32,17 @@ const Index = () => {
       return data;
     }
   });
+
+  useEffect(() => {
+    // Get current user's ID when component mounts
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setUserId(user.id)
+      }
+    }
+    getCurrentUser()
+  }, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -50,6 +63,42 @@ const Index = () => {
     toast.success("Garmin credentials deleted successfully");
     // This will trigger a refetch of the credentials
     window.location.reload();
+  };
+
+  const handleSync = async () => {
+    if (!userId) {
+      toast.error('No user logged in');
+      return;
+    }
+
+    try {
+      toast.loading('Syncing Garmin data...');
+      
+      // Zaktualizowany URL do lokalnego API
+      const response = await fetch('http://localhost:5001/api/sync-garmin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Sync failed');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success('Data synced successfully!');
+        console.log('Sync summary:', data.summary);
+      } else {
+        toast.error(data.error || 'Sync failed');
+      }
+    } catch (error) {
+      console.error('Error syncing:', error);
+      toast.error('Error syncing data');
+    }
   };
 
   if (isLoading) {
@@ -74,13 +123,13 @@ const Index = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button id="syncButton" variant="outline" className="gap-2">
+                      <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
                         <RefreshCw className="h-4 w-4" />
                         Sync Garmin
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Coming Soon</p>
+                      <p>Sync Garmin activities and TRIMP data</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
