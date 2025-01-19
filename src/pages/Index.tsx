@@ -23,7 +23,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
-  const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 1));
+  const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
@@ -180,7 +180,7 @@ const Index = () => {
                       selected={startDate}
                       onChange={(date: Date) => setStartDate(startOfDay(date))}
                       maxDate={new Date()}
-                      minDate={subMonths(new Date(), 4)}
+                      minDate={subMonths(new Date(), 5)}
                       className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       dateFormat="yyyy-MM-dd"
                       placeholderText="Select start date"
