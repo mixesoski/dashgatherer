@@ -169,9 +169,8 @@ const Index = () => {
       if (data.success) {
         if (data.newActivities > 0) {
           toast.success(`Added ${data.newActivities} new activities!`, { id: toastId });
-          await refetchGarminData();
         } else {
-          toast.success('No new activities, checking calculations...', { id: toastId });
+          toast.loading('Verifying and updating calculations...', { id: toastId });
           
           const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
@@ -189,11 +188,11 @@ const Index = () => {
           const recalcData = await recalcResponse.json();
           if (recalcData.success) {
             toast.success('Calculations verified and updated', { id: toastId });
-            await refetchGarminData();
           } else {
             toast.error('Error verifying calculations', { id: toastId });
           }
         }
+        await refetchGarminData();
       } else {
         toast.error(data.error || 'Update failed', { id: toastId });
       }

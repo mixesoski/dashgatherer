@@ -146,6 +146,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                     daily_data[first_date]['ctl'] = prev_metrics['ctl']
                     daily_data[first_date]['tsb'] = prev_metrics['tsb']
                 
+                print("Recalculating metrics...")
                 # Recalculate metrics for all days
                 sorted_dates = sorted(daily_data.keys())
                 for i in range(1, len(sorted_dates)):
@@ -167,7 +168,9 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                     # TSB calculation
                     daily_data[current_date]['tsb'] = daily_data[prev_date]['ctl'] - daily_data[prev_date]['atl']
 
+                print("Updating records in database...")
                 # Update records in Supabase
+                updated_records = []
                 for date_str, day_data in daily_data.items():
                     activity_data = {
                         'user_id': user_id,
@@ -180,14 +183,17 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                     }
                     
                     # Update existing record
-                    supabase.table('garmin_data')\
+                    response = supabase.table('garmin_data')\
                         .update(activity_data)\
                         .eq('user_id', user_id)\
                         .eq('date', day_data['date'].isoformat())\
                         .execute()
                     
+                    updated_records.append(activity_data)
+                    print(f"Updated record for {date_str}")
+                
                 print("Calculations updated successfully")
-                return pd.DataFrame(list(daily_data.values()))
+                return pd.DataFrame(updated_records)
             else:
                 print("No data found in date range")
                 return pd.DataFrame()
