@@ -282,6 +282,9 @@ def main(user_id=None):
                 'error': 'No activities found'
             }
         
+        # Convert date strings to datetime objects
+        df['date'] = pd.to_datetime(df['date'])
+        
         # Sort by date
         df = df.sort_values('date', ascending=False)
         
