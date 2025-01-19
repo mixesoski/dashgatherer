@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
-import { GarminChart } from "@/components/dashboard/GarminChart";
+import { PerformanceChart } from "@/components/PerformanceChart";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -168,7 +168,7 @@ const Index = () => {
                 </div>
               )}
               {garminData && garminData.length > 0 && (
-                <GarminChart data={garminData} />
+                <PerformanceChart data={garminData} />
               )}
             </div>
           ) : (
