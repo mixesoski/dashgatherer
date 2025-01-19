@@ -15,6 +15,9 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuLabel,
+  ContextMenuGroup,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useEffect, useState } from 'react';
@@ -97,8 +100,17 @@ const Index = () => {
     }
 
     toast.success("Garmin credentials deleted successfully");
-    // This will trigger a refetch of the credentials
     window.location.reload();
+  };
+
+  const handleChangePassword = () => {
+    // This will be implemented in a future update
+    toast.info("Password change functionality coming soon");
+  };
+
+  const handleUpdateProfile = () => {
+    // This will be implemented in a future update
+    toast.info("Profile update functionality coming soon");
   };
 
   const handleSync = async () => {
@@ -161,13 +173,26 @@ const Index = () => {
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem
-                className="text-destructive"
-                onClick={handleDeleteCredentials}
-              >
-                Remove Garmin Connection
-              </ContextMenuItem>
+            <ContextMenuContent className="w-64">
+              <ContextMenuLabel>Profile Settings</ContextMenuLabel>
+              <ContextMenuGroup>
+                <ContextMenuItem onClick={handleUpdateProfile}>
+                  Update Profile
+                </ContextMenuItem>
+                <ContextMenuItem onClick={handleChangePassword}>
+                  Change Password
+                </ContextMenuItem>
+              </ContextMenuGroup>
+              <ContextMenuSeparator />
+              <ContextMenuLabel>Garmin Integration</ContextMenuLabel>
+              <ContextMenuGroup>
+                <ContextMenuItem
+                  className="text-destructive"
+                  onClick={handleDeleteCredentials}
+                >
+                  Remove Garmin Connection
+                </ContextMenuItem>
+              </ContextMenuGroup>
             </ContextMenuContent>
           </ContextMenu>
           <Button onClick={handleLogout} variant="outline">
