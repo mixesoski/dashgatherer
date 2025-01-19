@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
-import { PerformanceChart } from "@/components/PerformanceChart";
+import { GarminChart } from "@/components/dashboard/GarminChart";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
@@ -21,23 +21,23 @@ const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
 
-  const { data: garminCredentials, isLoading: credentialsLoading, refetch: refetchCredentials } = useQuery({
-    queryKey: ['garminCredentials', userId],
+  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
+    queryKey: ['garminCredentials'],
     queryFn: async () => {
-      if (!userId) return null;
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
-        .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       return data;
-    },
-    enabled: !!userId
+    }
   });
 
-  const { data: garminData, isLoading: dataLoading, refetch: refetchGarminData } = useQuery({
+  const { data: garminData, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', userId],
     queryFn: async () => {
       if (!userId) return null;
@@ -46,10 +46,12 @@ const Index = () => {
         .from('garmin_data')
         .select('*')
         .eq('user_id', userId)
-        .order('date', { ascending: true });
+        .limit(1);
 
-      if (error) throw error;
-      console.log("Fetched garmin data:", data); // Debug log
+      if (error) {
+        throw error;
+      }
+
       return data;
     },
     enabled: !!userId
@@ -60,7 +62,6 @@ const Index = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
-        console.log("Current user ID:", user.id); // Debug log
       }
     };
     getCurrentUser();
@@ -76,7 +77,7 @@ const Index = () => {
     const { error } = await supabase
       .from('garmin_credentials')
       .delete()
-      .eq('user_id', userId);
+      .single();
 
     if (error) {
       toast.error("Failed to delete Garmin credentials");
@@ -132,7 +133,7 @@ const Index = () => {
     }
   };
 
-  if (credentialsLoading) {
+  if (isLoading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
@@ -167,7 +168,7 @@ const Index = () => {
                 </div>
               )}
               {garminData && garminData.length > 0 && (
-                <PerformanceChart data={garminData} />
+                <GarminChart data={garminData} />
               )}
             </div>
           ) : (
