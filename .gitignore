@@ -21,4 +21,7 @@ trimp_chart.png
 
 # Node
 node_modules/
-dist/ 
+dist/
+
+# Project specific
+cursorTrimp/ 

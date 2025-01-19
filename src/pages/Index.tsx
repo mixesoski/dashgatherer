@@ -72,9 +72,10 @@ const Index = () => {
     }
 
     try {
-      toast.loading('Syncing Garmin data...');
+      const toastId = toast.loading('Syncing Garmin data...');
       
-      // Zaktualizowany URL do lokalnego API
+      console.log('Sending request with userId:', userId); // Debug log
+      
       const response = await fetch('http://localhost:5001/api/sync-garmin', {
         method: 'POST',
         headers: {
@@ -83,17 +84,16 @@ const Index = () => {
         body: JSON.stringify({ userId })
       });
 
-      if (!response.ok) {
-        throw new Error('Sync failed');
-      }
-
+      console.log('Raw response:', response); // Debug log
+      
       const data = await response.json();
+      console.log('Response data:', data); // Debug log
       
       if (data.success) {
-        toast.success('Data synced successfully!');
+        toast.success('Data synced successfully!', { id: toastId });
         console.log('Sync summary:', data.summary);
       } else {
-        toast.error(data.error || 'Sync failed');
+        toast.error(data.error || 'Sync failed', { id: toastId });
       }
     } catch (error) {
       console.error('Error syncing:', error);

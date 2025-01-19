@@ -11,6 +11,7 @@ import pathlib
 import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
+import traceback
 
 # Debug: Print current directory
 print("Current directory:", os.getcwd())
@@ -42,7 +43,7 @@ def get_garmin_credentials(user_id):
     credentials = response.data[0]
     return credentials['email'], credentials['password']
 
-def get_trimp_values(api):
+def get_trimp_values(api, user_id):
     try:
         # Get dates for last 9 days
         end_date = datetime.now()
@@ -62,7 +63,8 @@ def get_trimp_values(api):
         for activity in activities:
             try:
                 activity_id = activity['activityId']
-                print(f"\nProcessing activity: {activity.get('activityName', 'Unknown')}")
+                activity_name = activity.get('activityName', 'Unknown')
+                print(f"\nProcessing activity: {activity_name}")
                 
                 # Add delay between requests to avoid rate limiting
                 time.sleep(1)
@@ -89,17 +91,30 @@ def get_trimp_values(api):
                         print("Doubled TRIMP for strength training")
                 
                 date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
-                activity_type = activity.get('activityType', {}).get('typeKey', 'Unknown')
                 
-                data.append({
-                    'date': date,
-                    'trimp': trimp,
-                    'activity_type': activity_type,
-                    'activity_name': activity.get('activityName', 'Unknown')
-                })
+                activity_data = {
+                    'user_id': user_id,
+                    'date': date.isoformat(),
+                    'trimp': float(trimp),
+                    'activity': str(activity_name)
+                }
+                
+                print(f"Formatted data for Supabase: {activity_data}")  # Debug print
+                
+                # Save to Supabase
+                try:
+                    print(f"Attempting to save to Supabase: {activity_data}")  # Debug print
+                    response = supabase.table('garmin_data').upsert(activity_data).execute()
+                    print(f"Supabase response: {response}")  # Debug print
+                    print(f"Saved to Supabase: {activity_name}")
+                except Exception as e:
+                    print(f"Error saving to Supabase: {str(e)}")
+                    print(f"Full error details: {traceback.format_exc()}")  # Add full traceback
+                
+                data.append(activity_data)
                 
                 print(f"Date: {date}")
-                print(f"Activity type: {activity_type}")
+                print(f"Activity: {activity_name}")
                 print(f"TRIMP: {trimp}")
                 print("-" * 50)
                 
@@ -111,7 +126,7 @@ def get_trimp_values(api):
                 
     except Exception as e:
         print(f"Error fetching activities: {e}")
-        return pd.DataFrame(columns=['date', 'trimp', 'activity_type', 'activity_name'])
+        return pd.DataFrame(columns=['date', 'trimp', 'activity'])
 
 def create_trimp_chart(df):
     # Use Agg backend which doesn't require GUI
@@ -175,12 +190,15 @@ def main(user_id=None):
                     continue
                 raise
         
-        # Get TRIMP data
-        df = get_trimp_values(client)
+        # Get TRIMP data and save to Supabase
+        df = get_trimp_values(client, user_id)
         
         if len(df) == 0:
             print("No activities found!")
-            return
+            return {
+                'success': False,
+                'error': 'No activities found'
+            }
         
         # Sort by date
         df = df.sort_values('date', ascending=False)
@@ -198,7 +216,7 @@ def main(user_id=None):
         
         return {
             'success': True,
-            'message': 'Data fetched successfully',
+            'message': 'Data fetched and saved successfully',
             'summary': {
                 'total_activities': len(df),
                 'total_trimp': round(df['trimp'].sum(), 1),
@@ -212,7 +230,6 @@ def main(user_id=None):
         
     except Exception as e:
         print(f"An error occurred: {e}")
-        import traceback
         print(traceback.format_exc())
         return {
             'success': False,
