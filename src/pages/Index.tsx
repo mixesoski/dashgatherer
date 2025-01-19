@@ -74,7 +74,7 @@ const Index = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="outline" className="gap-2">
+                      <Button id="syncButton" variant="outline" className="gap-2">
                         <RefreshCw className="h-4 w-4" />
                         Sync Garmin
                       </Button>
