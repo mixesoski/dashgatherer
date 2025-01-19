@@ -160,7 +160,7 @@ const Index = () => {
         body: JSON.stringify({ 
           userId,
           startDate: startDate.toISOString(),
-          updateOnly: true // New flag to indicate update mode
+          updateOnly: true
         })
       });
       
@@ -171,7 +171,28 @@ const Index = () => {
           toast.success(`Added ${data.newActivities} new activities!`, { id: toastId });
           await refetchGarminData();
         } else {
-          toast.success('No new activities found', { id: toastId });
+          toast.success('No new activities, checking calculations...', { id: toastId });
+          
+          const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              userId,
+              startDate: startDate.toISOString(),
+              updateOnly: true,
+              recalculateOnly: true
+            })
+          });
+          
+          const recalcData = await recalcResponse.json();
+          if (recalcData.success) {
+            toast.success('Calculations verified and updated', { id: toastId });
+            await refetchGarminData();
+          } else {
+            toast.error('Error verifying calculations', { id: toastId });
+          }
         }
       } else {
         toast.error(data.error || 'Update failed', { id: toastId });

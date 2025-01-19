@@ -111,16 +111,18 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
         print(f"Found {len(activities)} activities")
         
         if update_only:
+            print("Update mode: checking existing data and calculations")
             # Get existing data from last 9 days
             existing_response = supabase.table('garmin_data')\
                 .select('*')\
                 .eq('user_id', user_id)\
                 .gte('date', start_date.isoformat())\
                 .lte('date', end_date.isoformat())\
-                .order('date')\
+                .order('date', ascending=True)\
                 .execute()
 
             if existing_response.data:
+                print(f"Found {len(existing_response.data)} records to verify")
                 # Get the day before start_date for initial metrics
                 prev_day_response = supabase.table('garmin_data')\
                     .select('*')\
@@ -184,7 +186,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                         .eq('date', day_data['date'].isoformat())\
                         .execute()
                     
-                print(f"Recalculated and updated metrics for date range: {start_date.date()} to {end_date.date()}")
+                print("Calculations updated successfully")
                 return pd.DataFrame(list(daily_data.values()))
             else:
                 print("No data found in date range")
