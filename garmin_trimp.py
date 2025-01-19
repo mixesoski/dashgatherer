@@ -49,12 +49,32 @@ def get_trimp_values(api, user_id):
         print(f"Supabase URL: {SUPABASE_URL}")
         print(f"Supabase key starts with: {SUPABASE_KEY[:10]}...")
         
-        # Test Supabase connection
+        # Test Supabase connection and permissions
         try:
-            test_response = supabase.table('garmin_data').select('*').limit(1).execute()
-            print("Supabase connection test successful")
+            print("\nTesting Supabase connection and permissions...")
+            # Test select
+            select_response = supabase.table('garmin_data').select('*').limit(1).execute()
+            print("Select test successful")
+            
+            # Test insert with a dummy record
+            test_data = {
+                'user_id': user_id,
+                'date': datetime.now().isoformat(),
+                'trimp': 0,
+                'activity': 'TEST_RECORD'
+            }
+            print(f"\nTrying test insert with data: {test_data}")
+            insert_response = supabase.table('garmin_data').insert(test_data).execute()
+            print(f"Insert test response: {insert_response}")
+            
+            # Delete test record
+            delete_response = supabase.table('garmin_data').delete().eq('activity', 'TEST_RECORD').execute()
+            print("Delete test successful")
+            
+            print("All Supabase permission tests passed!")
         except Exception as e:
-            print(f"Supabase connection test failed: {str(e)}")
+            print(f"Supabase test failed: {str(e)}")
+            print(f"Full error details: {traceback.format_exc()}")
             raise
 
         # Get dates for last 9 days
