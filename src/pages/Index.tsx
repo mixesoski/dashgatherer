@@ -11,14 +11,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis } from "recharts";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 const Index = () => {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showButtons, setShowButtons] = useState(true);
 
   const { data: garminCredentials, isLoading } = useQuery({
     queryKey: ['garminCredentials'],
@@ -36,16 +43,32 @@ const Index = () => {
     }
   });
 
+  const { data: garminData, refetch: refetchGarminData } = useQuery({
+    queryKey: ['garminData'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('garmin_data')
+        .select('*')
+        .order('date', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+    }
+  });
+
   useEffect(() => {
     // Get current user's ID when component mounts
     const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        setUserId(user.id)
+        setUserId(user.id);
       }
-    }
-    getCurrentUser()
-  }, [])
+    };
+    getCurrentUser();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -102,6 +125,8 @@ const Index = () => {
       
       if (data.success) {
         toast.success('Data synced successfully!', { id: toastId });
+        setShowButtons(false);
+        await refetchGarminData();
         console.log('Sync summary:', data.summary);
       } else {
         toast.error(data.error || 'Sync failed', { id: toastId });
@@ -115,6 +140,16 @@ const Index = () => {
   if (isLoading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
+
+  const chartConfig = {
+    trimp: {
+      label: "TRIMP",
+      theme: {
+        light: "#0ea5e9",
+        dark: "#38bdf8",
+      },
+    },
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -130,27 +165,55 @@ const Index = () => {
             <div className="space-y-4">
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
               <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-              <div className="flex justify-center gap-4">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
-                        <RefreshCw className="h-4 w-4" />
-                        Sync Garmin
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Sync Garmin activities and TRIMP data</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-                <Button 
-                  onClick={handleDeleteCredentials}
-                  variant="destructive"
-                >
-                  Remove Garmin Connection
-                </Button>
-              </div>
+              {showButtons && (
+                <div className="flex justify-center gap-4">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
+                          <RefreshCw className="h-4 w-4" />
+                          Sync Garmin
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Sync Garmin activities and TRIMP data</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Button 
+                    onClick={handleDeleteCredentials}
+                    variant="destructive"
+                  >
+                    Remove Garmin Connection
+                  </Button>
+                </div>
+              )}
+              {garminData && garminData.length > 0 && (
+                <div className="mt-8">
+                  <h2 className="text-2xl font-semibold mb-4">Your TRIMP Data</h2>
+                  <div className="w-full h-[400px] bg-white rounded-lg shadow p-4">
+                    <ChartContainer config={chartConfig}>
+                      <LineChart data={garminData}>
+                        <XAxis 
+                          dataKey="date" 
+                          tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                        />
+                        <YAxis />
+                        <ChartTooltip>
+                          <ChartTooltipContent />
+                        </ChartTooltip>
+                        <Line 
+                          type="monotone" 
+                          dataKey="trimp" 
+                          stroke="var(--color-trimp)" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ChartContainer>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <>

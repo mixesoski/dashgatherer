@@ -38,28 +38,28 @@ export type Database = {
       }
       garmin_data: {
         Row: {
-          activity: string | null
+          activity: string
           created_at: string | null
-          date: string | null
+          date: string
           id: string
-          trimp: number | null
-          user_id: string | null
+          trimp: number
+          user_id: string
         }
         Insert: {
-          activity?: string | null
+          activity: string
           created_at?: string | null
-          date?: string | null
+          date: string
           id?: string
-          trimp?: number | null
-          user_id?: string | null
+          trimp: number
+          user_id: string
         }
         Update: {
-          activity?: string | null
+          activity?: string
           created_at?: string | null
-          date?: string | null
+          date?: string
           id?: string
-          trimp?: number | null
-          user_id?: string | null
+          trimp?: number
+          user_id?: string
         }
         Relationships: []
       }
