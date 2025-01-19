@@ -185,14 +185,11 @@ const Index = () => {
                       dateFormat="yyyy-MM-dd"
                       placeholderText="Select start date"
                       popperPlacement="bottom-end"
-                      popperModifiers={[
-                        {
-                          name: "offset",
-                          options: {
-                            offset: [0, 8]
-                          }
-                        }
-                      ]}
+                      popperProps={{
+                        positionFixed: true,
+                        strategy: "fixed"
+                      }}
+                      calendarClassName="translate-y-2"
                     />
                   </div>
                 </div>
