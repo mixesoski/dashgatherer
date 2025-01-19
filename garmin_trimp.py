@@ -113,7 +113,9 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
         print(f"Found {len(activities)} activities")
         
         if update_only or recalculate_only:
-            print("Checking existing data and calculations...")
+            print("\n=== CHECKING EXISTING DATA ===")
+            print(f"Date range: {start_date.date()} to {end_date.date()}")
+            
             # Get existing data from last 9 days
             existing_response = supabase.table('garmin_data')\
                 .select('*')\
@@ -123,9 +125,12 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 .order('date', ascending=True)\
                 .execute()
 
+            print(f"\nFound {len(existing_response.data)} records in Supabase")
+            for record in existing_response.data:
+                print(f"Date: {record['date']}, TRIMP: {record['trimp']}, ATL: {record['atl']}, CTL: {record['ctl']}, TSB: {record['tsb']}")
+
             if existing_response.data:
-                print(f"Found {len(existing_response.data)} records to verify")
-                
+                print("\n=== GETTING PREVIOUS DAY METRICS ===")
                 # Get the day before start_date for initial metrics
                 prev_day_response = supabase.table('garmin_data')\
                     .select('*')\
@@ -135,33 +140,49 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                     .limit(1)\
                     .execute()
 
+                if prev_day_response.data:
+                    prev_metrics = prev_day_response.data[0]
+                    print(f"Previous day ({prev_metrics['date']}):")
+                    print(f"ATL: {prev_metrics['atl']:.1f}")
+                    print(f"CTL: {prev_metrics['ctl']:.1f}")
+                    print(f"TSB: {prev_metrics['tsb']:.1f}")
+                else:
+                    print("No previous day data found")
+
+                print("\n=== INITIALIZING DAILY DATA ===")
                 # Initialize daily_data with existing activities
                 for record in existing_response.data:
                     date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
                     daily_data[date_str]['trimp'] = record['trimp']
                     daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
+                    print(f"Initialized {date_str} with TRIMP: {record['trimp']}")
 
                 # Set initial metrics from previous day
                 if prev_day_response.data:
                     prev_metrics = prev_day_response.data[0]
                     first_date = sorted(daily_data.keys())[0]
-                    print(f"\nStarting recalculation from {first_date} with initial values:")
+                    print(f"\n=== STARTING RECALCULATION ===")
+                    print(f"First date: {first_date}")
+                    print(f"Initial values from {prev_metrics['date']}:")
                     print(f"ATL: {prev_metrics['atl']:.1f}")
                     print(f"CTL: {prev_metrics['ctl']:.1f}")
                     print(f"TSB: {prev_metrics['tsb']:.1f}")
+                    
                     daily_data[first_date]['atl'] = prev_metrics['atl']
                     daily_data[first_date]['ctl'] = prev_metrics['ctl']
                     daily_data[first_date]['tsb'] = prev_metrics['tsb']
-                
-                print("\nRecalculating metrics day by day...")
-                # Recalculate metrics for all days
+
+                print("\n=== CALCULATING METRICS DAY BY DAY ===")
                 sorted_dates = sorted(daily_data.keys())
                 for i in range(1, len(sorted_dates)):
                     current_date = sorted_dates[i]
                     prev_date = sorted_dates[i-1]
                     
-                    print(f"\nProcessing {current_date}:")
+                    print(f"\nCalculating for {current_date}:")
+                    print(f"Previous day: {prev_date}")
                     print(f"TRIMP: {daily_data[current_date]['trimp']}")
+                    print(f"Previous ATL: {daily_data[prev_date]['atl']:.1f}")
+                    print(f"Previous CTL: {daily_data[prev_date]['ctl']:.1f}")
                     
                     # ATL calculation
                     daily_data[current_date]['atl'] = (
@@ -178,11 +199,11 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                     # TSB calculation
                     daily_data[current_date]['tsb'] = daily_data[prev_date]['ctl'] - daily_data[prev_date]['atl']
                     
-                    print(f"ATL: {daily_data[current_date]['atl']:.1f}")
-                    print(f"CTL: {daily_data[current_date]['ctl']:.1f}")
-                    print(f"TSB: {daily_data[current_date]['tsb']:.1f}")
+                    print(f"New ATL: {daily_data[current_date]['atl']:.1f}")
+                    print(f"New CTL: {daily_data[current_date]['ctl']:.1f}")
+                    print(f"New TSB: {daily_data[current_date]['tsb']:.1f}")
 
-                print("\nUpdating records in database...")
+                print("\n=== UPDATING DATABASE ===")
                 # Update records in Supabase
                 updated_records = []
                 for date_str, day_data in daily_data.items():
