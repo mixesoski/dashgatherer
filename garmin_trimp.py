@@ -43,10 +43,12 @@ def get_garmin_credentials(user_id):
     credentials = response.data[0]
     return credentials['email'], credentials['password']
 
-def get_trimp_values(api, user_id, start_date=None, update_only=False):
+def get_trimp_values(api, user_id, start_date=None, update_only=False, recalculate_only=False):
     try:
         print(f"\nStarting get_trimp_values for user_id: {user_id}")
         print(f"Start date: {start_date}")
+        print(f"Update only: {update_only}")
+        print(f"Recalculate only: {recalculate_only}")
         print(f"Supabase URL: {SUPABASE_URL}")
         print(f"Supabase key starts with: {SUPABASE_KEY[:10]}...")
         
@@ -110,8 +112,8 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
         )
         print(f"Found {len(activities)} activities")
         
-        if update_only:
-            print("Update mode: checking existing data and calculations")
+        if update_only or recalculate_only:
+            print("Checking existing data and calculations...")
             # Get existing data from last 9 days
             existing_response = supabase.table('garmin_data')\
                 .select('*')\
@@ -123,6 +125,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
 
             if existing_response.data:
                 print(f"Found {len(existing_response.data)} records to verify")
+                
                 # Get the day before start_date for initial metrics
                 prev_day_response = supabase.table('garmin_data')\
                     .select('*')\
@@ -194,9 +197,9 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False):
                 
                 print("Calculations updated successfully")
                 return pd.DataFrame(updated_records)
-            else:
-                print("No data found in date range")
-                return pd.DataFrame()
+
+            print("No data found in date range")
+            return pd.DataFrame()
         
         # Process each activity
         for activity in activities:
@@ -353,7 +356,7 @@ def list_available_users():
     except Exception as e:
         print(f"Error fetching users: {str(e)}")
 
-def main(user_id=None, start_date=None, update_only=False):
+def main(user_id=None, start_date=None, update_only=False, recalculate_only=False):
     try:
         if user_id:
             print(f"\nProcessing data for user ID: {user_id}")
@@ -386,7 +389,7 @@ def main(user_id=None, start_date=None, update_only=False):
                 raise
         
         # Get TRIMP data and save to Supabase
-        df = get_trimp_values(client, user_id, start_date, update_only)
+        df = get_trimp_values(client, user_id, start_date, update_only, recalculate_only)
         
         if len(df) == 0:
             print("No activities found!")
@@ -440,4 +443,5 @@ if __name__ == "__main__":
     user_id = sys.argv[1] if len(sys.argv) > 1 else None
     start_date = sys.argv[2] if len(sys.argv) > 2 else None
     update_only = sys.argv[3] == 'update_only' if len(sys.argv) > 3 else False
-    main(user_id, start_date, update_only) 
+    recalculate_only = sys.argv[4] == 'recalculate_only' if len(sys.argv) > 4 else False
+    main(user_id, start_date, update_only, recalculate_only) 
