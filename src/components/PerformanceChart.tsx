@@ -50,7 +50,7 @@ export function PerformanceChart({ data }: Props) {
   }, [data])
 
   return (
-    <Card>
+    <Card className="w-full">
       <CardHeader>
         <CardTitle>Training Load Balance</CardTitle>
         <CardDescription>
@@ -58,16 +58,20 @@ export function PerformanceChart({ data }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-[400px]">
+        <div className="h-[600px]">
           <ChartContainer config={config}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sortedData}>
+              <LineChart 
+                data={sortedData}
+                margin={{ top: 20, right: 30, left: 0, bottom: 30 }}
+              >
                 <XAxis
                   dataKey="date"
                   stroke="#888888"
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
+                  tickMargin={12}
                 />
                 <YAxis
                   stroke="#888888"
@@ -75,43 +79,56 @@ export function PerformanceChart({ data }: Props) {
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => `${value}`}
+                  domain={['auto', 'auto']}
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartTooltip 
+                  content={<ChartTooltipContent />}
+                  cursor={{ stroke: '#888888', strokeDasharray: '4 4' }}
+                />
                 <Line
                   type="monotone"
                   dataKey="atl"
                   strokeWidth={2}
+                  dot={false}
                   activeDot={{
-                    r: 4,
+                    r: 6,
                     style: { fill: "var(--color-atl)" },
                   }}
                   style={{
                     stroke: "var(--color-atl)",
                   }}
+                  fill="rgba(59, 130, 246, 0.1)"
+                  fillOpacity={0.6}
                 />
                 <Line
                   type="monotone"
                   dataKey="tsb"
                   strokeWidth={2}
+                  dot={false}
                   activeDot={{
-                    r: 4,
+                    r: 6,
                     style: { fill: "var(--color-tsb)" },
                   }}
                   style={{
                     stroke: "var(--color-tsb)",
                   }}
+                  fill="rgba(239, 68, 68, 0.1)"
+                  fillOpacity={0.6}
                 />
                 <Line
                   type="monotone"
                   dataKey="ctl"
                   strokeWidth={2}
+                  dot={false}
                   activeDot={{
-                    r: 4,
+                    r: 6,
                     style: { fill: "var(--color-ctl)" },
                   }}
                   style={{
                     stroke: "var(--color-ctl)",
                   }}
+                  fill="rgba(234, 179, 8, 0.1)"
+                  fillOpacity={0.6}
                 />
               </LineChart>
             </ResponsiveContainer>
