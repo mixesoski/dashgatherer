@@ -21,23 +21,23 @@ const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
 
-  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
-    queryKey: ['garminCredentials'],
+  const { data: garminCredentials, isLoading: credentialsLoading, refetch: refetchCredentials } = useQuery({
+    queryKey: ['garminCredentials', userId],
     queryFn: async () => {
+      if (!userId) return null;
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
+        .eq('user_id', userId)
         .maybeSingle();
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data;
-    }
+    },
+    enabled: !!userId
   });
 
-  const { data: garminData, refetch: refetchGarminData } = useQuery({
+  const { data: garminData, isLoading: dataLoading, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', userId],
     queryFn: async () => {
       if (!userId) return null;
@@ -46,12 +46,10 @@ const Index = () => {
         .from('garmin_data')
         .select('*')
         .eq('user_id', userId)
-        .limit(1);
+        .order('date', { ascending: true });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
+      console.log("Fetched garmin data:", data); // Debug log
       return data;
     },
     enabled: !!userId
@@ -62,6 +60,7 @@ const Index = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
+        console.log("Current user ID:", user.id); // Debug log
       }
     };
     getCurrentUser();
@@ -77,7 +76,7 @@ const Index = () => {
     const { error } = await supabase
       .from('garmin_credentials')
       .delete()
-      .single();
+      .eq('user_id', userId);
 
     if (error) {
       toast.error("Failed to delete Garmin credentials");
@@ -133,7 +132,7 @@ const Index = () => {
     }
   };
 
-  if (isLoading) {
+  if (credentialsLoading) {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
