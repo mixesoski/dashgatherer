@@ -1,88 +1,92 @@
+import { Line } from 'react-chartjs-2';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  CartesianGrid,
-  Area,
-  ResponsiveContainer,
-} from "recharts";
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
 
-interface GarminChartProps {
-  data: any[];
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+interface GarminData {
+  date: string;
+  trimp: number;
+  activity: string;
+  atl: number;
+  ctl: number;
+  tsb: number;
 }
 
-export const GarminChart = ({ data }: GarminChartProps) => {
+interface Props {
+  data: GarminData[];
+}
+
+export const GarminChart = ({ data }: Props) => {
+  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  const chartData = {
+    labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
+    datasets: [
+      {
+        label: 'TRIMP',
+        data: sortedData.map(d => d.trimp),
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+      },
+      {
+        label: 'Fatigue (ATL)',
+        data: sortedData.map(d => d.atl),
+        borderColor: 'rgb(255, 99, 132)',
+        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+      },
+      {
+        label: 'Fitness (CTL)',
+        data: sortedData.map(d => d.ctl),
+        borderColor: 'rgb(54, 162, 235)',
+        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+      },
+      {
+        label: 'Form (TSB)',
+        data: sortedData.map(d => d.tsb),
+        borderColor: 'rgb(75, 192, 75)',
+        backgroundColor: 'rgba(75, 192, 75, 0.5)',
+      }
+    ]
+  };
+
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: 'Training Metrics',
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true
+      }
+    }
+  };
+
   return (
-    <div className="mt-8">
-      <h2 className="text-2xl font-semibold mb-4">Your TRIMP Data</h2>
-      <div className="w-full h-[500px] bg-white rounded-lg shadow p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={data}
-            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-          >
-            <defs>
-              <linearGradient id="trimpareacolor" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.1} />
-                <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis
-              dataKey="date"
-              tickFormatter={(value) => {
-                const date = new Date(value);
-                return date.toLocaleDateString('en-US', {
-                  month: '2-digit',
-                  day: '2-digit'
-                });
-              }}
-              stroke="#94a3b8"
-              tick={{ fontSize: 12 }}
-              axisLine={{ stroke: '#e2e8f0' }}
-            />
-            <YAxis
-              stroke="#94a3b8"
-              tick={{ fontSize: 12 }}
-              axisLine={{ stroke: '#e2e8f0' }}
-            />
-            <RechartsTooltip
-              contentStyle={{
-                backgroundColor: 'white',
-                border: '1px solid #e2e8f0',
-                borderRadius: '6px',
-                padding: '8px'
-              }}
-              labelFormatter={(value) => {
-                const date = new Date(value);
-                return date.toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                });
-              }}
-              formatter={(value: number) => [`${value}`, 'TRIMP']}
-            />
-            <Area
-              type="monotone"
-              dataKey="trimp"
-              stroke="none"
-              fillOpacity={1}
-              fill="url(#trimpareacolor)"
-            />
-            <Line
-              type="monotone"
-              dataKey="trimp"
-              stroke="#0ea5e9"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 6, fill: "#0ea5e9", stroke: "white", strokeWidth: 2 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+    <div className="w-full h-96">
+      <Line data={chartData} options={options} />
     </div>
   );
 };

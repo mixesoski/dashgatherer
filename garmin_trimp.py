@@ -151,6 +151,35 @@ def get_trimp_values(api, user_id):
                 print(f"Error processing activity {activity_id}: {e}")
                 continue
         
+        # Sort daily_data by date
+        sorted_dates = sorted(daily_data.keys())
+        
+        # Initialize metrics for first day
+        first_date = sorted_dates[0]
+        daily_data[first_date]['atl'] = 50
+        daily_data[first_date]['ctl'] = 50
+        daily_data[first_date]['tsb'] = 0
+        
+        # Calculate metrics for subsequent days
+        for i in range(1, len(sorted_dates)):
+            current_date = sorted_dates[i]
+            prev_date = sorted_dates[i-1]
+            
+            # ATL = previous_ATL + (today_TRIMP - previous_ATL) / 7
+            daily_data[current_date]['atl'] = (
+                daily_data[prev_date]['atl'] + 
+                (daily_data[current_date]['trimp'] - daily_data[prev_date]['atl']) / 7
+            )
+            
+            # CTL = previous_CTL + (today_TRIMP - previous_CTL) / 42
+            daily_data[current_date]['ctl'] = (
+                daily_data[prev_date]['ctl'] + 
+                (daily_data[current_date]['trimp'] - daily_data[prev_date]['ctl']) / 42
+            )
+            
+            # TSB = CTL - ATL
+            daily_data[current_date]['tsb'] = daily_data[current_date]['ctl'] - daily_data[current_date]['atl']
+        
         # Save daily data to Supabase
         data = []
         for date_str, day_data in daily_data.items():
@@ -158,7 +187,10 @@ def get_trimp_values(api, user_id):
                 'user_id': user_id,
                 'date': day_data['date'].isoformat(),
                 'trimp': float(day_data['trimp']),
-                'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day'
+                'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day',
+                'atl': round(float(day_data['atl']), 1),
+                'ctl': round(float(day_data['ctl']), 1),
+                'tsb': round(float(day_data['tsb']), 1)
             }
             
             print(f"Saving data for {date_str}: {activity_data}")
@@ -176,7 +208,7 @@ def get_trimp_values(api, user_id):
                 
     except Exception as e:
         print(f"Error fetching activities: {e}")
-        return pd.DataFrame(columns=['date', 'trimp', 'activity'])
+        return pd.DataFrame(columns=['date', 'trimp', 'activity', 'atl', 'ctl', 'tsb'])
 
 def create_trimp_chart(df):
     # Use Agg backend which doesn't require GUI
