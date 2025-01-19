@@ -145,16 +145,23 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 if prev_day_response.data:
                     prev_metrics = prev_day_response.data[0]
                     first_date = sorted(daily_data.keys())[0]
+                    print(f"\nStarting recalculation from {first_date} with initial values:")
+                    print(f"ATL: {prev_metrics['atl']:.1f}")
+                    print(f"CTL: {prev_metrics['ctl']:.1f}")
+                    print(f"TSB: {prev_metrics['tsb']:.1f}")
                     daily_data[first_date]['atl'] = prev_metrics['atl']
                     daily_data[first_date]['ctl'] = prev_metrics['ctl']
                     daily_data[first_date]['tsb'] = prev_metrics['tsb']
                 
-                print("Recalculating metrics...")
+                print("\nRecalculating metrics day by day...")
                 # Recalculate metrics for all days
                 sorted_dates = sorted(daily_data.keys())
                 for i in range(1, len(sorted_dates)):
                     current_date = sorted_dates[i]
                     prev_date = sorted_dates[i-1]
+                    
+                    print(f"\nProcessing {current_date}:")
+                    print(f"TRIMP: {daily_data[current_date]['trimp']}")
                     
                     # ATL calculation
                     daily_data[current_date]['atl'] = (
@@ -170,8 +177,12 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                     
                     # TSB calculation
                     daily_data[current_date]['tsb'] = daily_data[prev_date]['ctl'] - daily_data[prev_date]['atl']
+                    
+                    print(f"ATL: {daily_data[current_date]['atl']:.1f}")
+                    print(f"CTL: {daily_data[current_date]['ctl']:.1f}")
+                    print(f"TSB: {daily_data[current_date]['tsb']:.1f}")
 
-                print("Updating records in database...")
+                print("\nUpdating records in database...")
                 # Update records in Supabase
                 updated_records = []
                 for date_str, day_data in daily_data.items():

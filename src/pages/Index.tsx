@@ -170,7 +170,7 @@ const Index = () => {
         if (data.newActivities > 0) {
           toast.success(`Added ${data.newActivities} new activities!`, { id: toastId });
         } else {
-          toast.loading('Verifying and updating calculations...', { id: toastId });
+          toast.loading('Starting metrics recalculation for last 9 days...', { id: toastId });
           
           const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
@@ -187,9 +187,9 @@ const Index = () => {
           
           const recalcData = await recalcResponse.json();
           if (recalcData.success) {
-            toast.success('Calculations verified and updated', { id: toastId });
+            toast.success('Metrics recalculated and updated successfully', { id: toastId });
           } else {
-            toast.error('Error verifying calculations', { id: toastId });
+            toast.error('Error recalculating metrics', { id: toastId });
           }
         }
         await refetchGarminData();
