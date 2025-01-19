@@ -42,7 +42,7 @@ export const GarminChart = ({ data }: Props) => {
     labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
       {
-        label: 'Acute Load (ATL)',
+        label: 'Acute Load',
         data: sortedData.map(d => d.atl),
         borderColor: 'rgb(59, 130, 246)', // Blue
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -50,7 +50,7 @@ export const GarminChart = ({ data }: Props) => {
         tension: 0.4,
       },
       {
-        label: 'Stress Balance (TSB)',
+        label: 'Stress Balance',
         data: sortedData.map(d => d.tsb),
         borderColor: 'rgb(239, 68, 68)', // Red
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -58,7 +58,7 @@ export const GarminChart = ({ data }: Props) => {
         tension: 0.4,
       },
       {
-        label: 'Chronic Load (CTL)',
+        label: 'Chronic Load',
         data: sortedData.map(d => d.ctl),
         borderColor: 'rgb(234, 179, 8)', // Yellow
         backgroundColor: 'rgba(234, 179, 8, 0.1)',
@@ -77,6 +77,9 @@ export const GarminChart = ({ data }: Props) => {
         labels: {
           usePointStyle: true,
           padding: 20,
+          font: {
+            size: 14
+          }
         },
       },
       title: {
@@ -100,7 +103,10 @@ export const GarminChart = ({ data }: Props) => {
         },
         ticks: {
           maxRotation: 45,
-          minRotation: 45
+          minRotation: 45,
+          font: {
+            size: 12
+          }
         }
       },
       y: {
@@ -109,7 +115,10 @@ export const GarminChart = ({ data }: Props) => {
           color: 'rgba(0, 0, 0, 0.05)'
         },
         ticks: {
-          callback: (value: number) => Math.round(value * 10) / 10
+          callback: (value: number) => Math.round(value * 10) / 10,
+          font: {
+            size: 12
+          }
         }
       }
     },
