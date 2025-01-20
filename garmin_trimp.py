@@ -96,7 +96,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
             print(f"Date range: {start_date.date()} to {end_date.date()}")
             
             # First, get the metrics from 9 days ago for initial values
-            nine_days_ago = start_date - timedelta(days=1)  # One day before our range
+            nine_days_ago = start_date - timedelta(days=1)
             print(f"\nGetting initial metrics from {nine_days_ago.date()}")
             
             initial_metrics = supabase.table('garmin_data')\
@@ -119,39 +119,41 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 initial_ctl = 50
                 initial_tsb = 0
 
-            # Get existing data from last 9 days
-            existing_response = supabase.table('garmin_data')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .gte('date', start_date.isoformat())\
-                .lte('date', end_date.isoformat())\
-                .order('date')\
-                .execute()
+            # Get existing data and new activities if in update mode
+            if update_only:
+                activities = api.get_activities_by_date(
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d")
+                )
+                print(f"Found {len(activities)} new activities")
+                
+                # Process new activities
+                for activity in activities:
+                    try:
+                        activity_id = activity['activityId']
+                        activity_name = activity.get('activityName', 'Unknown')
+                        
+                        activity_details = api.get_activity(activity_id)
+                        trimp = 0
+                        if 'connectIQMeasurements' in activity_details:
+                            for item in activity_details['connectIQMeasurements']:
+                                if item['developerFieldNumber'] == 4:
+                                    trimp = round(float(item['value']), 1)
+                        
+                        date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
+                        date_str = date.strftime("%Y-%m-%d")
+                        
+                        if date_str in daily_data:
+                            daily_data[date_str]['trimp'] += trimp
+                            daily_data[date_str]['activities'].append(activity_name)
+                            print(f"Added TRIMP {trimp} for {date_str} - {activity_name}")
+                        
+                        time.sleep(1)  # Rate limiting
+                    except Exception as e:
+                        print(f"Error processing activity: {e}")
+                        continue
 
-            print(f"\nFound {len(existing_response.data)} records in Supabase")
-            
-            # Initialize daily_data with existing or new records
-            daily_data = {}
-            current = start_date
-            while current <= end_date:
-                date_str = current.strftime("%Y-%m-%d")
-                daily_data[date_str] = {
-                    'date': current.replace(hour=12),
-                    'trimp': 0,
-                    'activities': [],
-                    'atl': initial_atl,  # Initialize with previous day's values
-                    'ctl': initial_ctl,
-                    'tsb': initial_tsb
-                }
-                current += timedelta(days=1)
-
-            # Update with existing data
-            for record in existing_response.data:
-                date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
-                daily_data[date_str]['trimp'] = record['trimp']
-                daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
-
-            # Calculate metrics day by day
+            # Calculate metrics for all days
             print("\n=== CALCULATING METRICS ===")
             sorted_dates = sorted(daily_data.keys())
             prev_atl = initial_atl
@@ -178,7 +180,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 prev_atl = daily_data[date_str]['atl']
                 prev_ctl = daily_data[date_str]['ctl']
 
-            # Update records in Supabase
+            # Update database
             print("\n=== UPDATING DATABASE ===")
             for date_str, day_data in daily_data.items():
                 activity_data = {
@@ -192,27 +194,12 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 }
                 
                 try:
-                    # Sprawdź czy rekord istnieje
-                    existing = supabase.table('garmin_data')\
-                        .select('*')\
-                        .eq('user_id', user_id)\
-                        .eq('date', day_data['date'].isoformat())\
+                    # Update or insert
+                    response = supabase.table('garmin_data')\
+                        .upsert(activity_data, 
+                               on_conflict='user_id,date')\
                         .execute()
-
-                    if existing.data:
-                        # Update
-                        response = supabase.table('garmin_data')\
-                            .update(activity_data)\
-                            .eq('user_id', user_id)\
-                            .eq('date', day_data['date'].isoformat())\
-                            .execute()
-                        print(f"Updated {date_str}")
-                    else:
-                        # Insert
-                        response = supabase.table('garmin_data')\
-                            .insert(activity_data)\
-                            .execute()
-                        print(f"Inserted {date_str}")
+                    print(f"Updated {date_str}")
                 except Exception as e:
                     print(f"Error updating {date_str}: {e}")
 
