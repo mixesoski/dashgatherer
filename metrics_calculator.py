@@ -78,13 +78,20 @@ def calculate_metrics(user_id, start_date=None):
 
         # Calculate metrics for all days starting from start_date
         updates = []
+        if last_known.data:
+            last_known_date = datetime.fromisoformat(last_known.data[0]['date']).date()
+            print(f"\nLast known date to skip: {last_known_date}")
+        
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
+            current_date_only = current_date.date()
             
             # Skip if this is the last known metrics date
-            if last_known.data and current_date.date() <= datetime.fromisoformat(last_known.data[0]['date']).date():
-                print(f"Skipping {day} - using as reference point")
+            if last_known.data and current_date_only <= last_known_date:
+                print(f"Skipping {day} - using as reference point only")
                 continue
+            
+            print(f"Processing {day}")
             
             # Get or create record for this day
             record = existing_map.get(day, {
