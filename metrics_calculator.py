@@ -16,7 +16,6 @@ def calculate_metrics(user_id, start_date=None):
         print(f"Date range: {start_date.date()} to {end_date.date()}")
 
         # Get the last known metrics before start_date
-        # Convert start_date to start of day to ensure we get the previous day's values
         start_of_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
         
         last_known = supabase.table('garmin_data')\
@@ -77,10 +76,15 @@ def calculate_metrics(user_id, start_date=None):
             for record in existing_data.data
         }
 
-        # Calculate metrics for all days
+        # Calculate metrics for all days starting from start_date
         updates = []
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
+            
+            # Skip if this is the last known metrics date
+            if last_known.data and current_date.date() <= datetime.fromisoformat(last_known.data[0]['date']).date():
+                print(f"Skipping {day} - using as reference point")
+                continue
             
             # Get or create record for this day
             record = existing_map.get(day, {
