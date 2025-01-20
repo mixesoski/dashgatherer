@@ -4,9 +4,18 @@ from garmin_sync import sync_garmin_data
 from metrics_calculator import calculate_metrics
 import traceback
 import numpy as np
+import os
 
 app = Flask(__name__)
-CORS(app)
+# Configure CORS to accept requests from any origin in development
+if os.environ.get('FLASK_ENV') == 'development':
+    CORS(app)
+else:
+    # In production, only accept requests from your domain
+    CORS(app, origins=[
+        "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
+        "https://eeaebxnbcxhzafzpzqsu.supabase.co"
+    ])
 
 def convert_to_serializable(obj):
     if isinstance(obj, np.int64):
@@ -57,4 +66,5 @@ def sync_garmin():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=True)
