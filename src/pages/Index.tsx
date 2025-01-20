@@ -147,63 +147,42 @@ const Index = () => {
     if (!userId) return;
     
     try {
-      setIsUpdating(true);
-      const toastId = toast.loading('Checking for new activities and missing dates...');
-      
-      // Get last 9 days
-      const startDate = subDays(new Date(), 9);
-      
-      const response = await fetch(`${API_URL}/api/sync-garmin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          userId,
-          startDate: startDate.toISOString(),
-          updateOnly: true,
-          recalculateOnly: false
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        if (data.newActivities > 0 || data.missingDates > 0) {
-          toast.success(`Updated: ${data.newActivities} new activities, ${data.missingDates} missing dates`, { id: toastId });
-          await refetchGarminData();
-        } else {
-          toast.loading('Recalculating metrics...', { id: toastId });
-          
-          const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
+        setIsUpdating(true);
+        const toastId = toast.loading('Checking for new activities...');
+        
+        // Get last 9 days
+        const startDate = subDays(new Date(), 9);
+        
+        const response = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
-              userId,
-              startDate: startDate.toISOString(),
-              updateOnly: false,
-              recalculateOnly: true
+                userId,
+                startDate: startDate.toISOString(),
+                updateOnly: true,
+                recalculateOnly: false
             })
-          });
-          
-          const recalcData = await recalcResponse.json();
-          if (recalcData.success) {
-            toast.success('Metrics updated successfully', { id: toastId });
-            await refetchGarminData();
-          } else {
-            toast.error('Error updating metrics', { id: toastId });
-          }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            if (data.newActivities > 0) {
+                toast.success(`Updated: ${data.newActivities} new activities`, { id: toastId });
+                await refetchGarminData();
+            } else {
+                toast.success('No new activities found', { id: toastId });
+            }
+        } else {
+            toast.error(data.error || 'Update failed', { id: toastId });
         }
-      } else {
-        toast.error(data.error || 'Update failed', { id: toastId });
-      }
     } catch (error) {
-      console.error('Error updating:', error);
-      toast.error('Error updating data');
+        console.error('Error updating:', error);
+        toast.error('Error updating data');
     } finally {
-      setIsUpdating(false);
+        setIsUpdating(false);
     }
   };
 
