@@ -37,6 +37,7 @@ def sync_garmin_data(user_id, start_date=None):
             try:
                 activity_id = activity['activityId']
                 activity_name = activity.get('activityName', 'Unknown')
+                activity_type = activity.get('activityType', {}).get('typeKey', '').lower()
                 
                 activity_details = client.get_activity(activity_id)
                 trimp = 0
@@ -44,6 +45,10 @@ def sync_garmin_data(user_id, start_date=None):
                     for item in activity_details['connectIQMeasurements']:
                         if item['developerFieldNumber'] == 4:
                             trimp = round(float(item['value']), 1)
+                            # Apply multiplier for strength training
+                            if 'strength' in activity_type or 'training' in activity_type:
+                                trimp *= 2
+                                print(f"Applied x2 multiplier for strength training")
                 
                 date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
                 date_str = date.strftime("%Y-%m-%d")

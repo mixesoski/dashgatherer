@@ -62,6 +62,13 @@ def calculate_metrics(user_id, start_date=None):
             all_days.append(current.strftime("%Y-%m-%d"))
             current += timedelta(days=1)
 
+        if not all_days:
+            print("No days to process after last known metrics")
+            return {
+                'success': True,
+                'message': 'No days to update'
+            }
+
         print(f"\nProcessing {len(all_days)} days from {all_days[0]} to {all_days[-1]}")
 
         # Get existing data for these days
