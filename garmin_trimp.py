@@ -119,6 +119,21 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 initial_ctl = 50
                 initial_tsb = 0
 
+            # Initialize daily_data first
+            daily_data = {}
+            current = start_date
+            while current <= end_date:
+                date_str = current.strftime("%Y-%m-%d")
+                daily_data[date_str] = {
+                    'date': current.replace(hour=12),
+                    'trimp': 0,
+                    'activities': [],
+                    'atl': initial_atl,
+                    'ctl': initial_ctl,
+                    'tsb': initial_tsb
+                }
+                current += timedelta(days=1)
+
             # Get existing data and new activities if in update mode
             if update_only:
                 activities = api.get_activities_by_date(
@@ -214,21 +229,6 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 end_date.strftime("%Y-%m-%d")
             )
             print(f"Found {len(activities)} activities")
-
-        # Initialize daily_data
-        daily_data = {}
-        current = start_date
-        while current <= end_date:
-            date_str = current.strftime("%Y-%m-%d")
-            daily_data[date_str] = {
-                'date': current.replace(hour=12),
-                'trimp': 0,
-                'activities': [],
-                'atl': 0,
-                'ctl': 0,
-                'tsb': 0
-            }
-            current += timedelta(days=1)
 
         # Update TRIMP values from activities
         if activities:
