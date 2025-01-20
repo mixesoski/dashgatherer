@@ -16,6 +16,7 @@ import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
 import { subMonths, startOfDay, subDays } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
+import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
@@ -26,31 +27,27 @@ const Index = () => {
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const { data: garminCredentials, isLoading, error: credentialsError, refetch: refetchCredentials } = useQuery({
+  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
     queryFn: async () => {
-      console.log('Fetching Garmin credentials...');
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching Garmin credentials:', error);
         throw error;
       }
 
-      console.log('Garmin credentials fetched:', data);
       return data;
     }
   });
 
-  const { data: garminData, error: garminDataError, refetch: refetchGarminData } = useQuery({
+  const { data: garminData, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', userId],
     queryFn: async () => {
       if (!userId) return null;
       
-      console.log('Fetching Garmin data for user:', userId);
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
@@ -58,11 +55,9 @@ const Index = () => {
         .order('date', { ascending: true });
 
       if (error) {
-        console.error('Error fetching Garmin data:', error);
         throw error;
       }
 
-      console.log('Garmin data fetched:', data);
       return data;
     },
     enabled: !!userId
@@ -70,18 +65,9 @@ const Index = () => {
 
   useEffect(() => {
     const getCurrentUser = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error) {
-          console.error('Error getting current user:', error);
-          return;
-        }
-        if (user) {
-          console.log('Current user set:', user.id);
-          setUserId(user.id);
-        }
-      } catch (error) {
-        console.error('Error in getCurrentUser:', error);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
       }
     };
     getCurrentUser();
@@ -93,35 +79,19 @@ const Index = () => {
     }
   }, [garminData]);
 
-  // Show errors in UI if they occur
-  useEffect(() => {
-    if (credentialsError) {
-      toast.error('Error fetching Garmin credentials: ' + credentialsError.message);
-    }
-    if (garminDataError) {
-      toast.error('Error fetching Garmin data: ' + garminDataError.message);
-    }
-  }, [credentialsError, garminDataError]);
-
   const handleDeleteCredentials = async () => {
-    try {
-      const { error } = await supabase
-        .from('garmin_credentials')
-        .delete()
-        .single();
+    const { error } = await supabase
+      .from('garmin_credentials')
+      .delete()
+      .single();
 
-      if (error) {
-        console.error('Error deleting credentials:', error);
-        toast.error("Failed to delete Garmin credentials");
-        return;
-      }
-
-      toast.success("Garmin credentials deleted successfully");
-      await refetchCredentials();
-    } catch (error) {
-      console.error('Error in handleDeleteCredentials:', error);
-      toast.error("An error occurred while deleting credentials");
+    if (error) {
+      toast.error("Failed to delete Garmin credentials");
+      return;
     }
+
+    toast.success("Garmin credentials deleted successfully");
+    await refetchCredentials();
   };
 
   const handleSync = async () => {
@@ -130,47 +100,10 @@ const Index = () => {
       return;
     }
 
-    try {
-      const toastId = toast.loading('Syncing Garmin data...');
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      console.log('Current user:', user);
-      console.log('Using userId:', userId);
-      console.log('Start date:', startDate);
-      console.log('API URL:', `${API_URL}/api/sync-garmin`);
-      
-      if (!user || user.id !== userId) {
-        toast.error('User authentication error', { id: toastId });
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/sync-garmin`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          userId: user.id,
-          startDate: startDate.toISOString()
-        })
-      });
-
-      console.log('Raw response:', response);
-      
-      const data = await response.json();
-      console.log('Response data:', data);
-      
-      if (data.success) {
-        toast.success('Data synced successfully!', { id: toastId });
-        setShowButtons(false);
-        await refetchGarminData();
-        console.log('Sync summary:', data.summary);
-      } else {
-        toast.error(data.error || 'Sync failed', { id: toastId });
-      }
-    } catch (error) {
-      console.error('Error syncing:', error);
-      toast.error('Error syncing data');
+    const success = await syncGarminData(userId, startDate);
+    if (success) {
+      setShowButtons(false);
+      await refetchGarminData();
     }
   };
 
@@ -178,42 +111,13 @@ const Index = () => {
     if (!userId) return;
     
     try {
-        setIsUpdating(true);
-        const toastId = toast.loading('Checking for new activities...');
-        
-        // Get last 9 days
-        const startDate = subDays(new Date(), 9);
-        
-        const response = await fetch(`${API_URL}/api/sync-garmin`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                userId,
-                startDate: startDate.toISOString(),
-                updateOnly: true,
-                recalculateOnly: false
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            if (data.newActivities > 0) {
-                toast.success(`Updated: ${data.newActivities} new activities`, { id: toastId });
-                await refetchGarminData();
-            } else {
-                toast.success('No new activities found', { id: toastId });
-            }
-        } else {
-            toast.error(data.error || 'Update failed', { id: toastId });
-        }
-    } catch (error) {
-        console.error('Error updating:', error);
-        toast.error('Error updating data');
+      setIsUpdating(true);
+      const success = await updateGarminData(userId);
+      if (success) {
+        await refetchGarminData();
+      }
     } finally {
-        setIsUpdating(false);
+      setIsUpdating(false);
     }
   };
 
