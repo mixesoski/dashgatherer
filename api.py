@@ -2,9 +2,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_trimp import main as garmin_main
 import traceback
+import numpy as np
 
 app = Flask(__name__)
 CORS(app)
+
+def convert_to_serializable(obj):
+    if isinstance(obj, np.int64):
+        return int(obj)
+    return obj
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
@@ -26,6 +32,11 @@ def sync_garmin():
             return jsonify({'success': False, 'error': 'No user ID provided'})
         
         result = garmin_main(user_id, start_date, update_only, recalculate_only)
+        
+        # Convert any int64 values to regular Python integers
+        if isinstance(result, dict):
+            result = {k: convert_to_serializable(v) for k, v in result.items()}
+        
         print(f"Processing result: {result}")
         
         return jsonify(result)
@@ -35,4 +46,4 @@ def sync_garmin():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(port=5001, debug=True)  # Enable debug mode 
+    app.run(port=5001, debug=True)
