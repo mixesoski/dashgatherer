@@ -5,7 +5,10 @@ const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://loca
 
 export const syncGarminData = async (userId: string, startDate: Date) => {
     try {
-        const toastId = toast.loading('Syncing Garmin data...');
+        // Start with initial loading toast
+        const toastId = toast.loading('Connecting to Garmin...', {
+            duration: Infinity
+        });
         
         const { data: { user } } = await supabase.auth.getUser();
         console.log('Current user:', user);
@@ -17,6 +20,9 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
             toast.error('User authentication error', { id: toastId });
             return false;
         }
+
+        // Update toast to show data fetching
+        toast.loading('Fetching activities from Garmin...', { id: toastId });
 
         const response = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
@@ -30,12 +36,26 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         });
 
         console.log('Raw response:', response);
-        
         const data = await response.json();
         console.log('Response data:', data);
         
         if (data.success) {
-            toast.success('Data synced successfully!', { id: toastId });
+            // Show progress messages
+            if (data.newActivities > 0) {
+                toast.loading('Processing new activities...', { id: toastId });
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to read
+                toast.loading('Calculating metrics...', { id: toastId });
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to read
+                toast.success(`Synced ${data.newActivities} new activities!`, { 
+                    id: toastId,
+                    duration: 3000
+                });
+            } else {
+                toast.success('Everything is up to date!', { 
+                    id: toastId,
+                    duration: 3000
+                });
+            }
             return true;
         } else {
             toast.error(data.error || 'Sync failed', { id: toastId });
@@ -50,7 +70,9 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
 
 export const updateGarminData = async (userId: string) => {
     try {
-        const toastId = toast.loading('Checking for new activities...');
+        const toastId = toast.loading('Checking for new activities...', {
+            duration: Infinity
+        });
         
         // Get last 9 days
         const startDate = new Date();
@@ -73,10 +95,18 @@ export const updateGarminData = async (userId: string) => {
         
         if (data.success) {
             if (data.newActivities > 0) {
-                toast.success(`Updated: ${data.newActivities} new activities`, { id: toastId });
+                toast.loading('Processing new activities...', { id: toastId });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                toast.success(`Updated ${data.newActivities} new activities!`, { 
+                    id: toastId,
+                    duration: 3000
+                });
                 return true;
             } else {
-                toast.success('No new activities found', { id: toastId });
+                toast.success('No new activities found', { 
+                    id: toastId,
+                    duration: 3000
+                });
                 return false;
             }
         } else {
