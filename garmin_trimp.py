@@ -194,8 +194,10 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 try:
                     # Użyj upsert z kluczem unikalnym (user_id + date)
                     response = supabase.table('garmin_data')\
-                        .upsert(activity_data, 
-                               on_conflict='user_id,date')\  # Klucz unikalny
+                        .upsert(
+                            activity_data, 
+                            on_conflict='user_id,date'  # Klucz unikalny
+                        )\
                         .execute()
                     print(f"Updated {date_str}")
                 except Exception as e:
