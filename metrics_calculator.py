@@ -33,8 +33,8 @@ def calculate_metrics(user_id, start_date=None):
             prev_atl = float(record['atl'] if record['atl'] is not None else 0)
             prev_ctl = float(record['ctl'] if record['ctl'] is not None else 0)
             last_known_date = datetime.fromisoformat(record['date']).date()
-            # Adjust start_date to day after last_known
-            start_date = (last_known_date + timedelta(days=1))
+            # Adjust start_date to day after last_known (as datetime)
+            start_date = datetime.combine(last_known_date + timedelta(days=1), datetime.min.time())
             print(f"Found last known metrics from {record['date']}")
             print(f"ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
             print(f"Adjusting start date to: {start_date}")
