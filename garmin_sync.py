@@ -10,6 +10,16 @@ def sync_garmin_data(user_id, start_date=None):
     try:
         print(f"\nStarting data sync for user ID: {user_id}")
         
+        # Check if this is first sync for user
+        existing_data = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .limit(1)\
+            .execute()
+        
+        is_first_sync = len(existing_data.data) == 0
+        print(f"Is first sync: {is_first_sync}")
+
         # Get credentials and initialize client
         email, password = get_garmin_credentials(user_id)
         client = Garmin(email, password)
@@ -77,6 +87,14 @@ def sync_garmin_data(user_id, start_date=None):
                 'trimp': float(data['trimp']),
                 'activity': ', '.join(data['activities'])
             }
+            
+            # Add initial metrics for first sync
+            if is_first_sync:
+                activity_data.update({
+                    'atl': 50,
+                    'ctl': 50,
+                    'tsb': 0
+                })
             
             try:
                 response = supabase.table('garmin_data')\
