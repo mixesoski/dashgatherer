@@ -251,7 +251,6 @@ const Index = () => {
                       placeholderText="Select start date"
                       popperPlacement="bottom-end"
                       popperProps={{
-                        positionFixed: true,
                         strategy: "fixed"
                       }}
                       calendarClassName="translate-y-2"
