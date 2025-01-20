@@ -411,10 +411,13 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
         df = df.sort_values('date', ascending=False)
         
         # Print summary
+        total_trimp = float(df['trimp'].sum())  # Convert numpy.int64 to float
+        avg_trimp = float(df['trimp'].mean())   # Convert numpy.float64 to float
+        
         print("\nSummary:")
         print(f"Total activities: {len(df)}")
-        print(f"Total TRIMP: {round(df['trimp'].sum(), 1)}")
-        print(f"Average TRIMP per activity: {round(df['trimp'].mean(), 1)}")
+        print(f"Total TRIMP: {round(total_trimp, 1)}")
+        print(f"Average TRIMP per activity: {round(avg_trimp, 1)}")
         print(f"Date range: {df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}")
         
         # Create chart
@@ -427,8 +430,8 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
             'newActivities': len(df) if update_only else None,
             'summary': {
                 'total_activities': len(df),
-                'total_trimp': round(df['trimp'].sum(), 1),
-                'avg_trimp': round(df['trimp'].mean(), 1),
+                'total_trimp': round(total_trimp, 1),  # Use converted float
+                'avg_trimp': round(avg_trimp, 1),      # Use converted float
                 'date_range': {
                     'start': df['date'].min().strftime('%Y-%m-%d'),
                     'end': df['date'].max().strftime('%Y-%m-%d')
