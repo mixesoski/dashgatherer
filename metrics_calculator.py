@@ -15,22 +15,22 @@ def calculate_metrics(user_id, start_date=None):
         print(f"\n=== CALCULATING METRICS ===")
         print(f"Date range: {start_date.date()} to {end_date.date()}")
 
-        # Get initial metrics from previous day
-        nine_days_ago = start_date - timedelta(days=1)
-        print(f"\nGetting initial metrics from {nine_days_ago.date()}")
-        
-        initial_metrics = supabase.table('garmin_data')\
+        # Get the last known metrics before start_date
+        last_known = supabase.table('garmin_data')\
             .select('*')\
             .eq('user_id', user_id)\
-            .eq('date', nine_days_ago.isoformat())\
+            .lt('date', start_date.isoformat())\
+            .order('date', desc=True)\
+            .limit(1)\
             .execute()
 
-        if initial_metrics.data:
-            initial_atl = float(initial_metrics.data[0]['atl'] or 0)
-            initial_ctl = float(initial_metrics.data[0]['ctl'] or 0)
-            print(f"Found initial metrics - ATL: {initial_atl:.1f}, CTL: {initial_ctl:.1f}")
+        if last_known.data:
+            prev_atl = float(last_known.data[0]['atl'] or 0)
+            prev_ctl = float(last_known.data[0]['ctl'] or 0)
+            print(f"Found last known metrics from {last_known.data[0]['date']}")
+            print(f"ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
         else:
-            # Only use defaults if no previous data exists at all
+            # Only use defaults for new users
             any_data = supabase.table('garmin_data')\
                 .select('*')\
                 .eq('user_id', user_id)\
@@ -38,49 +38,59 @@ def calculate_metrics(user_id, start_date=None):
                 .execute()
             
             if any_data.data:
-                initial_atl = 0
-                initial_ctl = 0
-                print("No previous day data, but user has history - using zeros")
+                prev_atl = 0
+                prev_ctl = 0
+                print("No previous data found, but user exists - using zeros")
             else:
-                initial_atl = 50
-                initial_ctl = 50
+                prev_atl = 50
+                prev_ctl = 50
                 print("New user - using default values")
 
-        # Get existing data
-        existing_response = supabase.table('garmin_data')\
+        # Get all days in range (including rest days)
+        all_days = []
+        current = start_date
+        while current <= end_date:
+            all_days.append(current.strftime("%Y-%m-%d"))
+            current += timedelta(days=1)
+
+        # Get existing data for these days
+        existing_data = supabase.table('garmin_data')\
             .select('*')\
             .eq('user_id', user_id)\
             .gte('date', start_date.isoformat())\
             .lte('date', end_date.isoformat())\
-            .order('date')\
             .execute()
 
-        if not existing_response.data:
-            print("No data found in date range")
-            return {
-                'success': False,
-                'error': 'No data found in date range'
-            }
+        # Create a map of existing data
+        existing_map = {
+            datetime.fromisoformat(record['date']).strftime("%Y-%m-%d"): record
+            for record in existing_data.data
+        }
 
-        print(f"\nFound {len(existing_response.data)} records to update")
-
-        # Calculate metrics
-        prev_atl = initial_atl
-        prev_ctl = initial_ctl
+        # Calculate metrics for all days
         updates = []
-        
-        for record in existing_response.data:
-            trimp = float(record['trimp'] or 0)
-            date = record['date']
+        for day in all_days:
+            current_date = datetime.strptime(day, "%Y-%m-%d")
+            
+            # Get or create record for this day
+            record = existing_map.get(day, {
+                'user_id': user_id,
+                'date': current_date.isoformat(),
+                'trimp': 0,
+                'activity': 'Rest day'
+            })
             
             # Calculate new values
+            trimp = float(record.get('trimp', 0) or 0)
             atl = prev_atl + (trimp - prev_atl) / 7
             ctl = prev_ctl + (trimp - prev_ctl) / 42
             tsb = prev_ctl - prev_atl
             
             updates.append({
                 'user_id': user_id,
-                'date': date,
+                'date': record['date'],
+                'trimp': trimp,
+                'activity': record.get('activity', 'Rest day'),
                 'atl': round(float(atl), 1),
                 'ctl': round(float(ctl), 1),
                 'tsb': round(float(tsb), 1)
@@ -89,17 +99,11 @@ def calculate_metrics(user_id, start_date=None):
             prev_atl = atl
             prev_ctl = ctl
 
-        # Batch update all records
+        # Update all records
         try:
             for update in updates:
                 response = supabase.table('garmin_data')\
-                    .update({
-                        'atl': update['atl'],
-                        'ctl': update['ctl'],
-                        'tsb': update['tsb']
-                    })\
-                    .eq('user_id', update['user_id'])\
-                    .eq('date', update['date'])\
+                    .upsert(update, on_conflict='user_id,date')\
                     .execute()
                 print(f"Updated metrics for {update['date']}")
         except Exception as e:
@@ -111,7 +115,7 @@ def calculate_metrics(user_id, start_date=None):
 
         return {
             'success': True,
-            'message': f'Updated metrics for {len(updates)} records'
+            'message': f'Updated metrics for {len(updates)} days'
         }
 
     except Exception as e:
