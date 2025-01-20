@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from garmin_trimp import main as garmin_main
+from garmin_sync import sync_garmin_data
+from metrics_calculator import calculate_metrics
 import traceback
 import numpy as np
 
@@ -31,7 +32,17 @@ def sync_garmin():
             print("No user_id provided")
             return jsonify({'success': False, 'error': 'No user ID provided'})
         
-        result = garmin_main(user_id, start_date, update_only, recalculate_only)
+        if recalculate_only:
+            result = calculate_metrics(user_id, start_date)
+        else:
+            # First sync new data
+            sync_result = sync_garmin_data(user_id, start_date)
+            if not sync_result['success']:
+                return jsonify(sync_result)
+            
+            # Then calculate metrics
+            result = calculate_metrics(user_id, start_date)
+            result['newActivities'] = sync_result['newActivities']
         
         # Convert any int64 values to regular Python integers
         if isinstance(result, dict):
