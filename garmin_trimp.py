@@ -410,12 +410,19 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
         # Sort by date
         df = df.sort_values('date', ascending=False)
         
+        # Convert all numeric values to native Python types
+        df['trimp'] = df['trimp'].astype(float)
+        df['atl'] = df['atl'].astype(float)
+        df['ctl'] = df['ctl'].astype(float)
+        df['tsb'] = df['tsb'].astype(float)
+        
         # Print summary
-        total_trimp = float(df['trimp'].sum())  # Convert numpy.int64 to float
-        avg_trimp = float(df['trimp'].mean())   # Convert numpy.float64 to float
+        total_trimp = float(df['trimp'].sum())
+        avg_trimp = float(df['trimp'].mean())
+        total_activities = int(len(df))  # Convert to native int
         
         print("\nSummary:")
-        print(f"Total activities: {len(df)}")
+        print(f"Total activities: {total_activities}")
         print(f"Total TRIMP: {round(total_trimp, 1)}")
         print(f"Average TRIMP per activity: {round(avg_trimp, 1)}")
         print(f"Date range: {df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}")
@@ -427,11 +434,11 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
         return {
             'success': True,
             'message': 'Data fetched and saved successfully',
-            'newActivities': len(df) if update_only else None,
+            'newActivities': total_activities if update_only else None,
             'summary': {
-                'total_activities': len(df),
-                'total_trimp': round(total_trimp, 1),  # Use converted float
-                'avg_trimp': round(avg_trimp, 1),      # Use converted float
+                'total_activities': total_activities,
+                'total_trimp': round(float(total_trimp), 1),
+                'avg_trimp': round(float(avg_trimp), 1),
                 'date_range': {
                     'start': df['date'].min().strftime('%Y-%m-%d'),
                     'end': df['date'].max().strftime('%Y-%m-%d')
