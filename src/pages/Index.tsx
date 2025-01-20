@@ -147,7 +147,7 @@ const Index = () => {
     
     try {
       setIsUpdating(true);
-      const toastId = toast.loading('Checking for new activities...');
+      const toastId = toast.loading('Checking for new activities and missing dates...');
       
       // Get last 9 days
       const startDate = subDays(new Date(), 9);
@@ -168,13 +168,12 @@ const Index = () => {
       const data = await response.json();
       
       if (data.success) {
-        if (data.newActivities > 0) {
-          toast.success(`Added ${data.newActivities} new activities!`, { id: toastId });
+        if (data.newActivities > 0 || data.missingDates > 0) {
+          toast.success(`Updated: ${data.newActivities} new activities, ${data.missingDates} missing dates`, { id: toastId });
           await refetchGarminData();
         } else {
-          toast.loading('Starting metrics recalculation for last 9 days...', { id: toastId });
+          toast.loading('Recalculating metrics...', { id: toastId });
           
-          // Jeśli nie ma nowych aktywności, uruchamiamy recalculate
           const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
             headers: {
@@ -190,36 +189,14 @@ const Index = () => {
           
           const recalcData = await recalcResponse.json();
           if (recalcData.success) {
-            toast.success('Metrics recalculated and updated successfully', { id: toastId });
+            toast.success('Metrics updated successfully', { id: toastId });
             await refetchGarminData();
           } else {
-            toast.error('Error recalculating metrics', { id: toastId });
+            toast.error('Error updating metrics', { id: toastId });
           }
         }
       } else {
-        // Jeśli nie znaleziono aktywności, uruchamiamy recalculate
-        toast.loading('No new activities, starting metrics recalculation...', { id: toastId });
-        
-        const recalcResponse = await fetch(`${API_URL}/api/sync-garmin`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            userId,
-            startDate: startDate.toISOString(),
-            updateOnly: false,
-            recalculateOnly: true
-          })
-        });
-        
-        const recalcData = await recalcResponse.json();
-        if (recalcData.success) {
-          toast.success('Metrics recalculated and updated successfully', { id: toastId });
-          await refetchGarminData();
-        } else {
-          toast.error('Error recalculating metrics', { id: toastId });
-        }
+        toast.error(data.error || 'Update failed', { id: toastId });
       }
     } catch (error) {
       console.error('Error updating:', error);

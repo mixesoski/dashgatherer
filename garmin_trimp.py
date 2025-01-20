@@ -122,15 +122,49 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                 .eq('user_id', user_id)\
                 .gte('date', start_date.isoformat())\
                 .lte('date', end_date.isoformat())\
-                .order('date', { ascending: True })\
+                .order('date')\
                 .execute()
 
             print(f"\nFound {len(existing_response.data)} records in Supabase")
             
-            if recalculate_only:
-                # Jeśli tylko przeliczamy, nie pobieramy nowych aktywności
-                activities = []
+            # Create set of existing dates
+            existing_dates = {datetime.fromisoformat(record['date']).strftime("%Y-%m-%d") 
+                            for record in existing_response.data}
             
+            # Check for missing dates
+            current = start_date
+            missing_dates = []
+            while current <= end_date:
+                date_str = current.strftime("%Y-%m-%d")
+                if date_str not in existing_dates:
+                    missing_dates.append(date_str)
+                    print(f"Found missing date: {date_str}")
+                current += timedelta(days=1)
+
+            if missing_dates:
+                print(f"\nAdding {len(missing_dates)} missing dates as rest days")
+                for date_str in missing_dates:
+                    rest_day = {
+                        'user_id': user_id,
+                        'date': datetime.strptime(date_str, "%Y-%m-%d").replace(hour=12).isoformat(),
+                        'trimp': 0,
+                        'activity': 'Rest day',
+                        'atl': 0,
+                        'ctl': 0,
+                        'tsb': 0
+                    }
+                    supabase.table('garmin_data').insert(rest_day).execute()
+                    print(f"Added rest day for {date_str}")
+
+                # Refresh existing data after adding missing dates
+                existing_response = supabase.table('garmin_data')\
+                    .select('*')\
+                    .eq('user_id', user_id)\
+                    .gte('date', start_date.isoformat())\
+                    .lte('date', end_date.isoformat())\
+                    .order('date')\
+                    .execute()
+
             if existing_response.data:
                 print("\n=== GETTING PREVIOUS DAY METRICS ===")
                 # Get the day before start_date for initial metrics
