@@ -18,7 +18,7 @@ import { subMonths, startOfDay, subDays } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 
 // Get the API URL from environment variable or fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -106,6 +106,7 @@ const Index = () => {
       console.log('Current user:', user);
       console.log('Using userId:', userId);
       console.log('Start date:', startDate);
+      console.log('API URL:', `${API_URL}/api/sync-garmin`);
       
       if (!user || user.id !== userId) {
         toast.error('User authentication error', { id: toastId });
