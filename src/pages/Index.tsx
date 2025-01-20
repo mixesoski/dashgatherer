@@ -26,27 +26,31 @@ const Index = () => {
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
+  const { data: garminCredentials, isLoading, error: credentialsError, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials'],
     queryFn: async () => {
+      console.log('Fetching Garmin credentials...');
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
         .maybeSingle();
 
       if (error) {
+        console.error('Error fetching Garmin credentials:', error);
         throw error;
       }
 
+      console.log('Garmin credentials fetched:', data);
       return data;
     }
   });
 
-  const { data: garminData, refetch: refetchGarminData } = useQuery({
+  const { data: garminData, error: garminDataError, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', userId],
     queryFn: async () => {
       if (!userId) return null;
       
+      console.log('Fetching Garmin data for user:', userId);
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
@@ -54,9 +58,11 @@ const Index = () => {
         .order('date', { ascending: true });
 
       if (error) {
+        console.error('Error fetching Garmin data:', error);
         throw error;
       }
 
+      console.log('Garmin data fetched:', data);
       return data;
     },
     enabled: !!userId
@@ -64,9 +70,18 @@ const Index = () => {
 
   useEffect(() => {
     const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('Error getting current user:', error);
+          return;
+        }
+        if (user) {
+          console.log('Current user set:', user.id);
+          setUserId(user.id);
+        }
+      } catch (error) {
+        console.error('Error in getCurrentUser:', error);
       }
     };
     getCurrentUser();
@@ -78,19 +93,35 @@ const Index = () => {
     }
   }, [garminData]);
 
-  const handleDeleteCredentials = async () => {
-    const { error } = await supabase
-      .from('garmin_credentials')
-      .delete()
-      .single();
-
-    if (error) {
-      toast.error("Failed to delete Garmin credentials");
-      return;
+  // Show errors in UI if they occur
+  useEffect(() => {
+    if (credentialsError) {
+      toast.error('Error fetching Garmin credentials: ' + credentialsError.message);
     }
+    if (garminDataError) {
+      toast.error('Error fetching Garmin data: ' + garminDataError.message);
+    }
+  }, [credentialsError, garminDataError]);
 
-    toast.success("Garmin credentials deleted successfully");
-    await refetchCredentials();
+  const handleDeleteCredentials = async () => {
+    try {
+      const { error } = await supabase
+        .from('garmin_credentials')
+        .delete()
+        .single();
+
+      if (error) {
+        console.error('Error deleting credentials:', error);
+        toast.error("Failed to delete Garmin credentials");
+        return;
+      }
+
+      toast.success("Garmin credentials deleted successfully");
+      await refetchCredentials();
+    } catch (error) {
+      console.error('Error in handleDeleteCredentials:', error);
+      toast.error("An error occurred while deleting credentials");
+    }
   };
 
   const handleSync = async () => {
