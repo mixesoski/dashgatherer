@@ -32,8 +32,12 @@ def calculate_metrics(user_id, start_date=None):
             record = last_known.data[0]
             prev_atl = float(record['atl'] if record['atl'] is not None else 0)
             prev_ctl = float(record['ctl'] if record['ctl'] is not None else 0)
+            last_known_date = datetime.fromisoformat(record['date']).date()
+            # Adjust start_date to day after last_known
+            start_date = (last_known_date + timedelta(days=1))
             print(f"Found last known metrics from {record['date']}")
             print(f"ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
+            print(f"Adjusting start date to: {start_date}")
         else:
             # Only use defaults for new users
             any_data = supabase.table('garmin_data')\
@@ -76,20 +80,10 @@ def calculate_metrics(user_id, start_date=None):
             for record in existing_data.data
         }
 
-        # Calculate metrics for all days starting from start_date
+        # Calculate metrics for all days
         updates = []
-        if last_known.data:
-            last_known_date = datetime.fromisoformat(last_known.data[0]['date']).date()
-            print(f"\nLast known date to skip: {last_known_date}")
-        
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
-            current_date_only = current_date.date()
-            
-            # Skip if this is the last known metrics date
-            if last_known.data and current_date_only <= last_known_date:
-                print(f"Skipping {day} - using as reference point only")
-                continue
             
             print(f"Processing {day}")
             
