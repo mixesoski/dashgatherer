@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
+import { useState, useEffect } from "react"
+import { RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -18,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { supabase } from "@/integrations/supabase/client"
+import { useQuery } from "@tanstack/react-query"
 
 const formSchema = z.object({
   email: z.string().min(1, "Email is required").email("Invalid email format"),
@@ -26,6 +29,25 @@ const formSchema = z.object({
 
 export function GarminCredentialsForm() {
   const navigate = useNavigate()
+  const [hasCredentials, setHasCredentials] = useState(false)
+
+  const { data: garminCredentials, refetch } = useQuery({
+    queryKey: ['garminCredentials'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('garmin_credentials')
+        .select('*')
+        .maybeSingle()
+
+      if (error) throw error
+      return data
+    }
+  })
+
+  useEffect(() => {
+    setHasCredentials(!!garminCredentials)
+  }, [garminCredentials])
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -55,10 +77,32 @@ export function GarminCredentialsForm() {
 
       toast.success("Garmin credentials saved successfully!")
       form.reset()
+      refetch() // Refresh the credentials data
     } catch (error) {
       console.error('Error saving Garmin credentials:', error)
       toast.error("Failed to save Garmin credentials")
     }
+  }
+
+  if (hasCredentials) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader>
+          <CardTitle>Garmin Account Connected</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-gray-600 mb-4">Your Garmin account ({garminCredentials?.email}) is connected.</p>
+          <Button 
+            variant="outline" 
+            className="w-full flex items-center justify-center gap-2"
+            onClick={() => navigate('/')}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Go to Sync Page
+          </Button>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
