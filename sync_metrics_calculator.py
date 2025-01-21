@@ -58,22 +58,16 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         # Calculate metrics for all days
         updates = []
         
-        # Always start with 50/50 for first day
-        if day == all_days[0]:
+        # Set initial values
+        if last_known.data:
+            record = last_known.data[0]
+            prev_atl = float(record['atl'])
+            prev_ctl = float(record['ctl'])
+            print(f"Using previous values - ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
+        else:
             prev_atl = 50
             prev_ctl = 50
-            print(f"Starting with initial values - ATL: 50.0, CTL: 50.0")
-        else:
-            # Use last known values if available, otherwise use 50/50
-            if last_known.data:
-                record = last_known.data[0]
-                prev_atl = float(record['atl'])
-                prev_ctl = float(record['ctl'])
-                print(f"Using previous values - ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
-            else:
-                prev_atl = 50
-                prev_ctl = 50
-                print(f"No previous data - starting with ATL: 50.0, CTL: 50.0")
+            print(f"No previous data - starting with ATL: 50.0, CTL: 50.0")
         
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
