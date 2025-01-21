@@ -7,12 +7,16 @@ def calculate_metrics(user_id, start_date=None):
         # Get dates range
         end_date = datetime.now().replace(tzinfo=None)
         if start_date:
-            start_date = datetime.fromisoformat(start_date.replace('Z', ''))
+            # Upewnijmy się, że start_date jest obiektem datetime
+            if isinstance(start_date, str):
+                start_date = datetime.fromisoformat(start_date.replace('Z', ''))
             start_date = start_date.replace(tzinfo=None)
         else:
             start_date = end_date - timedelta(days=9)
 
         print(f"\n=== CALCULATING METRICS ===")
+        print(f"Start date type: {type(start_date)}")  # Dodajmy debug
+        print(f"Start date value: {start_date}")
         print(f"Date range: {start_date.date()} to {end_date.date()}")
 
         # Get the last known metrics before start_date
