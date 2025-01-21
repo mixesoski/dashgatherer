@@ -36,6 +36,13 @@ const Login = () => {
       if (event === 'TOKEN_REFRESHED') {
         console.log('Token refreshed successfully');
       }
+      if (event === 'USER_UPDATED') {
+        console.log('User updated successfully');
+      }
+      // Handle authentication errors
+      if (event === 'USER_DELETED' || event === 'SIGNED_OUT') {
+        setError(null);
+      }
     });
 
     // Cleanup subscription
@@ -67,6 +74,13 @@ const Login = () => {
                 loading_button_label: 'Signing in...',
                 social_provider_text: 'Sign in with {{provider}}',
                 link_text: "Already have an account? Sign in",
+              },
+              sign_up: {
+                email_label: 'Email',
+                password_label: 'Password',
+                button_label: 'Sign Up',
+                loading_button_label: 'Signing up...',
+                link_text: "Don't have an account? Sign up",
               },
             },
           }}
