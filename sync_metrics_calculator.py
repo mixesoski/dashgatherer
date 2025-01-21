@@ -15,46 +15,18 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         print(f"\n=== CALCULATING SYNC METRICS ===")
         print(f"Date range: {start_date.date()} to {end_date.date()}")
 
-        # Get the last known metrics before start_date
-        start_of_day = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        last_known = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .lt('date', start_of_day.isoformat())\
-            .order('date', desc=True)\
-            .limit(1)\
-            .execute()
-
-        print("\nLooking for last known metrics before:", start_of_day.isoformat())
-        
-        if last_known.data:
-            record = last_known.data[0]
-            if is_first_sync:
-                prev_atl = 50
-                prev_ctl = 50
-                print("First sync - using initial values ATL=50, CTL=50")
-            else:
-                prev_atl = float(record['atl'] if record['atl'] is not None else 50)
-                prev_ctl = float(record['ctl'] if record['ctl'] is not None else 50)
-                print(f"Found last known metrics from {record['date']}")
-                print(f"ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
-        else:
-            if is_first_sync:
-                prev_atl = 50
-                prev_ctl = 50
-                print("First sync - using initial values ATL=50, CTL=50")
-            else:
-                prev_atl = 50
-                prev_ctl = 50
-                print("No previous data found - using default values ATL=50, CTL=50")
-
         # Get all days in range (including rest days)
         all_days = []
         current = start_date
         while current <= end_date:
             all_days.append(current.strftime("%Y-%m-%d"))
             current += timedelta(days=1)
+
+        if not all_days:
+            return {
+                'success': True,
+                'message': 'No days to update'
+            }
 
         print(f"\nProcessing {len(all_days)} days from {all_days[0]} to {all_days[-1]}")
 
@@ -76,6 +48,29 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         # Calculate metrics for all days
         updates = []
+        prev_atl = 50 if is_first_sync else None  # Start with 50 for first sync
+        prev_ctl = 50 if is_first_sync else None  # Start with 50 for first sync
+        
+        # If not first sync, get previous values
+        if not is_first_sync:
+            last_known = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .lt('date', start_date.isoformat())\
+                .order('date', desc=True)\
+                .limit(1)\
+                .execute()
+                
+            if last_known.data:
+                record = last_known.data[0]
+                prev_atl = float(record['atl'] if record['atl'] is not None else 50)
+                prev_ctl = float(record['ctl'] if record['ctl'] is not None else 50)
+                print(f"Using previous values - ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
+            else:
+                prev_atl = 50
+                prev_ctl = 50
+                print("No previous values found, using ATL=50, CTL=50")
+
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
             
@@ -91,9 +86,18 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             
             # Calculate new values
             trimp = float(record.get('trimp', 0) if record.get('trimp') is not None else 0)
-            atl = prev_atl + (trimp - prev_atl) / 7
-            ctl = prev_ctl + (trimp - prev_ctl) / 42
-            tsb = ctl - atl
+            
+            if is_first_sync and day == all_days[0]:
+                # First record in first sync gets initial values
+                atl = 50
+                ctl = 50
+                tsb = 0
+                print(f"Setting initial values for first record - ATL: 50.0, CTL: 50.0, TSB: 0.0")
+            else:
+                # Calculate based on previous values
+                atl = prev_atl + (trimp - prev_atl) / 7
+                ctl = prev_ctl + (trimp - prev_ctl) / 42
+                tsb = ctl - atl
             
             updates.append({
                 'user_id': user_id,
