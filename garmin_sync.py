@@ -82,8 +82,27 @@ def sync_garmin_data(user_id, start_date=None):
 
         # Sort days chronologically
         sorted_days = sorted(daily_data.keys())
-        
-        # Calculate metrics for all days
+
+        # First, save all activities data
+        for date_str, data in daily_data.items():
+            activity_data = {
+                'user_id': user_id,
+                'date': data['date'].isoformat(),
+                'trimp': float(data['trimp']),
+                'activity': ', '.join(data['activities'])
+            }
+            
+            try:
+                response = supabase.table('garmin_data')\
+                    .upsert(activity_data, 
+                           on_conflict='user_id,date')\
+                    .execute()
+                print(f"Saved activity data for {date_str}")
+            except Exception as e:
+                print(f"Error saving activity data: {e}")
+                continue
+
+        # Then calculate metrics
         if isinstance(start_date, str):
             start_date = datetime.fromisoformat(start_date.replace('Z', ''))
         result = calculate_sync_metrics(user_id, start_date, is_first_sync=is_first_sync)
