@@ -86,9 +86,10 @@ def sync_garmin_data(user_id, start_date=None):
         if is_first_sync and sorted_days:
             first_day = sorted_days[0]
             data = daily_data[first_day]
+            first_date = data['date']
             activity_data = {
                 'user_id': user_id,
-                'date': data['date'].isoformat(),
+                'date': first_date.isoformat(),
                 'trimp': float(data['trimp']),
                 'activity': ', '.join(data['activities']),
                 'atl': 50,
@@ -102,14 +103,24 @@ def sync_garmin_data(user_id, start_date=None):
                            on_conflict='user_id,date')\
                     .execute()
                 print(f"Set initial metrics for {first_day} - ATL: 50.0, CTL: 50.0, TSB: 0.0")
+                
+                # Use the day after first activity as start date for metrics calculation
+                calc_start_date = first_date + timedelta(days=1)
+                result = calculate_metrics(user_id, calc_start_date)
+                if not result['success']:
+                    return result
+                    
             except Exception as e:
                 print(f"Error setting initial metrics: {e}")
-
-        # Let metrics_calculator handle the rest
-        from metrics_calculator import calculate_metrics
-        result = calculate_metrics(user_id, start_date)
-        if not result['success']:
-            return result
+                return {
+                    'success': False,
+                    'error': str(e)
+                }
+        else:
+            # If not first sync, calculate metrics for the entire range
+            result = calculate_metrics(user_id, start_date)
+            if not result['success']:
+                return result
 
         return {
             'success': True,
