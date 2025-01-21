@@ -7,23 +7,26 @@ import numpy as np
 import os
 
 app = Flask(__name__)
-# Configure CORS to accept requests from any origin in development
-if os.environ.get('FLASK_ENV') == 'development':
-    CORS(app)
-else:
-    # In production, only accept requests from your domain
-    CORS(app, origins=[
-        "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
-        "https://eeaebxnbcxhzafzpzqsu.supabase.co"
-    ])
+
+# Configure CORS to accept all origins in development
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 def convert_to_serializable(obj):
     if isinstance(obj, np.int64):
         return int(obj)
     return obj
 
-@app.route('/api/sync-garmin', methods=['POST'])
+@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
 def sync_garmin():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
         print("\n=== Starting API request ===")
         print(f"Request headers: {dict(request.headers)}")

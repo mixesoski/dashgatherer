@@ -24,4 +24,7 @@ node_modules/
 dist/
 
 # Project specific
-cursorTrimp/ 
+cursorTrimp/
+
+# Additional files
+.DS_Store 
