@@ -30,15 +30,35 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         print(f"\nProcessing {len(all_days)} days from {all_days[0]} to {all_days[-1]}")
 
-        # Get existing data for these days
-        existing_data = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .gte('date', start_date.isoformat())\
-            .lte('date', end_date.isoformat())\
-            .execute()
+        try:
+            # Test Supabase connection
+            test_response = supabase.table('garmin_data')\
+                .select('count')\
+                .eq('user_id', user_id)\
+                .execute()
+            print("Supabase connection test successful")
+        except Exception as e:
+            print(f"Supabase connection error: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Database connection error: {str(e)}'
+            }
 
-        print(f"Found {len(existing_data.data)} existing records in date range")
+        # Get existing data for these days
+        try:
+            existing_data = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .gte('date', start_date.isoformat())\
+                .lte('date', end_date.isoformat())\
+                .execute()
+            print(f"Found {len(existing_data.data)} existing records in date range")
+        except Exception as e:
+            print(f"Error fetching existing data: {str(e)}")
+            return {
+                'success': False,
+                'error': f'Error fetching data: {str(e)}'
+            }
 
         # Create a map of existing data
         existing_map = {
@@ -115,21 +135,22 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             prev_atl = atl
             prev_ctl = ctl
 
-        # Update all records
+        # Update database
+        print("\n=== UPDATING DATABASE ===")
         updated_count = 0
-        try:
-            for update in updates:
+        for update in updates:
+            try:
                 response = supabase.table('garmin_data')\
                     .upsert(update, on_conflict='user_id,date')\
                     .execute()
                 updated_count += 1
-                print(f"Updated metrics for {update['date']} - ATL: {update['atl']:.1f}, CTL: {update['ctl']:.1f}, TSB: {update['tsb']:.1f}")
-        except Exception as e:
-            print(f"Error updating metrics: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
+                print(f"Updated {update['date']} - ATL: {update['atl']:.1f}, CTL: {update['ctl']:.1f}, TSB: {update['tsb']:.1f}")
+            except Exception as e:
+                print(f"Error updating record: {str(e)}")
+                return {
+                    'success': False,
+                    'error': f'Error updating database: {str(e)}'
+                }
 
         return {
             'success': True,
@@ -137,7 +158,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         }
 
     except Exception as e:
-        print(f"Error calculating metrics: {e}")
+        print(f"Error calculating metrics: {str(e)}")
         return {
             'success': False,
             'error': str(e)
