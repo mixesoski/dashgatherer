@@ -58,6 +58,10 @@ const Login = () => {
           appearance={{ theme: ThemeSupa }}
           providers={[]}
           theme="light"
+          onError={(error) => {
+            console.error("Auth error:", error);
+            setError(error.message);
+          }}
         />
       </div>
     </div>
