@@ -14,7 +14,7 @@ def sync_garmin_data(user_id, start_date=None):
         existing_data = supabase.table('garmin_data')\
             .select('*')\
             .eq('user_id', user_id)\
-            .limit(1)\
+            .order('date', desc=True)\
             .execute()
         
         is_first_sync = len(existing_data.data) == 0
@@ -79,31 +79,51 @@ def sync_garmin_data(user_id, start_date=None):
                 print(f"Error processing activity: {e}")
                 continue
 
-        # Update database
-        for date_str, data in daily_data.items():
+        # Sort days chronologically
+        sorted_days = sorted(daily_data.keys())
+        
+        # Calculate and update metrics
+        prev_atl = 50 if is_first_sync else float(existing_data.data[0]['atl'])
+        prev_ctl = 50 if is_first_sync else float(existing_data.data[0]['ctl'])
+        
+        for day in sorted_days:
+            data = daily_data[day]
+            trimp = float(data['trimp'])
+            
+            # For first record in first sync, use initial values
+            if is_first_sync and day == sorted_days[0]:
+                atl = 50
+                ctl = 50
+                tsb = 0
+            else:
+                # Calculate new values
+                atl = prev_atl + (trimp - prev_atl) / 7
+                ctl = prev_ctl + (trimp - prev_ctl) / 42
+                tsb = ctl - atl
+            
+            # Update database
             activity_data = {
                 'user_id': user_id,
                 'date': data['date'].isoformat(),
-                'trimp': float(data['trimp']),
-                'activity': ', '.join(data['activities'])
+                'trimp': trimp,
+                'activity': ', '.join(data['activities']),
+                'atl': round(float(atl), 1),
+                'ctl': round(float(ctl), 1),
+                'tsb': round(float(tsb), 1)
             }
-            
-            # Add initial metrics for first sync
-            if is_first_sync:
-                activity_data.update({
-                    'atl': 50,
-                    'ctl': 50,
-                    'tsb': 0
-                })
             
             try:
                 response = supabase.table('garmin_data')\
                     .upsert(activity_data, 
                            on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {date_str}")
+                print(f"Updated {day} - ATL: {atl:.1f}, CTL: {ctl:.1f}, TSB: {tsb:.1f}")
             except Exception as e:
-                print(f"Error updating {date_str}: {e}")
+                print(f"Error updating {day}: {e}")
+            
+            # Update previous values for next iteration
+            prev_atl = atl
+            prev_ctl = ctl
 
         return {
             'success': True,
