@@ -88,6 +88,8 @@ def sync_garmin_data(user_id, start_date=None):
             first_day = sorted_days[0]
             data = daily_data[first_day]
             first_date = data['date']
+            
+            # Set initial metrics for first record
             activity_data = {
                 'user_id': user_id,
                 'date': first_date.isoformat(),
@@ -99,17 +101,19 @@ def sync_garmin_data(user_id, start_date=None):
             }
             
             try:
+                # Save first record with initial values
                 response = supabase.table('garmin_data')\
                     .upsert(activity_data, 
                            on_conflict='user_id,date')\
                     .execute()
                 print(f"Set initial metrics for {first_day} - ATL: 50.0, CTL: 50.0, TSB: 0.0")
                 
-                # Use the day after first activity as start date for metrics calculation
-                calc_start_date = first_date + timedelta(days=1)
-                result = calculate_metrics(user_id, calc_start_date)
-                if not result['success']:
-                    return result
+                # Calculate metrics for remaining days starting from the day after first record
+                if len(sorted_days) > 1:
+                    calc_start_date = first_date + timedelta(days=1)
+                    result = calculate_metrics(user_id, calc_start_date)
+                    if not result['success']:
+                        return result
                     
             except Exception as e:
                 print(f"Error setting initial metrics: {e}")
