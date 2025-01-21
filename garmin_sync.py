@@ -5,6 +5,7 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
+from metrics_calculator import calculate_metrics
 
 def sync_garmin_data(user_id, start_date=None):
     try:
