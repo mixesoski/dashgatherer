@@ -15,7 +15,7 @@ const Login = () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error("Session check error:", sessionError);
-        setError(sessionError.message);
+        setError("Invalid credentials");
         return;
       }
       if (session) {
