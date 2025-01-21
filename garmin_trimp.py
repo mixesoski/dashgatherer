@@ -91,71 +91,147 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
         
         print(f"\nFetching activities from {start_date.date()} to {end_date.date()}")
         
-        # Get initial metrics from previous day
-        nine_days_ago = start_date - timedelta(days=1)
-        print(f"\nGetting initial metrics from {nine_days_ago.date()}")
-        
-        initial_metrics = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .eq('date', nine_days_ago.isoformat())\
-            .execute()
+        if update_only or recalculate_only:
+            print("\n=== CHECKING EXISTING DATA ===")
+            print(f"Date range: {start_date.date()} to {end_date.date()}")
+            
+            # First, get the metrics from 9 days ago for initial values
+            nine_days_ago = start_date - timedelta(days=1)
+            print(f"\nGetting initial metrics from {nine_days_ago.date()}")
+            
+            initial_metrics = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('date', nine_days_ago.isoformat())\
+                .execute()
 
-        if initial_metrics.data:
-            initial_atl = initial_metrics.data[0]['atl']
-            initial_ctl = initial_metrics.data[0]['ctl']
-            initial_tsb = initial_metrics.data[0]['tsb']
-            print(f"Found initial metrics:")
-            print(f"ATL: {initial_atl:.1f}")
-            print(f"CTL: {initial_ctl:.1f}")
-            print(f"TSB: {initial_tsb:.1f}")
-        else:
-            print("No initial metrics found, using defaults")
-            initial_atl = 50
-            initial_ctl = 50
-            initial_tsb = 0
+            if initial_metrics.data:
+                initial_atl = initial_metrics.data[0]['atl']
+                initial_ctl = initial_metrics.data[0]['ctl']
+                initial_tsb = initial_metrics.data[0]['tsb']
+                print(f"Found initial metrics:")
+                print(f"ATL: {initial_atl:.1f}")
+                print(f"CTL: {initial_ctl:.1f}")
+                print(f"TSB: {initial_tsb:.1f}")
+            else:
+                print("No initial metrics found, using defaults")
+                initial_atl = 50
+                initial_ctl = 50
+                initial_tsb = 0
 
-        # Initialize daily_data
-        daily_data = {}
-        current = start_date
-        while current <= end_date:
-            date_str = current.strftime("%Y-%m-%d")
-            daily_data[date_str] = {
-                'date': current.replace(hour=12),
-                'trimp': 0,
-                'activities': [],
-                'atl': initial_atl,
-                'ctl': initial_ctl,
-                'tsb': initial_tsb
-            }
-            current += timedelta(days=1)
+            # Initialize daily_data first
+            daily_data = {}
+            current = start_date
+            while current <= end_date:
+                date_str = current.strftime("%Y-%m-%d")
+                daily_data[date_str] = {
+                    'date': current.replace(hour=12),
+                    'trimp': 0,
+                    'activities': [],
+                    'atl': initial_atl,
+                    'ctl': initial_ctl,
+                    'tsb': initial_tsb
+                }
+                current += timedelta(days=1)
 
-        # Get existing data first
-        existing_response = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .gte('date', start_date.isoformat())\
-            .lte('date', end_date.isoformat())\
-            .order('date')\
-            .execute()
+            # Get existing data and new activities if in update mode
+            if update_only:
+                activities = api.get_activities_by_date(
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d")
+                )
+                print(f"Found {len(activities)} new activities")
+                
+                # Process new activities
+                for activity in activities:
+                    try:
+                        activity_id = activity['activityId']
+                        activity_name = activity.get('activityName', 'Unknown')
+                        
+                        activity_details = api.get_activity(activity_id)
+                        trimp = 0
+                        if 'connectIQMeasurements' in activity_details:
+                            for item in activity_details['connectIQMeasurements']:
+                                if item['developerFieldNumber'] == 4:
+                                    trimp = round(float(item['value']), 1)
+                        
+                        date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
+                        date_str = date.strftime("%Y-%m-%d")
+                        
+                        if date_str in daily_data:
+                            daily_data[date_str]['trimp'] += trimp
+                            daily_data[date_str]['activities'].append(activity_name)
+                            print(f"Added TRIMP {trimp} for {date_str} - {activity_name}")
+                        
+                        time.sleep(1)  # Rate limiting
+                    except Exception as e:
+                        print(f"Error processing activity: {e}")
+                        continue
 
-        print(f"\nFound {len(existing_response.data)} existing records")
+            # Calculate metrics for all days
+            print("\n=== CALCULATING METRICS ===")
+            sorted_dates = sorted(daily_data.keys())
+            prev_atl = initial_atl
+            prev_ctl = initial_ctl
+            
+            for date_str in sorted_dates:
+                print(f"\nCalculating for {date_str}:")
+                print(f"TRIMP: {daily_data[date_str]['trimp']}")
+                
+                # ATL calculation
+                daily_data[date_str]['atl'] = prev_atl + (daily_data[date_str]['trimp'] - prev_atl) / 7
+                
+                # CTL calculation
+                daily_data[date_str]['ctl'] = prev_ctl + (daily_data[date_str]['trimp'] - prev_ctl) / 42
+                
+                # TSB calculation
+                daily_data[date_str]['tsb'] = prev_ctl - prev_atl
+                
+                print(f"ATL: {daily_data[date_str]['atl']:.1f}")
+                print(f"CTL: {daily_data[date_str]['ctl']:.1f}")
+                print(f"TSB: {daily_data[date_str]['tsb']:.1f}")
+                
+                # Update previous values for next iteration
+                prev_atl = daily_data[date_str]['atl']
+                prev_ctl = daily_data[date_str]['ctl']
 
-        # Update with existing data
-        for record in existing_response.data:
-            date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
-            if date_str in daily_data:
-                daily_data[date_str]['trimp'] = record['trimp']
-                daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
+            # Update database
+            print("\n=== UPDATING DATABASE ===")
+            for date_str, day_data in daily_data.items():
+                activity_data = {
+                    'user_id': user_id,
+                    'date': day_data['date'].isoformat(),
+                    'trimp': float(day_data['trimp']),
+                    'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day',
+                    'atl': round(float(day_data['atl']), 1),
+                    'ctl': round(float(day_data['ctl']), 1),
+                    'tsb': round(float(day_data['tsb']), 1)
+                }
+                
+                try:
+                    # Update or insert
+                    response = supabase.table('garmin_data')\
+                        .upsert(activity_data, 
+                               on_conflict='user_id,date')\
+                        .execute()
+                    print(f"Updated {date_str}")
+                except Exception as e:
+                    print(f"Error updating {date_str}: {e}")
 
-        # Get and process new activities if not in recalculate mode
+            print("\nRecalculation completed successfully")
+            return pd.DataFrame(list(daily_data.values()))
+
+        # Process each activity
+        activities = []
         if not recalculate_only:
             activities = api.get_activities_by_date(
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")
             )
-            print(f"Found {len(activities)} new activities")
-            
+            print(f"Found {len(activities)} activities")
+
+        # Update TRIMP values from activities
+        if activities:
             for activity in activities:
                 try:
                     activity_id = activity['activityId']
@@ -181,12 +257,28 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
                     print(f"Error processing activity: {e}")
                     continue
 
+        # Get existing data and metrics
+        existing_response = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .gte('date', start_date.isoformat())\
+            .lte('date', end_date.isoformat())\
+            .order('date')\
+            .execute()
+
+        # Update daily_data with existing records
+        for record in existing_response.data:
+            date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
+            if date_str in daily_data:
+                if not activities:  # Only update TRIMP if we're not getting new activities
+                    daily_data[date_str]['trimp'] = record['trimp']
+                daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
+
         # Calculate metrics
-        print("\n=== CALCULATING METRICS ===")
         sorted_dates = sorted(daily_data.keys())
         prev_atl = initial_atl
         prev_ctl = initial_ctl
-        
+
         for date_str in sorted_dates:
             print(f"\nCalculating for {date_str}:")
             print(f"TRIMP: {daily_data[date_str]['trimp']}")
@@ -194,10 +286,6 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
             daily_data[date_str]['atl'] = prev_atl + (daily_data[date_str]['trimp'] - prev_atl) / 7
             daily_data[date_str]['ctl'] = prev_ctl + (daily_data[date_str]['trimp'] - prev_ctl) / 42
             daily_data[date_str]['tsb'] = prev_ctl - prev_atl
-            
-            print(f"ATL: {daily_data[date_str]['atl']:.1f}")
-            print(f"CTL: {daily_data[date_str]['ctl']:.1f}")
-            print(f"TSB: {daily_data[date_str]['tsb']:.1f}")
             
             prev_atl = daily_data[date_str]['atl']
             prev_ctl = daily_data[date_str]['ctl']
@@ -216,6 +304,7 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
             }
             
             try:
+                # Update or insert
                 response = supabase.table('garmin_data')\
                     .upsert(activity_data, 
                            on_conflict='user_id,date')\
