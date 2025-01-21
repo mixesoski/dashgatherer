@@ -69,7 +69,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             else:
                 prev_atl = 50
                 prev_ctl = 50
-                print("No previous values found, using ATL=50, CTL=50")
+                print("No previous data found - setting ATL=50, CTL=50, TSB=0")
 
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
