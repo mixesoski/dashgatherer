@@ -27,6 +27,8 @@ const Login = () => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event);
+      
       if (event === 'SIGNED_IN' && session) {
         navigate("/");
       }
@@ -38,10 +40,6 @@ const Login = () => {
       }
       if (event === 'USER_UPDATED') {
         console.log('User updated successfully');
-      }
-      // Handle authentication errors
-      if (event === 'USER_DELETED' || event === 'SIGNED_OUT') {
-        setError(null);
       }
     });
 
