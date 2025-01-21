@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { toast } from "sonner";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -13,21 +12,14 @@ const Login = () => {
   useEffect(() => {
     // Check for existing session on mount
     const checkSession = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error("Session check error:", sessionError);
-          setError(sessionError.message);
-          return;
-        }
-        
-        if (session) {
-          navigate("/");
-        }
-      } catch (err) {
-        console.error("Session check failed:", err);
-        toast.error("Failed to check authentication status");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("Session check error:", sessionError);
+        setError(sessionError.message);
+        return;
+      }
+      if (session) {
+        navigate("/");
       }
     };
 
@@ -35,8 +27,6 @@ const Login = () => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth event:", event);
-      
       if (event === 'SIGNED_IN' && session) {
         navigate("/");
       }
@@ -45,9 +35,6 @@ const Login = () => {
       }
       if (event === 'TOKEN_REFRESHED') {
         console.log('Token refreshed successfully');
-      }
-      if (event === 'USER_UPDATED') {
-        console.log('User updated');
       }
     });
 
@@ -68,15 +55,8 @@ const Login = () => {
         )}
         <Auth
           supabaseClient={supabase}
-          appearance={{ 
-            theme: ThemeSupa,
-            style: {
-              button: { background: 'rgb(59 130 246)', color: 'white' },
-              anchor: { color: 'rgb(59 130 246)' },
-            }
-          }}
+          appearance={{ theme: ThemeSupa }}
           providers={[]}
-          redirectTo={window.location.origin + '/login'}
           theme="light"
         />
       </div>
