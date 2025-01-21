@@ -119,6 +119,8 @@ def sync_garmin_data(user_id, start_date=None):
                 }
         else:
             # If not first sync, calculate metrics for the entire range
+            if isinstance(start_date, str):
+                start_date = datetime.fromisoformat(start_date.replace('Z', ''))
             result = calculate_metrics(user_id, start_date)
             if not result['success']:
                 return result
