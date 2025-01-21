@@ -5,7 +5,7 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
-from metrics_calculator import calculate_metrics
+from sync_metrics_calculator import calculate_sync_metrics
 
 def sync_garmin_data(user_id, start_date=None):
     try:
@@ -83,51 +83,12 @@ def sync_garmin_data(user_id, start_date=None):
         # Sort days chronologically
         sorted_days = sorted(daily_data.keys())
         
-        # For first sync, set initial values
-        if is_first_sync and sorted_days:
-            first_day = sorted_days[0]
-            data = daily_data[first_day]
-            first_date = data['date']
-            
-            # Set initial metrics for first record
-            activity_data = {
-                'user_id': user_id,
-                'date': first_date.isoformat(),
-                'trimp': float(data['trimp']),
-                'activity': ', '.join(data['activities']),
-                'atl': 50,
-                'ctl': 50,
-                'tsb': 0
-            }
-            
-            try:
-                # Save first record with initial values
-                response = supabase.table('garmin_data')\
-                    .upsert(activity_data, 
-                           on_conflict='user_id,date')\
-                    .execute()
-                print(f"Set initial metrics for {first_day} - ATL: 50.0, CTL: 50.0, TSB: 0.0")
-                
-                # Calculate metrics for remaining days starting from the day after first record
-                if len(sorted_days) > 1:
-                    calc_start_date = first_date + timedelta(days=1)
-                    result = calculate_metrics(user_id, calc_start_date)
-                    if not result['success']:
-                        return result
-                    
-            except Exception as e:
-                print(f"Error setting initial metrics: {e}")
-                return {
-                    'success': False,
-                    'error': str(e)
-                }
-        else:
-            # If not first sync, calculate metrics for the entire range
-            if isinstance(start_date, str):
-                start_date = datetime.fromisoformat(start_date.replace('Z', ''))
-            result = calculate_metrics(user_id, start_date)
-            if not result['success']:
-                return result
+        # Calculate metrics for all days
+        if isinstance(start_date, str):
+            start_date = datetime.fromisoformat(start_date.replace('Z', ''))
+        result = calculate_sync_metrics(user_id, start_date, is_first_sync=is_first_sync)
+        if not result['success']:
+            return result
 
         return {
             'success': True,
