@@ -48,29 +48,9 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         # Calculate metrics for all days
         updates = []
-        prev_atl = 50 if is_first_sync else None  # Start with 50 for first sync
-        prev_ctl = 50 if is_first_sync else None  # Start with 50 for first sync
+        prev_atl = 50  # Always start with 50
+        prev_ctl = 50  # Always start with 50
         
-        # If not first sync, get previous values
-        if not is_first_sync:
-            last_known = supabase.table('garmin_data')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .lt('date', start_date.isoformat())\
-                .order('date', desc=True)\
-                .limit(1)\
-                .execute()
-                
-            if last_known.data:
-                record = last_known.data[0]
-                prev_atl = float(record['atl'] if record['atl'] is not None else 50)
-                prev_ctl = float(record['ctl'] if record['ctl'] is not None else 50)
-                print(f"Using previous values - ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
-            else:
-                prev_atl = 50
-                prev_ctl = 50
-                print("No previous data found - setting ATL=50, CTL=50, TSB=0")
-
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
             
@@ -87,12 +67,11 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             # Calculate new values
             trimp = float(record.get('trimp', 0) if record.get('trimp') is not None else 0)
             
-            if is_first_sync and day == all_days[0]:
-                # First record in first sync gets initial values
+            if day == all_days[0]:  # First day always gets 50/50
                 atl = 50
                 ctl = 50
                 tsb = 0
-                print(f"Setting initial values for first record - ATL: 50.0, CTL: 50.0, TSB: 0.0")
+                print(f"Setting initial values - ATL: 50.0, CTL: 50.0, TSB: 0.0")
             else:
                 # Calculate based on previous values
                 atl = prev_atl + (trimp - prev_atl) / 7
