@@ -39,21 +39,9 @@ def calculate_metrics(user_id, start_date=None):
             print(f"ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
             print(f"Adjusting start date to: {start_date}")
         else:
-            # Only use defaults for new users
-            any_data = supabase.table('garmin_data')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .limit(1)\
-                .execute()
-            
-            if any_data.data:
-                prev_atl = 0
-                prev_ctl = 0
-                print("No previous data found, but user exists - using zeros")
-            else:
-                prev_atl = 50
-                prev_ctl = 50
-                print("New user - using default values")
+            prev_atl = 0
+            prev_ctl = 0
+            print("No previous data found - using zeros")
 
         # Get all days in range (including rest days)
         all_days = []

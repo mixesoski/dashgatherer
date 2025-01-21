@@ -82,34 +82,18 @@ def sync_garmin_data(user_id, start_date=None):
         # Sort days chronologically
         sorted_days = sorted(daily_data.keys())
         
-        # Calculate and update metrics
-        prev_atl = 50 if is_first_sync else float(existing_data.data[0]['atl'])
-        prev_ctl = 50 if is_first_sync else float(existing_data.data[0]['ctl'])
-        
-        for day in sorted_days:
-            data = daily_data[day]
-            trimp = float(data['trimp'])
-            
-            # For first record in first sync, use initial values
-            if is_first_sync and day == sorted_days[0]:
-                atl = 50
-                ctl = 50
-                tsb = 0
-            else:
-                # Calculate new values
-                atl = prev_atl + (trimp - prev_atl) / 7
-                ctl = prev_ctl + (trimp - prev_ctl) / 42
-                tsb = ctl - atl
-            
-            # Update database
+        # For first sync, set initial values
+        if is_first_sync and sorted_days:
+            first_day = sorted_days[0]
+            data = daily_data[first_day]
             activity_data = {
                 'user_id': user_id,
                 'date': data['date'].isoformat(),
-                'trimp': trimp,
+                'trimp': float(data['trimp']),
                 'activity': ', '.join(data['activities']),
-                'atl': round(float(atl), 1),
-                'ctl': round(float(ctl), 1),
-                'tsb': round(float(tsb), 1)
+                'atl': 50,
+                'ctl': 50,
+                'tsb': 0
             }
             
             try:
@@ -117,13 +101,15 @@ def sync_garmin_data(user_id, start_date=None):
                     .upsert(activity_data, 
                            on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {day} - ATL: {atl:.1f}, CTL: {ctl:.1f}, TSB: {tsb:.1f}")
+                print(f"Set initial metrics for {first_day} - ATL: 50.0, CTL: 50.0, TSB: 0.0")
             except Exception as e:
-                print(f"Error updating {day}: {e}")
-            
-            # Update previous values for next iteration
-            prev_atl = atl
-            prev_ctl = ctl
+                print(f"Error setting initial metrics: {e}")
+
+        # Let metrics_calculator handle the rest
+        from metrics_calculator import calculate_metrics
+        result = calculate_metrics(user_id, start_date)
+        if not result['success']:
+            return result
 
         return {
             'success': True,
