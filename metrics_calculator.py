@@ -34,20 +34,8 @@ def calculate_metrics(user_id, start_date=None):
         df = pd.DataFrame(all_data.data)
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values('date')
-        
-        # Get first row's existing metrics or use its TRIMP value
-        first_row = df.iloc[0]
-        if first_row['atl'] is not None and first_row['ctl'] is not None:
-            df.at[df.index[0], 'atl'] = float(first_row['atl'])
-            df.at[df.index[0], 'ctl'] = float(first_row['ctl'])
-            df.at[df.index[0], 'tsb'] = float(first_row['tsb'] if first_row['tsb'] is not None else 0.0)
-        else:
-            # If no metrics exist, use the row's actual values
-            df.at[df.index[0], 'atl'] = float(first_row['trimp'])
-            df.at[df.index[0], 'ctl'] = float(first_row['trimp'])
-            df.at[df.index[0], 'tsb'] = 0.0
 
-        # Calculate metrics for each subsequent row based on previous row
+        # Calculate metrics for each row based on previous row
         for i in range(1, len(df)):
             prev_row = df.iloc[i-1]
             curr_row = df.iloc[i]
