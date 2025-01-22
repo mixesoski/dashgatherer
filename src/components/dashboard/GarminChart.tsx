@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { syncGarmin, updateChart } from "@/utils/garminSync";
 
 ChartJS.register(
   CategoryScale,
@@ -151,6 +152,19 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     interaction: {
       intersect: false,
       mode: 'index' as InteractionMode
+    }
+  };
+
+  const handleSync = async () => {
+    setIsUpdating(true);
+    try {
+      await syncGarmin(userId, startDate);
+      // Oddzielne wywołanie do aktualizacji wykresu
+      await updateChart(userId, startDate);
+    } catch (error) {
+      console.error('Error syncing data:', error);
+    } finally {
+      setIsUpdating(false);
     }
   };
 

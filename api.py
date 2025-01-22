@@ -38,7 +38,6 @@ def convert_to_serializable(obj):
 
 @app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
 def sync_garmin():
-    # Handle preflight requests
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Origin', '*')
@@ -49,21 +48,15 @@ def sync_garmin():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
             
         user_id = data.get('userId')
         if not user_id:
-            return jsonify({
-                'success': False,
-                'error': 'No user ID provided'
-            }), 400
+            return jsonify({'success': False, 'error': 'No user ID provided'}), 400
             
         start_date = data.get('startDate')
         
-        # Only sync data and calculate metrics once
+        # TYLKO synchronizacja danych
         result = sync_garmin_data(user_id, start_date)
         
         if isinstance(result, dict):
@@ -73,11 +66,7 @@ def sync_garmin():
         
     except Exception as e:
         print(f"API Error: {str(e)}")
-        print(f"Full error details: {traceback.format_exc()}")
-        return jsonify({
-            'success': False,
-            'error': 'Wystąpił nieoczekiwany błąd.'
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/update-chart', methods=['POST', 'OPTIONS'])
 def update_chart():
