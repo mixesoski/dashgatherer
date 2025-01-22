@@ -60,6 +60,7 @@ def calculate_metrics(user_id, start_date=None):
                 'user_id': user_id,
                 'date': row['date'].isoformat(),
                 'trimp': float(row['trimp']),
+                'activity': row.get('activity', 'Rest day'),
                 'atl': round(float(row['atl']), 1),
                 'ctl': round(float(row['ctl']), 1),
                 'tsb': round(float(row['tsb']), 1)
