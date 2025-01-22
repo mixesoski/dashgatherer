@@ -90,10 +90,14 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             # Calculate new values
             trimp = float(record.get('trimp', 0) if record.get('trimp') is not None else 0)
             
-            # Calculate based on previous values
-            atl = prev_atl + (trimp - prev_atl) / 7
-            ctl = prev_ctl + (trimp - prev_ctl) / 42
-            tsb = ctl - atl
+            if day == all_days[0]:  # First day (selected date) keeps ATL=50, CTL=50
+                atl = 50
+                ctl = 50
+                tsb = 0
+            else:  # Calculate for subsequent days
+                atl = prev_atl + (trimp - prev_atl) / 7
+                ctl = prev_ctl + (trimp - prev_ctl) / 42
+                tsb = ctl - atl
             
             updates.append({
                 'user_id': user_id,
