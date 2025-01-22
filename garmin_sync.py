@@ -52,11 +52,19 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             if isinstance(start_date, str):
                 start_date = datetime.fromisoformat(start_date.replace('Z', ''))
             
+            # Limit the date range if not first sync
+            if not is_first_sync and start_date < (datetime.now() - timedelta(days=30)):
+                start_date = datetime.now() - timedelta(days=30)
+                
+            print(f"Fetching activities from {start_date.strftime('%Y-%m-%d')} to {datetime.now().strftime('%Y-%m-%d')}")
+            
             # Get activities from Garmin
             activities = client.get_activities_by_date(
                 start_date.strftime("%Y-%m-%d"),
                 datetime.now().strftime("%Y-%m-%d")
             )
+            
+            print(f"Found {len(activities)} activities")
 
             # Process activities
             daily_data = {}
