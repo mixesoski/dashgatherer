@@ -73,7 +73,8 @@ def sync_garmin_data(user_id, start_date=None):
                                 trimp = round(float(item['value']), 1)
                     
                     # Apply multiplier for Strength Training
-                    if activity_name == 'Strength Training':
+                    strength_training_names = ['Siła', 'Trening siłowy', 'Strength Training', 'strength_training']
+                    if any(name.lower() in activity_name.lower().strip() for name in strength_training_names):
                         trimp = trimp * 2
                     
                     date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
