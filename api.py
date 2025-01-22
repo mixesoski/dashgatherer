@@ -40,25 +40,42 @@ def convert_to_serializable(obj):
 def sync_garmin():
     # Handle preflight requests
     if request.method == 'OPTIONS':
-        response = app.make_default_options_response()
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
         return response
 
     try:
         print("\n=== Starting API request ===")
         print(f"Request headers: {dict(request.headers)}")
-        print(f"Request body: {request.get_data(as_text=True)}")
+        
+        # Add CORS headers to response
+        response = jsonify({'status': 'processing'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
         
         data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+            
         user_id = data.get('userId')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'No user ID provided'
+            }), 400
+            
         start_date = data.get('startDate')
         update_only = data.get('updateOnly', False)
         recalculate_only = data.get('recalculateOnly', False)
         
-        print(f"Extracted user_id: {user_id}")
-        
-        if not user_id:
-            print("No user_id provided")
-            return jsonify({'success': False, 'error': 'No user ID provided'})
+        print(f"Processing request for user_id: {user_id}")
+        print(f"Start date: {start_date}")
+        print(f"Update only: {update_only}")
+        print(f"Recalculate only: {recalculate_only}")
         
         if recalculate_only:
             result = calculate_metrics(user_id, start_date)
@@ -66,7 +83,7 @@ def sync_garmin():
             # First sync new data
             sync_result = sync_garmin_data(user_id, start_date)
             if not sync_result['success']:
-                return jsonify(sync_result)
+                return jsonify(sync_result), 400
             
             # Then calculate metrics
             result = calculate_metrics(user_id, start_date)
@@ -76,13 +93,16 @@ def sync_garmin():
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
         
-        print(f"Processing result: {result}")
-        
+        print(f"Request completed successfully: {result}")
         return jsonify(result)
+        
     except Exception as e:
         print(f"API Error: {str(e)}")
         print(f"Full error details: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
