@@ -40,24 +40,18 @@ def convert_to_serializable(obj):
 def sync_garmin():
     try:
         data = request.json
-        user_id = data.get('user_id')
-        start_date = data.get('start_date')
-        is_first_sync = data.get('is_first_sync', False)
+        user_id = data.get('userId')
+        start_date = data.get('startDate')
 
         if not user_id:
             return jsonify({
                 'success': False,
-                'error': 'user_id is required'
+                'error': 'userId is required'
             }), 400
 
-        if is_first_sync:
-            # Użyj garmin_sync dla pierwszej synchronizacji
-            from garmin_sync import sync_garmin_data
-            result = sync_garmin_data(user_id, start_date)
-        else:
-            # Użyj garmin_trimp dla aktualizacji
-            from garmin_trimp import main
-            result = main(user_id, start_date)
+        # Używamy tylko garmin_trimp dla aktualizacji
+        from garmin_trimp import main
+        result = main(user_id, start_date)
 
         return jsonify(result)
 
