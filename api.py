@@ -65,26 +65,28 @@ def sync_garmin():
             }), 400
             
         start_date = data.get('startDate')
-        update_only = data.get('updateOnly', False)
         recalculate_only = data.get('recalculateOnly', False)
         
         print(f"Processing request for user_id: {user_id}")
         print(f"Start date: {start_date}")
+        print(f"Recalculate only: {recalculate_only}")
         
         try:
+            # Only use calculate_metrics for chart updates
             if recalculate_only:
                 result = calculate_metrics(user_id, start_date)
             else:
-                # Sync new data and calculate metrics in one go
+                # Use sync_garmin_data for syncing and calculating metrics
                 result = sync_garmin_data(user_id, start_date)
-                if not result['success']:
-                    error_msg = result.get('error', 'Unknown error')
-                    if "Invalid login credentials" in error_msg:
-                        return jsonify({
-                            'success': False,
-                            'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
-                        }), 401
-                    return jsonify(result), 400
+                
+            if not result['success']:
+                error_msg = result.get('error', 'Unknown error')
+                if "Invalid login credentials" in error_msg:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
+                    }), 401
+                return jsonify(result), 400
                 
         except Exception as e:
             error_message = str(e)
