@@ -48,8 +48,8 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             curr_row = df.iloc[i]
             
             trimp = float(curr_row['trimp'])
-            prev_atl = float(prev_row['atl'])
-            prev_ctl = float(prev_row['ctl'])
+            prev_atl = float(prev_row['atl']) if prev_row['atl'] is not None else 0.0
+            prev_ctl = float(prev_row['ctl']) if prev_row['ctl'] is not None else 0.0
             
             # Calculate new metrics
             atl = prev_atl + (trimp - prev_atl) / 7
