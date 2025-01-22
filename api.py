@@ -75,20 +75,17 @@ def sync_garmin():
             if recalculate_only:
                 result = calculate_metrics(user_id, start_date)
             else:
-                # First sync new data
-                sync_result = sync_garmin_data(user_id, start_date)
-                if not sync_result['success']:
-                    error_msg = sync_result.get('error', 'Unknown error')
+                # Sync new data and calculate metrics in one go
+                result = sync_garmin_data(user_id, start_date)
+                if not result['success']:
+                    error_msg = result.get('error', 'Unknown error')
                     if "Invalid login credentials" in error_msg:
                         return jsonify({
                             'success': False,
                             'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
                         }), 401
-                    return jsonify(sync_result), 400
+                    return jsonify(result), 400
                 
-                # Then calculate metrics
-                result = calculate_metrics(user_id, start_date)
-                result['newActivities'] = sync_result['newActivities']
         except Exception as e:
             error_message = str(e)
             if "Invalid login credentials" in error_message:
