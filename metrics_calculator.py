@@ -7,16 +7,15 @@ def calculate_metrics(user_id, start_date=None):
         # Get dates range
         end_date = datetime.now().replace(tzinfo=None)
         if start_date:
-            # Make sure start_date is a datetime object
             if isinstance(start_date, str):
-                start_date = datetime.fromisoformat(start_date.replace('Z', ''))
+                # Remove any timezone info and milliseconds
+                start_date = start_date.split('.')[0].split('+')[0].replace('Z', '')
+                start_date = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S")
             start_date = start_date.replace(tzinfo=None)
         else:
             start_date = end_date - timedelta(days=9)
 
         print(f"\n=== CALCULATING METRICS ===")
-        print(f"Start date type: {type(start_date)}")
-        print(f"Start date value: {start_date}")
         print(f"Date range: {start_date.date()} to {end_date.date()}")
 
         # Get existing data from database
@@ -28,14 +27,14 @@ def calculate_metrics(user_id, start_date=None):
         # Convert to DataFrame
         df = pd.DataFrame(existing_data.data)
         if not df.empty:
-            # Convert dates to datetime objects
-            df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
+            # Clean and convert dates
+            df['date'] = df['date'].apply(lambda x: x.split('.')[0].split('+')[0].replace('Z', ''))
+            df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
 
             # Get the earliest date with data
             earliest_date = df['date'].min()
             if earliest_date:
-                # Use the earliest date as the start date for calculations
                 start_date = min(start_date, earliest_date)
 
         # Create all days in range
@@ -55,10 +54,16 @@ def calculate_metrics(user_id, start_date=None):
         print(f"\nProcessing {len(all_days)} days from {all_days[0]} to {all_days[-1]}")
 
         # Create a map of existing data
-        existing_map = {
-            row['date'].strftime("%Y-%m-%d"): row
-            for _, row in df.iterrows()
-        } if not df.empty else {}
+        existing_map = {}
+        if not df.empty:
+            for _, row in df.iterrows():
+                day_str = row['date'].strftime("%Y-%m-%d")
+                existing_map[day_str] = {
+                    'user_id': row['user_id'],
+                    'date': row['date'].strftime("%Y-%m-%dT%H:%M:%S"),
+                    'trimp': row['trimp'],
+                    'activity': row['activity']
+                }
 
         # Calculate metrics for all days
         updates = []
@@ -72,13 +77,13 @@ def calculate_metrics(user_id, start_date=None):
             # Get or create record for this day
             record = existing_map.get(day, {
                 'user_id': user_id,
-                'date': current_date.isoformat(),
+                'date': current_date.strftime("%Y-%m-%dT%H:%M:%S"),
                 'trimp': 0,
                 'activity': 'Rest day'
             })
 
             # Calculate new values
-            trimp = float(record.get('trimp', 0) if record.get('trimp') is not None else 0)
+            trimp = float(record['trimp'] if record['trimp'] is not None else 0)
             atl = prev_atl + (trimp - prev_atl) / 7
             ctl = prev_ctl + (trimp - prev_ctl) / 42
             tsb = prev_ctl - prev_atl
@@ -87,7 +92,7 @@ def calculate_metrics(user_id, start_date=None):
                 'user_id': user_id,
                 'date': record['date'],
                 'trimp': trimp,
-                'activity': record.get('activity', 'Rest day'),
+                'activity': record['activity'],
                 'atl': round(atl, 1),
                 'ctl': round(ctl, 1),
                 'tsb': round(tsb, 1)
