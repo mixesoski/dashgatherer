@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
 from metrics_calculator import calculate_metrics
+from supabase_client import supabase
 import traceback
 import numpy as np
 import os
@@ -42,7 +43,6 @@ def sync_garmin():
         data = request.json
         user_id = data.get('userId')
         start_date = data.get('startDate')
-        is_first_sync = data.get('isFirstSync', False)
 
         if not user_id:
             return jsonify({
@@ -50,14 +50,16 @@ def sync_garmin():
                 'error': 'userId is required'
             }), 400
 
-        # Use garmin_sync for first synchronization
-        if is_first_sync:
-            from garmin_sync import sync_garmin_data
-            result = sync_garmin_data(user_id, start_date, is_first_sync=True)
-        else:
-            # Use garmin_trimp for updates
-            from garmin_trimp import main
-            result = main(user_id, start_date)
+        # Check if this is first sync for user
+        existing_data = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        is_first_sync = len(existing_data.data) == 0
+
+        # Always use garmin_sync for consistent handling of all days
+        result = sync_garmin_data(user_id, start_date, is_first_sync)
 
         return jsonify(result)
 
