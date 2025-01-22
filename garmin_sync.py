@@ -7,7 +7,7 @@ from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
 from sync_metrics_calculator import calculate_sync_metrics
 
-def sync_garmin_data(user_id, start_date=None):
+def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
         # Check for existing sync
         lock_key = f"sync_lock_{user_id}"
@@ -111,8 +111,8 @@ def sync_garmin_data(user_id, start_date=None):
                     print(f"Error saving activity data: {e}")
                     continue
 
-            # Calculate metrics only once using sync_metrics_calculator
-            metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync)
+            # Calculate metrics using sync_metrics_calculator
+            metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync=is_first_sync)
             
             return {
                 'success': True,

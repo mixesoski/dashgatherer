@@ -37,6 +37,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         # Initialize first row with default values if it's first sync
         if is_first_sync:
+            print("First sync detected - setting initial values ATL=50, CTL=50")
             df.at[df.index[0], 'atl'] = 50.0
             df.at[df.index[0], 'ctl'] = 50.0
             df.at[df.index[0], 'tsb'] = 0.0

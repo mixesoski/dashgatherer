@@ -42,6 +42,7 @@ def sync_garmin():
         data = request.json
         user_id = data.get('userId')
         start_date = data.get('startDate')
+        is_first_sync = data.get('isFirstSync', False)
 
         if not user_id:
             return jsonify({
@@ -49,9 +50,14 @@ def sync_garmin():
                 'error': 'userId is required'
             }), 400
 
-        # Używamy tylko garmin_trimp dla aktualizacji
-        from garmin_trimp import main
-        result = main(user_id, start_date)
+        # Użyj garmin_sync dla pierwszej synchronizacji
+        if is_first_sync:
+            from garmin_sync import sync_garmin_data
+            result = sync_garmin_data(user_id, start_date, is_first_sync=True)
+        else:
+            # Użyj garmin_trimp dla aktualizacji
+            from garmin_trimp import main
+            result = main(user_id, start_date)
 
         return jsonify(result)
 
