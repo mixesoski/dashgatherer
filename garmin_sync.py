@@ -52,8 +52,16 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
 
             print(f"Found {len(activities)} activities")
 
+            # Create a complete date range
+            end_date = datetime.now()
+            date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            daily_data = {date.strftime("%Y-%m-%d"): {
+                'date': date,
+                'trimp': 0,
+                'activities': ['Rest day']
+            } for date in date_range}
+
             # Process activities
-            daily_data = {}
             for activity in activities:
                 try:
                     activity_id = activity['activityId']
@@ -73,13 +81,9 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
                     date_str = date.strftime("%Y-%m-%d")
 
-                    if date_str not in daily_data:
-                        daily_data[date_str] = {
-                            'date': date,
-                            'trimp': 0,
-                            'activities': []
-                        }
-
+                    if daily_data[date_str]['activities'] == ['Rest day']:
+                        daily_data[date_str]['activities'] = []
+                    
                     daily_data[date_str]['trimp'] += trimp
                     daily_data[date_str]['activities'].append(activity_name)
                     print(f"Saved activity data for {date_str}")
@@ -89,6 +93,7 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     continue
 
             # Save activity data
+            print("\nSaving data for all days:")
             for date_str, data in daily_data.items():
                 activity_data = {
                     'user_id': user_id,
@@ -101,8 +106,9 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
                         .execute()
+                    print(f"Saved data for {date_str} - TRIMP: {activity_data['trimp']}, Activity: {activity_data['activity']}")
                 except Exception as e:
-                    print(f"Error saving activity data: {e}")
+                    print(f"Error saving activity data for {date_str}: {e}")
                     continue
 
             # Calculate metrics
