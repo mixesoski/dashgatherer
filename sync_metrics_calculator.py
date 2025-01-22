@@ -32,7 +32,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         # Convert to DataFrame and sort by date
         df = pd.DataFrame(all_data.data)
-        df['date'] = pd.to_datetime(df['date'])
+        df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)  # Remove timezone info
         
         # Create a complete date range
         date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
