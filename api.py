@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
-from metrics_calculator import calculate_metrics  # Zachowujemy dla Update Chart
+from metrics_calculator import calculate_metrics
 import traceback
 import numpy as np
 import os
@@ -50,12 +50,12 @@ def sync_garmin():
                 'error': 'userId is required'
             }), 400
 
-        # Użyj garmin_sync dla pierwszej synchronizacji
+        # Use garmin_sync for first synchronization
         if is_first_sync:
             from garmin_sync import sync_garmin_data
             result = sync_garmin_data(user_id, start_date, is_first_sync=True)
         else:
-            # Użyj garmin_trimp dla aktualizacji
+            # Use garmin_trimp for updates
             from garmin_trimp import main
             result = main(user_id, start_date)
 
@@ -108,7 +108,7 @@ def update_chart():
         print(f"Full error details: {traceback.format_exc()}")
         return jsonify({
             'success': False,
-            'error': 'Wystąpił nieoczekiwany błąd.'
+            'error': 'An unexpected error occurred.'
         }), 500
 
 if __name__ == '__main__':
