@@ -320,23 +320,42 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
         return pd.DataFrame(columns=['date', 'trimp', 'activity', 'atl', 'ctl', 'tsb'])
 
 def create_trimp_chart(df):
-    # Use Agg backend which doesn't require GUI
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    
-    plt.figure(figsize=(12, 6))
-    plt.plot(df['date'], df['trimp'], marker='o')
-    plt.title('TRIMP Values Over Last 9 Days')
-    plt.xlabel('Date')
-    plt.ylabel('TRIMP')
-    plt.grid(True)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    
-    # Save the chart
-    plt.savefig('trimp_chart.png')
-    plt.close('all')  # Make sure to close all figures
+    try:
+        # Use Agg backend which doesn't require GUI
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        
+        if df.empty:
+            print("No data to create chart")
+            return
+        
+        plt.figure(figsize=(12, 6))
+        
+        # Plot metrics
+        plt.plot(df['date'], df['atl'], label='ATL', color='red')
+        plt.plot(df['date'], df['ctl'], label='CTL', color='blue')
+        plt.plot(df['date'], df['tsb'], label='TSB', color='green')
+        
+        # Plot TRIMP bars
+        plt.bar(df['date'], df['trimp'], alpha=0.3, color='gray', label='TRIMP')
+        
+        plt.title('Training Metrics')
+        plt.xlabel('Date')
+        plt.ylabel('Value')
+        plt.grid(True)
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        # Save the chart
+        plt.savefig('trimp_chart.png')
+        plt.close('all')  # Make sure to close all figures
+        print("Chart created successfully")
+        
+    except Exception as e:
+        print(f"Error creating chart: {str(e)}")
+        plt.close('all')  # Clean up in case of error
 
 def list_available_users():
     try:
