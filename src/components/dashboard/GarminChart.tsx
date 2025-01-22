@@ -29,9 +29,9 @@ interface GarminData {
   date: string;
   trimp: number;
   activity: string;
-  atl: number;
-  ctl: number;
-  tsb: number;
+  atl: number | null;
+  ctl: number | null;
+  tsb: number | null;
 }
 
 interface Props {
@@ -50,14 +50,17 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const latestData = sortedData[sortedData.length - 1];
   console.log('Latest data:', latestData);
   
-  const status = latestData.tsb < 0 ? 'Zmęczenie' : 'Wypoczęty';
+  // Default to "No data" if TSB is null
+  const status = latestData?.tsb !== null 
+    ? (latestData.tsb < 0 ? 'Zmęczenie' : 'Wypoczęty')
+    : 'No data';
   
   const chartData = {
     labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
       {
         label: 'Acute Load (ATL)',
-        data: sortedData.map(d => d.atl),
+        data: sortedData.map(d => d.atl ?? 0),
         borderColor: 'rgb(59, 130, 246)', // Blue
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: true,
@@ -65,7 +68,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       },
       {
         label: 'Stress Balance (TSB)',
-        data: sortedData.map(d => d.tsb),
+        data: sortedData.map(d => d.tsb ?? 0),
         borderColor: 'rgb(239, 68, 68)', // Red
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         fill: true,
@@ -73,7 +76,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       },
       {
         label: 'Chronic Load (CTL)',
-        data: sortedData.map(d => d.ctl),
+        data: sortedData.map(d => d.ctl ?? 0),
         borderColor: 'rgb(234, 179, 8)', // Yellow
         backgroundColor: 'rgba(234, 179, 8, 0.1)',
         fill: true,
@@ -180,9 +183,9 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
               <span className="font-medium text-orange-800">{status}</span>
             </div>
             <div className="mt-2 text-sm text-orange-700">
-              TSB: {latestData.tsb.toFixed(1)} | CTL: {latestData.ctl.toFixed(1)}
+              TSB: {latestData?.tsb?.toFixed(1) ?? 'N/A'} | CTL: {latestData?.ctl?.toFixed(1) ?? 'N/A'}
               <br />
-              Data: {new Date(latestData.date).toLocaleDateString()}
+              Data: {latestData ? new Date(latestData.date).toLocaleDateString() : 'N/A'}
             </div>
           </div>
         </div>
