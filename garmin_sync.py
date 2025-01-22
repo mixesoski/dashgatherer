@@ -60,6 +60,19 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
 
             # Process activities
             daily_data = {}
+            
+            # Create a date range from start_date to today
+            current_date = start_date
+            while current_date <= datetime.now():
+                date_str = current_date.strftime("%Y-%m-%d")
+                daily_data[date_str] = {
+                    'date': current_date,
+                    'trimp': 0,
+                    'activities': ['Rest day']
+                }
+                current_date += timedelta(days=1)
+
+            # Now process actual activities
             for activity in activities:
                 try:
                     activity_id = activity['activityId']
@@ -80,15 +93,12 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
                     date_str = date.strftime("%Y-%m-%d")
                     
-                    if date_str not in daily_data:
-                        daily_data[date_str] = {
-                            'date': date,
-                            'trimp': 0,
-                            'activities': []
-                        }
-                    
-                    daily_data[date_str]['trimp'] += trimp
-                    daily_data[date_str]['activities'].append(activity_name)
+                    # Update existing day data
+                    if date_str in daily_data:
+                        if daily_data[date_str]['activities'] == ['Rest day']:
+                            daily_data[date_str]['activities'] = []
+                        daily_data[date_str]['trimp'] += trimp
+                        daily_data[date_str]['activities'].append(activity_name)
                     
                 except Exception as e:
                     print(f"Error processing activity: {e}")
