@@ -9,7 +9,7 @@ from sync_metrics_calculator import calculate_sync_metrics
 
 def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
-        # Check for existing sync
+        # Check for existing sync lock
         lock_key = f"sync_lock_{user_id}"
         lock_data = supabase.table('sync_locks')\
             .select('*')\
@@ -51,30 +51,17 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             client = Garmin(email, password)
             client.login()
 
-            # Get activities and save them
+            # Convert start_date if it's a string
             if isinstance(start_date, str):
                 start_date = datetime.fromisoformat(start_date.replace('Z', ''))
             
-            # Limit the date range if not first sync
-            if not is_first_sync and start_date < (datetime.now() - timedelta(days=30)):
-                start_date = datetime.now() - timedelta(days=30)
-                
-            print(f"Fetching activities from {start_date.strftime('%Y-%m-%d')} to {datetime.now().strftime('%Y-%m-%d')}")
+            end_date = datetime.now()
+            print(f"Fetching activities from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
             
-            # Get activities from Garmin
-            activities = client.get_activities_by_date(
-                start_date.strftime("%Y-%m-%d"),
-                datetime.now().strftime("%Y-%m-%d")
-            )
-            
-            print(f"Found {len(activities)} activities")
-
-            # Process activities
+            # Initialize daily_data with all days in range
             daily_data = {}
-            
-            # Create a date range from start_date to today
             current_date = start_date
-            while current_date <= datetime.now():
+            while current_date <= end_date:
                 date_str = current_date.strftime("%Y-%m-%d")
                 daily_data[date_str] = {
                     'date': current_date,
@@ -83,7 +70,14 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                 }
                 current_date += timedelta(days=1)
 
-            # Now process actual activities
+            # Get activities from Garmin
+            activities = client.get_activities_by_date(
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d")
+            )
+            print(f"Found {len(activities)} activities")
+
+            # Process activities and update daily_data
             for activity in activities:
                 try:
                     activity_id = activity['activityId']
@@ -115,7 +109,8 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     print(f"Error processing activity: {e}")
                     continue
 
-            # Save activity data
+            # Save all days to database (including rest days)
+            print("\n=== SAVING DATA TO DATABASE ===")
             for date_str, data in daily_data.items():
                 activity_data = {
                     'user_id': user_id,
@@ -128,11 +123,13 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
                         .execute()
+                    print(f"Saved data for {date_str} - TRIMP: {data['trimp']}")
                 except Exception as e:
-                    print(f"Error saving activity data: {e}")
+                    print(f"Error saving data for {date_str}: {e}")
                     continue
 
             # Calculate metrics using sync_metrics_calculator
+            print("\n=== CALCULATING METRICS ===")
             metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync=is_first_sync)
             
             return {
