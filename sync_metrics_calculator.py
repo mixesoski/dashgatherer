@@ -78,16 +78,10 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         # Calculate metrics for all days
         updates = []
         
-        # Set initial values
-        if last_known.data:
-            record = last_known.data[0]
-            prev_atl = float(record['atl'])
-            prev_ctl = float(record['ctl'])
-            print(f"Using previous values - ATL: {prev_atl:.1f}, CTL: {prev_ctl:.1f}")
-        else:
-            prev_atl = 50
-            prev_ctl = 50
-            print(f"No previous data - starting with ATL: 50.0, CTL: 50.0")
+        # Always start with ATL=50 and CTL=50
+        prev_atl = 50
+        prev_ctl = 50
+        print(f"Starting with ATL: 50.0, CTL: 50.0")
         
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
@@ -105,16 +99,10 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             # Calculate new values
             trimp = float(record.get('trimp', 0) if record.get('trimp') is not None else 0)
             
-            if day == all_days[0]:  # First day always gets 50/50
-                atl = 50
-                ctl = 50
-                tsb = 0
-                print(f"Setting initial values - ATL: 50.0, CTL: 50.0, TSB: 0.0")
-            else:
-                # Calculate based on previous values
-                atl = prev_atl + (trimp - prev_atl) / 7
-                ctl = prev_ctl + (trimp - prev_ctl) / 42
-                tsb = ctl - atl
+            # Calculate based on previous values
+            atl = prev_atl + (trimp - prev_atl) / 7
+            ctl = prev_ctl + (trimp - prev_ctl) / 42
+            tsb = ctl - atl
             
             updates.append({
                 'user_id': user_id,
