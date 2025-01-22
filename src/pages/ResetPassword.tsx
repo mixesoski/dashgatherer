@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,19 +12,53 @@ const ResetPassword = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // Get the access token from the URL
+  useEffect(() => {
+    const setupSession = async () => {
+      const accessToken = searchParams.get("access_token");
+      if (!accessToken) {
+        setError("Invalid or missing reset token. Please request a new password reset link.");
+        return;
+      }
+
+      // Set the session with the access token
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: "",
+      });
+
+      if (sessionError) {
+        console.error("Session error:", sessionError);
+        setError("Invalid or expired reset token. Please request a new password reset link.");
+      }
+    };
+
+    setupSession();
+  }, [searchParams]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    try {
-      const { error } = await supabase.auth.updateUser({ password });
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
 
-      if (error) {
-        setError(error.message);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ 
+        password: password 
+      });
+
+      if (updateError) {
+        console.error("Update error:", updateError);
+        setError(updateError.message);
         return;
       }
 
       toast.success("Password updated successfully!");
+      // Sign out the user after password reset
+      await supabase.auth.signOut();
       navigate("/login");
     } catch (err) {
       console.error("Error updating password:", err);
