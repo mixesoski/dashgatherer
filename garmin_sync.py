@@ -90,13 +90,12 @@ def sync_garmin_data(user_id, start_date=None):
                 continue
 
         # Calculate metrics using sync_metrics_calculator
-        metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync)
-        if not metrics_result['success']:
-            return metrics_result
+        result = calculate_sync_metrics(user_id, start_date, is_first_sync)
 
         return {
             'success': True,
-            'newActivities': len(daily_data)
+            'newActivities': len(daily_data),
+            'message': result['message'] if result['success'] else None
         }
 
     except Exception as e:
