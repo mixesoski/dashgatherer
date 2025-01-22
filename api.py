@@ -11,9 +11,10 @@ app = Flask(__name__)
 if os.environ.get('FLASK_ENV') == 'development':
     CORS(app)
 else:
-    # In production, only accept requests from your domain
+    # In production, accept requests from your domain and preview domains
     CORS(app, origins=[
         "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
+        "https://id-preview--b517f268-2dee-41b5-963d-5ba7555908cb.lovable.app",
         "https://eeaebxnbcxhzafzpzqsu.supabase.co"
     ])
 
