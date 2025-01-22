@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
+from metrics_calculator import calculate_metrics  # Zachowujemy dla Update Chart
 import traceback
 import numpy as np
 import os
@@ -62,8 +63,51 @@ def sync_garmin():
             
         start_date = data.get('startDate')
         
-        # Only sync data and calculate metrics
+        # Only sync data and calculate metrics once
         result = sync_garmin_data(user_id, start_date)
+        
+        if isinstance(result, dict):
+            result = {k: convert_to_serializable(v) for k, v in result.items()}
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"API Error: {str(e)}")
+        print(f"Full error details: {traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'error': 'Wystąpił nieoczekiwany błąd.'
+        }), 500
+
+@app.route('/api/update-chart', methods=['POST', 'OPTIONS'])
+def update_chart():
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+            
+        user_id = data.get('userId')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'No user ID provided'
+            }), 400
+            
+        start_date = data.get('startDate')
+        
+        # Calculate metrics for chart update
+        result = calculate_metrics(user_id, start_date)
         
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
