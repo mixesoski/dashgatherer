@@ -50,10 +50,6 @@ def sync_garmin():
         print("\n=== Starting API request ===")
         print(f"Request headers: {dict(request.headers)}")
         
-        # Add CORS headers to response
-        response = jsonify({'status': 'processing'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        
         data = request.get_json()
         if not data:
             return jsonify({
@@ -74,22 +70,45 @@ def sync_garmin():
         
         print(f"Processing request for user_id: {user_id}")
         print(f"Start date: {start_date}")
-        print(f"Update only: {update_only}")
-        print(f"Recalculate only: {recalculate_only}")
         
-        if recalculate_only:
-            result = calculate_metrics(user_id, start_date)
-        else:
-            # First sync new data
-            sync_result = sync_garmin_data(user_id, start_date)
-            if not sync_result['success']:
-                return jsonify(sync_result), 400
-            
-            # Then calculate metrics
-            result = calculate_metrics(user_id, start_date)
-            result['newActivities'] = sync_result['newActivities']
+        try:
+            if recalculate_only:
+                result = calculate_metrics(user_id, start_date)
+            else:
+                # First sync new data
+                sync_result = sync_garmin_data(user_id, start_date)
+                if not sync_result['success']:
+                    error_msg = sync_result.get('error', 'Unknown error')
+                    if "Invalid login credentials" in error_msg:
+                        return jsonify({
+                            'success': False,
+                            'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
+                        }), 401
+                    return jsonify(sync_result), 400
+                
+                # Then calculate metrics
+                result = calculate_metrics(user_id, start_date)
+                result['newActivities'] = sync_result['newActivities']
+        except Exception as e:
+            error_message = str(e)
+            if "Invalid login credentials" in error_message:
+                return jsonify({
+                    'success': False,
+                    'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
+                }), 401
+            elif "No credentials found" in error_message:
+                return jsonify({
+                    'success': False,
+                    'error': 'Nie znaleziono danych logowania dla tego użytkownika.'
+                }), 404
+            else:
+                print(f"Error details: {error_message}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Wystąpił błąd podczas synchronizacji.'
+                }), 500
         
-        # Convert any int64 values to regular Python integers
+        # Convert any int64 values
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
         
@@ -101,7 +120,7 @@ def sync_garmin():
         print(f"Full error details: {traceback.format_exc()}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Wystąpił nieoczekiwany błąd.'
         }), 500
 
 if __name__ == '__main__':
