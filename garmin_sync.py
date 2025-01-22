@@ -19,13 +19,11 @@ def sync_garmin_data(user_id, start_date=None):
             .execute()
         
         is_first_sync = len(existing_data.data) == 0
-        print(f"Is first sync: {is_first_sync}")
 
         # Get credentials and initialize client
         email, password = get_garmin_credentials(user_id)
         client = Garmin(email, password)
         client.login()
-        print("Login successful!")
 
         # Get activities and save them
         if isinstance(start_date, str):
@@ -36,7 +34,6 @@ def sync_garmin_data(user_id, start_date=None):
             start_date.strftime("%Y-%m-%d"),
             datetime.now().strftime("%Y-%m-%d")
         )
-        print(f"Found {len(activities)} new activities")
 
         # Process activities
         daily_data = {}
@@ -64,7 +61,6 @@ def sync_garmin_data(user_id, start_date=None):
                 
                 daily_data[date_str]['trimp'] += trimp
                 daily_data[date_str]['activities'].append(activity_name)
-                print(f"Added TRIMP {trimp} for {date_str} - {activity_name}")
                 
             except Exception as e:
                 print(f"Error processing activity: {e}")
@@ -80,22 +76,20 @@ def sync_garmin_data(user_id, start_date=None):
             }
             
             try:
-                response = supabase.table('garmin_data')\
-                    .upsert(activity_data, 
-                           on_conflict='user_id,date')\
+                supabase.table('garmin_data')\
+                    .upsert(activity_data, on_conflict='user_id,date')\
                     .execute()
-                print(f"Saved activity data for {date_str}")
             except Exception as e:
                 print(f"Error saving activity data: {e}")
                 continue
 
         # Calculate metrics using sync_metrics_calculator
-        result = calculate_sync_metrics(user_id, start_date, is_first_sync)
-
+        metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync)
+        
         return {
             'success': True,
             'newActivities': len(daily_data),
-            'message': result['message'] if result['success'] else None
+            'metrics': metrics_result
         }
 
     except Exception as e:

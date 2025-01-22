@@ -46,9 +46,6 @@ def sync_garmin():
         return response
 
     try:
-        print("\n=== Starting API request ===")
-        print(f"Request headers: {dict(request.headers)}")
-        
         data = request.get_json()
         if not data:
             return jsonify({
@@ -65,46 +62,12 @@ def sync_garmin():
             
         start_date = data.get('startDate')
         
-        print(f"Processing request for user_id: {user_id}")
-        print(f"Start date: {start_date}")
+        # Only sync data and calculate metrics
+        result = sync_garmin_data(user_id, start_date)
         
-        try:
-            # Use sync_garmin_data for syncing and calculating metrics
-            result = sync_garmin_data(user_id, start_date)
-                
-            if not result['success']:
-                error_msg = result.get('error', 'Unknown error')
-                if "Invalid login credentials" in error_msg:
-                    return jsonify({
-                        'success': False,
-                        'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
-                    }), 401
-                return jsonify(result), 400
-                
-        except Exception as e:
-            error_message = str(e)
-            if "Invalid login credentials" in error_message:
-                return jsonify({
-                    'success': False,
-                    'error': 'Nieprawidłowe dane logowania. Sprawdź email i hasło.'
-                }), 401
-            elif "No credentials found" in error_message:
-                return jsonify({
-                    'success': False,
-                    'error': 'Nie znaleziono danych logowania dla tego użytkownika.'
-                }), 404
-            else:
-                print(f"Error details: {error_message}")
-                return jsonify({
-                    'success': False,
-                    'error': 'Wystąpił błąd podczas synchronizacji.'
-                }), 500
-        
-        # Convert any int64 values
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
         
-        print(f"Request completed successfully: {result}")
         return jsonify(result)
         
     except Exception as e:
