@@ -7,15 +7,26 @@ export const ProgressToast = ({ message }: { message: string }) => {
     useEffect(() => {
         const timer = setInterval(() => {
             setProgress((prev) => {
-                if (prev >= 100) {
+                if (prev >= 95) {
                     clearInterval(timer);
-                    return 100;
+                    // Stop at 95% and wait for final completion
+                    return 95;
                 }
-                return prev + 1;
+                // Slow down progress as it gets closer to 95%
+                const increment = Math.max(1, (100 - prev) / 15);
+                return Math.min(95, prev + increment);
             });
-        }, 20);
+        }, 50);
 
-        return () => clearInterval(timer);
+        // Force complete after 2 seconds (typical chart load time)
+        const completeTimer = setTimeout(() => {
+            setProgress(100);
+        }, 2000);
+
+        return () => {
+            clearInterval(timer);
+            clearTimeout(completeTimer);
+        };
     }, []);
 
     return (
@@ -24,4 +35,4 @@ export const ProgressToast = ({ message }: { message: string }) => {
             <Progress value={progress} className="w-full h-2" />
         </div>
     );
-}; 
+};
