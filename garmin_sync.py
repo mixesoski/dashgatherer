@@ -1,8 +1,5 @@
 from garminconnect import Garmin
-import pandas as pd
-from datetime import datetime, timedelta
-import time
-from requests.exceptions import HTTPError
+from datetime import datetime
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
 
@@ -31,17 +28,6 @@ def sync_garmin_data(user_id, start_date=None):
             pass
 
         try:
-            print(f"\nStarting data sync for user ID: {user_id}")
-            
-            # Check if this is first sync for user
-            existing_data = supabase.table('garmin_data')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('date', desc=True)\
-                .execute()
-            
-            is_first_sync = len(existing_data.data) == 0
-
             # Get credentials and initialize client
             email, password = get_garmin_credentials(user_id)
             client = Garmin(email, password)

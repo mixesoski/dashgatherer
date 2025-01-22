@@ -95,7 +95,7 @@ def update_chart():
             
         start_date = data.get('startDate')
         
-        # Calculate metrics for chart update
+        # TYLKO aktualizacja wykresu
         result = calculate_metrics(user_id, start_date)
         
         if isinstance(result, dict):

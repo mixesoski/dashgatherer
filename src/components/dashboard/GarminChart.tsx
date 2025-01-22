@@ -158,9 +158,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const handleSync = async () => {
     setIsUpdating(true);
     try {
+      // Najpierw synchronizuj dane
       await syncGarmin(userId, startDate);
-      // Oddzielne wywołanie do aktualizacji wykresu
-      await updateChart(userId, startDate);
+      // Potem odśwież wykres
+      await onUpdate();
     } catch (error) {
       console.error('Error syncing data:', error);
     } finally {
