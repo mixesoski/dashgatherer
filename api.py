@@ -7,24 +7,42 @@ import numpy as np
 import os
 
 app = Flask(__name__)
-# Configure CORS to accept requests from any origin in development
+
+# Configure CORS
 if os.environ.get('FLASK_ENV') == 'development':
-    CORS(app)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
 else:
-    # In production, accept requests from your domain and preview domains
-    CORS(app, origins=[
-        "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
-        "https://id-preview--b517f268-2dee-41b5-963d-5ba7555908cb.lovable.app",
-        "https://eeaebxnbcxhzafzpzqsu.supabase.co"
-    ])
+    # In production, accept requests from specific domains
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": [
+                "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
+                "https://id-preview--b517f268-2dee-41b5-963d-5ba7555908cb.lovable.app",
+                "https://eeaebxnbcxhzafzpzqsu.supabase.co"
+            ],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
 
 def convert_to_serializable(obj):
     if isinstance(obj, np.int64):
         return int(obj)
     return obj
 
-@app.route('/api/sync-garmin', methods=['POST'])
+@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
 def sync_garmin():
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        return response
+
     try:
         print("\n=== Starting API request ===")
         print(f"Request headers: {dict(request.headers)}")
