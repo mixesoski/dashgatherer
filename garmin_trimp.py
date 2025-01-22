@@ -46,44 +46,10 @@ def get_garmin_credentials(user_id):
 def get_trimp_values(api, user_id, start_date=None, update_only=False, recalculate_only=False):
     try:
         print(f"\nStarting get_trimp_values for user_id: {user_id}")
-        print(f"Start date: {start_date}")
-        print(f"Update only: {update_only}")
-        print(f"Recalculate only: {recalculate_only}")
-        print(f"Supabase URL: {SUPABASE_URL}")
-        print(f"Supabase key starts with: {SUPABASE_KEY[:10]}...")
         
-        # Test Supabase connection and permissions
-        try:
-            print("\nTesting Supabase connection and permissions...")
-            # Test select
-            select_response = supabase.table('garmin_data').select('*').limit(1).execute()
-            print("Select test successful")
-            
-            # Test insert with a dummy record
-            test_data = {
-                'user_id': user_id,
-                'date': datetime.now().isoformat(),
-                'trimp': 0,
-                'activity': 'TEST_RECORD'
-            }
-            print(f"\nTrying test insert with data: {test_data}")
-            insert_response = supabase.table('garmin_data').insert(test_data).execute()
-            print(f"Insert test response: {insert_response}")
-            
-            # Delete test record
-            delete_response = supabase.table('garmin_data').delete().eq('activity', 'TEST_RECORD').execute()
-            print("Delete test successful")
-            
-            print("All Supabase permission tests passed!")
-        except Exception as e:
-            print(f"Supabase test failed: {str(e)}")
-            print(f"Full error details: {traceback.format_exc()}")
-            raise
-
         # Get dates range and ensure they're timezone-naive
         end_date = datetime.now().replace(tzinfo=None)
         if start_date:
-            # Convert to datetime and remove timezone info
             start_date = datetime.fromisoformat(start_date.replace('Z', ''))
             start_date = start_date.replace(tzinfo=None)
         else:
@@ -91,233 +57,73 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
         
         print(f"\nFetching activities from {start_date.date()} to {end_date.date()}")
         
-        if update_only or recalculate_only:
-            print("\n=== CHECKING EXISTING DATA ===")
-            print(f"Date range: {start_date.date()} to {end_date.date()}")
-            
-            # First, get the metrics from 9 days ago for initial values
-            nine_days_ago = start_date - timedelta(days=1)
-            print(f"\nGetting initial metrics from {nine_days_ago.date()}")
-            
-            initial_metrics = supabase.table('garmin_data')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .eq('date', nine_days_ago.isoformat())\
-                .execute()
-
-            if initial_metrics.data:
-                initial_atl = initial_metrics.data[0]['atl']
-                initial_ctl = initial_metrics.data[0]['ctl']
-                initial_tsb = initial_metrics.data[0]['tsb']
-                print(f"Found initial metrics:")
-                print(f"ATL: {initial_atl:.1f}")
-                print(f"CTL: {initial_ctl:.1f}")
-                print(f"TSB: {initial_tsb:.1f}")
-            else:
-                print("No initial metrics found, using defaults")
-                initial_atl = 50
-                initial_ctl = 50
-                initial_tsb = 0
-
-            # Initialize daily_data first
-            daily_data = {}
-            current = start_date
-            while current <= end_date:
-                date_str = current.strftime("%Y-%m-%d")
-                daily_data[date_str] = {
-                    'date': current.replace(hour=12),
-                    'trimp': 0,
-                    'activities': [],
-                    'atl': initial_atl,
-                    'ctl': initial_ctl,
-                    'tsb': initial_tsb
-                }
-                current += timedelta(days=1)
-
-            # Get existing data and new activities if in update mode
-            if update_only:
-                activities = api.get_activities_by_date(
-                    start_date.strftime("%Y-%m-%d"),
-                    end_date.strftime("%Y-%m-%d")
-                )
-                print(f"Found {len(activities)} new activities")
-                
-                # Process new activities
-                for activity in activities:
-                    try:
-                        activity_id = activity['activityId']
-                        activity_name = activity.get('activityName', 'Unknown')
-                        
-                        activity_details = api.get_activity(activity_id)
-                        trimp = 0
-                        if 'connectIQMeasurements' in activity_details:
-                            for item in activity_details['connectIQMeasurements']:
-                                if item['developerFieldNumber'] == 4:
-                                    trimp = round(float(item['value']), 1)
-                        
-                        date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
-                        date_str = date.strftime("%Y-%m-%d")
-                        
-                        if date_str in daily_data:
-                            daily_data[date_str]['trimp'] += trimp
-                            daily_data[date_str]['activities'].append(activity_name)
-                            print(f"Added TRIMP {trimp} for {date_str} - {activity_name}")
-                        
-                        time.sleep(1)  # Rate limiting
-                    except Exception as e:
-                        print(f"Error processing activity: {e}")
-                        continue
-
-            # Calculate metrics for all days
-            print("\n=== CALCULATING METRICS ===")
-            sorted_dates = sorted(daily_data.keys())
-            prev_atl = initial_atl
-            prev_ctl = initial_ctl
-            
-            for date_str in sorted_dates:
-                print(f"\nCalculating for {date_str}:")
-                print(f"TRIMP: {daily_data[date_str]['trimp']}")
-                
-                # ATL calculation
-                daily_data[date_str]['atl'] = prev_atl + (daily_data[date_str]['trimp'] - prev_atl) / 7
-                
-                # CTL calculation
-                daily_data[date_str]['ctl'] = prev_ctl + (daily_data[date_str]['trimp'] - prev_ctl) / 42
-                
-                # TSB calculation
-                daily_data[date_str]['tsb'] = prev_ctl - prev_atl
-                
-                print(f"ATL: {daily_data[date_str]['atl']:.1f}")
-                print(f"CTL: {daily_data[date_str]['ctl']:.1f}")
-                print(f"TSB: {daily_data[date_str]['tsb']:.1f}")
-                
-                # Update previous values for next iteration
-                prev_atl = daily_data[date_str]['atl']
-                prev_ctl = daily_data[date_str]['ctl']
-
-            # Update database
-            print("\n=== UPDATING DATABASE ===")
-            for date_str, day_data in daily_data.items():
-                activity_data = {
-                    'user_id': user_id,
-                    'date': day_data['date'].isoformat(),
-                    'trimp': float(day_data['trimp']),
-                    'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day',
-                    'atl': round(float(day_data['atl']), 1),
-                    'ctl': round(float(day_data['ctl']), 1),
-                    'tsb': round(float(day_data['tsb']), 1)
-                }
-                
-                try:
-                    # Update or insert
-                    response = supabase.table('garmin_data')\
-                        .upsert(activity_data, 
-                               on_conflict='user_id,date')\
-                        .execute()
-                    print(f"Updated {date_str}")
-                except Exception as e:
-                    print(f"Error updating {date_str}: {e}")
-
-            print("\nRecalculation completed successfully")
-            return pd.DataFrame(list(daily_data.values()))
+        # Get activities from Garmin
+        activities = api.get_activities_by_date(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d")
+        )
+        print(f"Found {len(activities)} activities")
 
         # Process each activity
-        activities = []
-        if not recalculate_only:
-            activities = api.get_activities_by_date(
-                start_date.strftime("%Y-%m-%d"),
-                end_date.strftime("%Y-%m-%d")
-            )
-            print(f"Found {len(activities)} activities")
+        daily_data = {}
+        for activity in activities:
+            try:
+                activity_id = activity['activityId']
+                activity_name = activity.get('activityName', 'Unknown')
+                
+                activity_details = api.get_activity(activity_id)
+                trimp = 0
+                if 'connectIQMeasurements' in activity_details:
+                    for item in activity_details['connectIQMeasurements']:
+                        if item['developerFieldNumber'] == 4:
+                            trimp = round(float(item['value']), 1)
+                
+                # Apply multiplier for Strength Training
+                strength_training_names = ['Siła', 'Trening siłowy', 'Strength Training', 'strength_training']
+                if any(name.lower() in activity_name.lower().strip() for name in strength_training_names):
+                    trimp = trimp * 2
+                
+                date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
+                date_str = date.strftime("%Y-%m-%d")
+                
+                if date_str not in daily_data:
+                    daily_data[date_str] = {
+                        'date': date,
+                        'trimp': 0,
+                        'activities': []
+                    }
+                
+                daily_data[date_str]['trimp'] += trimp
+                daily_data[date_str]['activities'].append(activity_name)
+                
+                time.sleep(1)  # Rate limiting
+            except Exception as e:
+                print(f"Error processing activity: {e}")
+                continue
 
-        # Update TRIMP values from activities
-        if activities:
-            for activity in activities:
-                try:
-                    activity_id = activity['activityId']
-                    activity_name = activity.get('activityName', 'Unknown')
-                    
-                    activity_details = api.get_activity(activity_id)
-                    trimp = 0
-                    if 'connectIQMeasurements' in activity_details:
-                        for item in activity_details['connectIQMeasurements']:
-                            if item['developerFieldNumber'] == 4:
-                                trimp = round(float(item['value']), 1)
-                    
-                    date = datetime.strptime(activity['startTimeLocal'], "%Y-%m-%d %H:%M:%S")
-                    date_str = date.strftime("%Y-%m-%d")
-                    
-                    if date_str in daily_data:
-                        daily_data[date_str]['trimp'] += trimp
-                        daily_data[date_str]['activities'].append(activity_name)
-                        print(f"Added TRIMP {trimp} for {date_str} - {activity_name}")
-                    
-                    time.sleep(1)  # Rate limiting
-                except Exception as e:
-                    print(f"Error processing activity: {e}")
-                    continue
-
-        # Get existing data and metrics
-        existing_response = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .gte('date', start_date.isoformat())\
-            .lte('date', end_date.isoformat())\
-            .order('date')\
-            .execute()
-
-        # Update daily_data with existing records
-        for record in existing_response.data:
-            date_str = datetime.fromisoformat(record['date']).strftime("%Y-%m-%d")
-            if date_str in daily_data:
-                if not activities:  # Only update TRIMP if we're not getting new activities
-                    daily_data[date_str]['trimp'] = record['trimp']
-                daily_data[date_str]['activities'] = record['activity'].split(', ') if record['activity'] != 'Rest day' else []
-
-        # Calculate metrics
-        sorted_dates = sorted(daily_data.keys())
-        prev_atl = initial_atl
-        prev_ctl = initial_ctl
-
-        for date_str in sorted_dates:
-            print(f"\nCalculating for {date_str}:")
-            print(f"TRIMP: {daily_data[date_str]['trimp']}")
-            
-            daily_data[date_str]['atl'] = prev_atl + (daily_data[date_str]['trimp'] - prev_atl) / 7
-            daily_data[date_str]['ctl'] = prev_ctl + (daily_data[date_str]['trimp'] - prev_ctl) / 42
-            daily_data[date_str]['tsb'] = prev_ctl - prev_atl
-            
-            prev_atl = daily_data[date_str]['atl']
-            prev_ctl = daily_data[date_str]['ctl']
-
-        # Update database
-        print("\n=== UPDATING DATABASE ===")
-        for date_str, day_data in daily_data.items():
+        # Save activity data to Supabase
+        for date_str, data in daily_data.items():
             activity_data = {
                 'user_id': user_id,
-                'date': day_data['date'].isoformat(),
-                'trimp': float(day_data['trimp']),
-                'activity': ', '.join(day_data['activities']) if day_data['activities'] else 'Rest day',
-                'atl': round(float(day_data['atl']), 1),
-                'ctl': round(float(day_data['ctl']), 1),
-                'tsb': round(float(day_data['tsb']), 1)
+                'date': data['date'].isoformat(),
+                'trimp': float(data['trimp']),
+                'activity': ', '.join(data['activities'])
             }
             
             try:
-                # Update or insert
-                response = supabase.table('garmin_data')\
-                    .upsert(activity_data, 
-                           on_conflict='user_id,date')\
+                supabase.table('garmin_data')\
+                    .upsert(activity_data, on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {date_str}")
+                print(f"Saved activity data for {date_str}")
             except Exception as e:
-                print(f"Error updating {date_str}: {e}")
+                print(f"Error saving activity data: {e}")
+                continue
 
-        return pd.DataFrame(list(daily_data.values()))
+        return daily_data
                 
     except Exception as e:
         print(f"Error fetching activities: {e}")
-        return pd.DataFrame(columns=['date', 'trimp', 'activity', 'atl', 'ctl', 'tsb'])
+        return {}
 
 def create_trimp_chart(df):
     try:
@@ -368,21 +174,92 @@ def list_available_users():
     except Exception as e:
         print(f"Error fetching users: {str(e)}")
 
+def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
+    try:
+        # Get existing data
+        data = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('date')\
+            .execute()
+        
+        if not data.data:
+            return {'message': 'No data found'}
+            
+        # Convert to DataFrame and sort
+        df = pd.DataFrame(data.data)
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # Initialize metrics arrays
+        dates = []
+        atl_values = []
+        ctl_values = []
+        tsb_values = []
+        
+        # Start with first date's TRIMP for initial calculations
+        first_trimp = float(df.iloc[0]['trimp'])
+        atl = first_trimp
+        ctl = first_trimp
+        
+        # Calculate for each day
+        for index, row in df.iterrows():
+            date = row['date']
+            trimp = float(row['trimp'])
+            
+            # Calculate ATL (fatigue)
+            atl = atl * (1 - 1/7) + trimp * (1/7)
+            
+            # Calculate CTL (fitness)
+            ctl = ctl * (1 - 1/42) + trimp * (1/42)
+            
+            # Calculate TSB (form)
+            tsb = ctl - atl
+            
+            # Store values
+            dates.append(date)
+            atl_values.append(round(atl, 1))
+            ctl_values.append(round(ctl, 1))
+            tsb_values.append(round(tsb, 1))
+            
+            # Update database
+            print(f"Updated {date} - ATL: {round(atl, 1)}, CTL: {round(ctl, 1)}, TSB: {round(tsb, 1)}")
+            
+            metrics_data = {
+                'user_id': user_id,
+                'date': date.isoformat(),
+                'atl': round(atl, 1),
+                'ctl': round(ctl, 1),
+                'tsb': round(tsb, 1)
+            }
+            
+            supabase.table('training_metrics')\
+                .upsert(metrics_data, on_conflict='user_id,date')\
+                .execute()
+        
+        return {
+            'dates': dates,
+            'atl': atl_values,
+            'ctl': ctl_values,
+            'tsb': tsb_values
+        }
+        
+    except Exception as e:
+        print(f"Error calculating metrics: {e}")
+        return None
+
 def main(user_id=None, start_date=None, update_only=False, recalculate_only=False):
     try:
         if user_id:
             print(f"\nProcessing data for user ID: {user_id}")
         else:
-            # List available users first
             list_available_users()
-            # Get user_id from input if not provided
             user_id = input("Enter user ID to fetch TRIMP data: ")
         
-        # Get credentials from Supabase
+        # Get credentials and login to Garmin
         email, password = get_garmin_credentials(user_id)
         print(f"\nFetching data for user with email: {email}")
         
-        # Initialize Garmin client with retry logic
         client = Garmin(email, password)
         max_retries = 3
         retry_delay = 5
@@ -400,56 +277,20 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
                     continue
                 raise
         
-        # Get TRIMP data and save to Supabase
-        df = get_trimp_values(client, user_id, start_date, update_only, recalculate_only)
+        # Get TRIMP data from Garmin and save to Supabase
+        daily_data = get_trimp_values(client, user_id, start_date, update_only, recalculate_only)
         
-        if len(df) == 0:
+        if not daily_data:
             print("No activities found!")
             return {
                 'success': False,
                 'error': 'No activities found'
             }
         
-        # Convert date strings to datetime objects
-        df['date'] = pd.to_datetime(df['date'])
-        
-        # Sort by date
-        df = df.sort_values('date', ascending=False)
-        
-        # Convert all numeric values to native Python types
-        df['trimp'] = df['trimp'].astype(float)
-        df['atl'] = df['atl'].astype(float)
-        df['ctl'] = df['ctl'].astype(float)
-        df['tsb'] = df['tsb'].astype(float)
-        
-        # Print summary
-        total_trimp = float(df['trimp'].sum())
-        avg_trimp = float(df['trimp'].mean())
-        total_activities = int(len(df))  # Convert to native int
-        
-        print("\nSummary:")
-        print(f"Total activities: {total_activities}")
-        print(f"Total TRIMP: {round(total_trimp, 1)}")
-        print(f"Average TRIMP per activity: {round(avg_trimp, 1)}")
-        print(f"Date range: {df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}")
-        
-        # Create chart
-        create_trimp_chart(df)
-        print("\nChart has been created successfully!")
-        
         return {
             'success': True,
             'message': 'Data fetched and saved successfully',
-            'newActivities': total_activities if update_only else None,
-            'summary': {
-                'total_activities': total_activities,
-                'total_trimp': round(float(total_trimp), 1),
-                'avg_trimp': round(float(avg_trimp), 1),
-                'date_range': {
-                    'start': df['date'].min().strftime('%Y-%m-%d'),
-                    'end': df['date'].max().strftime('%Y-%m-%d')
-                }
-            }
+            'newActivities': len(daily_data)
         }
         
     except Exception as e:
