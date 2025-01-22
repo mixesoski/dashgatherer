@@ -5,7 +5,6 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
-from sync_metrics_calculator import calculate_sync_metrics
 
 def sync_garmin_data(user_id, start_date=None):
     try:
@@ -106,15 +105,9 @@ def sync_garmin_data(user_id, start_date=None):
                     print(f"Error saving activity data: {e}")
                     continue
 
-            # Calculate metrics only if we have new activities
-            metrics_result = {}
-            if len(daily_data) > 0:
-                metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync)
-            
             return {
                 'success': True,
-                'newActivities': len(daily_data),
-                'metrics': metrics_result
+                'newActivities': len(daily_data)
             }
             
         finally:
