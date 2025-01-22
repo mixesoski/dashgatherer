@@ -33,6 +33,16 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         # Convert to DataFrame and sort by date
         df = pd.DataFrame(all_data.data)
         df['date'] = pd.to_datetime(df['date'])
+        
+        # Create a complete date range
+        date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
+        complete_df = pd.DataFrame(date_range, columns=['date'])
+        
+        # Merge with existing data, filling missing days with zero TRIMP
+        df = pd.merge(complete_df, df, on='date', how='left')
+        df['trimp'] = df['trimp'].fillna(0)
+        df['activity'] = df['activity'].fillna('Rest day')
+        df['user_id'] = user_id
         df = df.sort_values('date')
 
         # Initialize first row with default values if it's first sync
@@ -47,9 +57,9 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             prev_row = df.iloc[i-1]
             curr_row = df.iloc[i]
             
-            trimp = float(curr_row['trimp'])
-            prev_atl = float(prev_row['atl']) if prev_row['atl'] is not None else 0.0
-            prev_ctl = float(prev_row['ctl']) if prev_row['ctl'] is not None else 0.0
+            prev_atl = float(prev_row['atl']) if prev_row['atl'] is not None else 50.0
+            prev_ctl = float(prev_row['ctl']) if prev_row['ctl'] is not None else 50.0
+            trimp = float(curr_row['trimp']) if curr_row['trimp'] is not None else 0.0
             
             # Calculate new metrics
             atl = prev_atl + (trimp - prev_atl) / 7
