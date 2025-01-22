@@ -12,6 +12,7 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 import traceback
+from metrics_calculator import calculate_metrics  # zamiast calculate_sync_metrics
 
 # Debug: Print current directory
 print("Current directory:", os.getcwd())
@@ -175,6 +176,9 @@ def main(user_id=None, start_date=None, update_only=False, recalculate_only=Fals
                 'error': 'No activities found'
             }
         
+        # Calculate metrics using metrics_calculator
+        metrics_result = calculate_metrics(user_id, start_date)  # zamiast calculate_sync_metrics
+
         return {
             'success': True,
             'message': 'Data fetched and saved successfully',

@@ -36,47 +36,36 @@ def convert_to_serializable(obj):
         return int(obj)
     return obj
 
-@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
+@app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
-    # Handle preflight requests
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-        return response
-
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No data provided'
-            }), 400
-            
-        user_id = data.get('userId')
+        data = request.json
+        user_id = data.get('user_id')
+        start_date = data.get('start_date')
+        is_first_sync = data.get('is_first_sync', False)
+
         if not user_id:
             return jsonify({
                 'success': False,
-                'error': 'No user ID provided'
+                'error': 'user_id is required'
             }), 400
-            
-        start_date = data.get('startDate')
-        
-        # Only sync data and calculate metrics once
-        result = sync_garmin_data(user_id, start_date)
-        
-        if isinstance(result, dict):
-            result = {k: convert_to_serializable(v) for k, v in result.items()}
-        
+
+        if is_first_sync:
+            # Użyj garmin_sync dla pierwszej synchronizacji
+            from garmin_sync import sync_garmin_data
+            result = sync_garmin_data(user_id, start_date)
+        else:
+            # Użyj garmin_trimp dla aktualizacji
+            from garmin_trimp import main
+            result = main(user_id, start_date)
+
         return jsonify(result)
-        
+
     except Exception as e:
-        print(f"API Error: {str(e)}")
-        print(f"Full error details: {traceback.format_exc()}")
+        print(f"Error in sync endpoint: {e}")
         return jsonify({
             'success': False,
-            'error': 'Wystąpił nieoczekiwany błąd.'
+            'error': str(e)
         }), 500
 
 @app.route('/api/update-chart', methods=['POST', 'OPTIONS'])
