@@ -66,22 +66,13 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             for record in existing_data.data
         }
 
-        # Get last known metrics before start date
-        last_known = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .lt('date', start_date.isoformat())\
-            .order('date', desc=True)\
-            .limit(1)\
-            .execute()
-
         # Calculate metrics for all days
         updates = []
         
-        # Always start with ATL=50 and CTL=50
+        # Start with ATL=50 and CTL=50 for the selected start date
         prev_atl = 50
         prev_ctl = 50
-        print(f"Starting with ATL: 50.0, CTL: 50.0")
+        print(f"Starting with ATL: 50.0, CTL: 50.0 for date: {start_date.date()}")
         
         for day in all_days:
             current_date = datetime.strptime(day, "%Y-%m-%d")
