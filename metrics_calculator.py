@@ -13,70 +13,43 @@ def calculate_metrics(user_id, start_date=None):
         else:
             start_date = end_date - timedelta(days=9)
 
-        print(f"\n=== CALCULATING METRICS ===")
-        print(f"Date range: {start_date.date()} to {end_date.date()}")
-
-        # Get ALL historical data for this user
-        all_data = supabase.table('garmin_data')\
+        # Get data from database
+        data = supabase.table('garmin_data')\
             .select('*')\
             .eq('user_id', user_id)\
-            .order('date')\
+            .gte('date', start_date.isoformat())\
+            .lte('date', end_date.isoformat())\
             .execute()
 
-        if not all_data.data:
-            print("No data found for user")
+        if not data.data:
             return {
                 'success': False,
                 'message': 'No data found'
             }
 
-        # Convert to DataFrame and sort by date
-        df = pd.DataFrame(all_data.data)
-        df['date'] = pd.to_datetime(df['date'])
+        # Convert to DataFrame
+        df = pd.DataFrame(data.data)
+        df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
         df = df.sort_values('date')
 
-        # Calculate metrics for each row based on previous row
-        for i in range(1, len(df)):
-            prev_row = df.iloc[i-1]
-            curr_row = df.iloc[i]
-            
-            trimp = float(curr_row['trimp'])
-            prev_atl = float(prev_row['atl'])
-            prev_ctl = float(prev_row['ctl'])
-            
-            # Calculate new metrics using original formula
-            atl = prev_atl + (trimp - prev_atl) / 7
-            ctl = prev_ctl + (trimp - prev_ctl) / 42
-            tsb = prev_ctl - prev_atl
-            
-            # Update current row
-            df.at[df.index[i], 'atl'] = round(atl, 1)
-            df.at[df.index[i], 'ctl'] = round(ctl, 1)
-            df.at[df.index[i], 'tsb'] = round(tsb, 1)
+        # Create date range and merge
+        date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+        date_df = pd.DataFrame({'date': date_range})
+        df = pd.merge(date_df, df, on='date', how='left')
+        df['trimp'] = df['trimp'].fillna(0)
 
-        # Update database with new metrics
-        for _, row in df.iterrows():
-            metrics_data = {
-                'user_id': user_id,
-                'date': row['date'].isoformat(),
-                'trimp': float(row['trimp']),
-                'activity': row.get('activity', 'Rest day'),
-                'atl': round(float(row['atl']), 1),
-                'ctl': round(float(row['ctl']), 1),
-                'tsb': round(float(row['tsb']), 1)
-            }
-            
-            try:
-                supabase.table('garmin_data')\
-                    .upsert(metrics_data, on_conflict='user_id,date')\
-                    .execute()
-                print(f"Updated {row['date']} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
-            except Exception as e:
-                print(f"Error updating metrics for {row['date']}: {e}")
+        # Format data for chart
+        chart_data = {
+            'dates': df['date'].dt.strftime('%Y-%m-%d').tolist(),
+            'trimps': df['trimp'].tolist(),
+            'atl': df['atl'].tolist(),
+            'ctl': df['ctl'].tolist(),
+            'tsb': df['tsb'].tolist()
+        }
 
         return {
             'success': True,
-            'message': f'Updated metrics for {len(df)} days'
+            'data': chart_data
         }
 
     except Exception as e:
