@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
-from metrics_calculator import calculate_metrics
 import traceback
 import numpy as np
 import os
@@ -65,19 +64,13 @@ def sync_garmin():
             }), 400
             
         start_date = data.get('startDate')
-        recalculate_only = data.get('recalculateOnly', False)
         
         print(f"Processing request for user_id: {user_id}")
         print(f"Start date: {start_date}")
-        print(f"Recalculate only: {recalculate_only}")
         
         try:
-            # Only use calculate_metrics for chart updates
-            if recalculate_only:
-                result = calculate_metrics(user_id, start_date)
-            else:
-                # Use sync_garmin_data for syncing and calculating metrics
-                result = sync_garmin_data(user_id, start_date)
+            # Use sync_garmin_data for syncing and calculating metrics
+            result = sync_garmin_data(user_id, start_date)
                 
             if not result['success']:
                 error_msg = result.get('error', 'Unknown error')
