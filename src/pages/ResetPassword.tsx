@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,32 +9,7 @@ import { toast } from "sonner";
 const ResetPassword = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
-  // Get the access token from the URL
-  useEffect(() => {
-    const setupSession = async () => {
-      const accessToken = searchParams.get("access_token");
-      if (!accessToken) {
-        setError("Invalid or missing reset token. Please request a new password reset link.");
-        return;
-      }
-
-      // Set the session with the access token
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: "",
-      });
-
-      if (sessionError) {
-        console.error("Session error:", sessionError);
-        setError("Invalid or expired reset token. Please request a new password reset link.");
-      }
-    };
-
-    setupSession();
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
