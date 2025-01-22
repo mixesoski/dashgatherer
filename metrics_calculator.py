@@ -25,7 +25,8 @@ def calculate_metrics(user_id, start_date=None):
         # Convert to DataFrame
         df = pd.DataFrame(existing_data.data)
         if not df.empty:
-            df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
+            # Handle ISO8601 dates with milliseconds
+            df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
             df = df.sort_values('date')
 
             # Get the earliest date with data
@@ -39,8 +40,9 @@ def calculate_metrics(user_id, start_date=None):
         
         # Find new dates that need to be added
         if not df.empty:
-            existing_dates = set(df['date'].dt.strftime('%Y-%m-%d'))
-            new_dates = [d for d in date_range if d.strftime('%Y-%m-%d') not in existing_dates]
+            # Convert dates to date-only strings for comparison (ignore time)
+            existing_dates = set(df['date'].dt.date.astype(str))
+            new_dates = [d for d in date_range if d.date().isoformat() not in existing_dates]
             
             if new_dates:
                 print(f"Found {len(new_dates)} new dates to add")
