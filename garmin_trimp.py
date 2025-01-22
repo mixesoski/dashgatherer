@@ -125,44 +125,6 @@ def get_trimp_values(api, user_id, start_date=None, update_only=False, recalcula
         print(f"Error fetching activities: {e}")
         return {}
 
-def create_trimp_chart(df):
-    try:
-        # Use Agg backend which doesn't require GUI
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        
-        if df.empty:
-            print("No data to create chart")
-            return
-        
-        plt.figure(figsize=(12, 6))
-        
-        # Plot metrics
-        plt.plot(df['date'], df['atl'], label='ATL', color='red')
-        plt.plot(df['date'], df['ctl'], label='CTL', color='blue')
-        plt.plot(df['date'], df['tsb'], label='TSB', color='green')
-        
-        # Plot TRIMP bars
-        plt.bar(df['date'], df['trimp'], alpha=0.3, color='gray', label='TRIMP')
-        
-        plt.title('Training Metrics')
-        plt.xlabel('Date')
-        plt.ylabel('Value')
-        plt.grid(True)
-        plt.legend()
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        
-        # Save the chart
-        plt.savefig('trimp_chart.png')
-        plt.close('all')  # Make sure to close all figures
-        print("Chart created successfully")
-        
-    except Exception as e:
-        print(f"Error creating chart: {str(e)}")
-        plt.close('all')  # Clean up in case of error
-
 def list_available_users():
     try:
         response = supabase.table('garmin_credentials').select('user_id, email').execute()
@@ -173,80 +135,6 @@ def list_available_users():
         print("==================\n")
     except Exception as e:
         print(f"Error fetching users: {str(e)}")
-
-def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
-    try:
-        # Get existing data
-        data = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .order('date')\
-            .execute()
-        
-        if not data.data:
-            return {'message': 'No data found'}
-            
-        # Convert to DataFrame and sort
-        df = pd.DataFrame(data.data)
-        df['date'] = pd.to_datetime(df['date'])
-        df = df.sort_values('date')
-        
-        # Initialize metrics arrays
-        dates = []
-        atl_values = []
-        ctl_values = []
-        tsb_values = []
-        
-        # Start with first date's TRIMP for initial calculations
-        first_trimp = float(df.iloc[0]['trimp'])
-        atl = first_trimp
-        ctl = first_trimp
-        
-        # Calculate for each day
-        for index, row in df.iterrows():
-            date = row['date']
-            trimp = float(row['trimp'])
-            
-            # Calculate ATL (fatigue)
-            atl = atl * (1 - 1/7) + trimp * (1/7)
-            
-            # Calculate CTL (fitness)
-            ctl = ctl * (1 - 1/42) + trimp * (1/42)
-            
-            # Calculate TSB (form)
-            tsb = ctl - atl
-            
-            # Store values
-            dates.append(date)
-            atl_values.append(round(atl, 1))
-            ctl_values.append(round(ctl, 1))
-            tsb_values.append(round(tsb, 1))
-            
-            # Update database
-            print(f"Updated {date} - ATL: {round(atl, 1)}, CTL: {round(ctl, 1)}, TSB: {round(tsb, 1)}")
-            
-            metrics_data = {
-                'user_id': user_id,
-                'date': date.isoformat(),
-                'atl': round(atl, 1),
-                'ctl': round(ctl, 1),
-                'tsb': round(tsb, 1)
-            }
-            
-            supabase.table('training_metrics')\
-                .upsert(metrics_data, on_conflict='user_id,date')\
-                .execute()
-        
-        return {
-            'dates': dates,
-            'atl': atl_values,
-            'ctl': ctl_values,
-            'tsb': tsb_values
-        }
-        
-    except Exception as e:
-        print(f"Error calculating metrics: {e}")
-        return None
 
 def main(user_id=None, start_date=None, update_only=False, recalculate_only=False):
     try:
