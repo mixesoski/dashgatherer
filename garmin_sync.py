@@ -34,14 +34,17 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
         try:
             print(f"\nStarting data sync for user ID: {user_id}")
             
-            # Check if this is first sync for user
-            existing_data = supabase.table('garmin_data')\
-                .select('*')\
+            # Check if this is first sync for user (no ATL/CTL values)
+            existing_metrics = supabase.table('garmin_data')\
+                .select('atl,ctl')\
                 .eq('user_id', user_id)\
-                .order('date', desc=True)\
+                .not_('atl', 'is', 'null')\
+                .not_('ctl', 'is', 'null')\
+                .limit(1)\
                 .execute()
             
-            is_first_sync = len(existing_data.data) == 0
+            is_first_sync = len(existing_metrics.data) == 0
+            print(f"Is first sync: {is_first_sync}")
 
             # Get credentials and initialize client
             email, password = get_garmin_credentials(user_id)
