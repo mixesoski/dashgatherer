@@ -19,7 +19,7 @@ if os.environ.get('FLASK_ENV') == 'development':
         }
     })
 else:
-    # In production, accept requests from specific domains
+    # In production, accept requests from specific domains without port numbers
     CORS(app, resources={
         r"/api/*": {
             "origins": [
