@@ -2,6 +2,10 @@ from datetime import datetime, timedelta
 import math
 from supabase_client import supabase
 from garminconnect import Garmin
+import logging
+
+# Konfiguracja logowania
+logging.basicConfig(level=logging.INFO)
 
 def get_historical_metrics(user_id, before_date):
     """Pobiera ostatnie metryki sprzed podanej daty"""
@@ -99,16 +103,18 @@ def sync_garmin_data(user_id, email, password):
         
         # Aktualizacja bazy
         if calculated_metrics:
-            supabase.table('garmin_data').upsert(
+            response = supabase.table('garmin_data').upsert(
                 calculated_metrics,
                 on_conflict='user_id,date',
                 returning='minimal'
             ).execute()
+            
+            logging.info(f"Upsert response: {response}")
         
         return {'success': True, 'updated': len(calculated_metrics)}
     
     except Exception as e:
-        print(f"Błąd synchronizacji: {str(e)}")
+        logging.error(f"Błąd synchronizacji: {str(e)}")
         return {'success': False, 'error': str(e)}
 
 def update_chart_data(user_id, email, password):
