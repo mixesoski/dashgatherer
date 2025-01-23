@@ -97,8 +97,18 @@ def update_chart():
             
         start_date = data.get('startDate')
         
+        # Get Garmin credentials from environment variables
+        email = os.environ.get('EMAIL')
+        password = os.environ.get('PASSWORD')
+        
+        if not email or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Garmin credentials not configured'
+            }), 500
+        
         # Calculate metrics for chart update
-        result = update_chart_data(user_id, start_date)
+        result = update_chart_data(user_id, email, password)
         
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
