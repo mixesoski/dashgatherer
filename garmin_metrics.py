@@ -85,12 +85,40 @@ def update_chart_data(user_id, email, password):
             return {'success': False, 'error': 'Failed to initialize Garmin API'}
         
         # Get last metrics and determine date range
-        last_metrics = get_last_metrics(user_id)
         end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=9)
+        start_date = end_date - timedelta(days=9)  # Zawsze bierzemy ostatnie 9 dni
         
-        if last_metrics['date']:
-            start_date = min(start_date, last_metrics['date'])
+        # Pobierz wszystkie rekordy z tego zakresu dat
+        existing_records = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .gte('date', start_date.strftime("%Y-%m-%d"))\
+            .lte('date', end_date.strftime("%Y-%m-%d"))\
+            .execute()
+        
+        # Stwórz mapę istniejących rekordów po dacie
+        existing_map = {}
+        last_metrics = {'atl': 50.0, 'ctl': 50.0}
+        
+        if existing_records.data:
+            for record in existing_records.data:
+                date_str = record['date'].split('T')[0]
+                existing_map[date_str] = record
+                
+            # Znajdź ostatnie wartości ATL/CTL przed start_date
+            last_values = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .lt('date', start_date.strftime("%Y-%m-%d"))\
+                .order('date', desc=True)\
+                .limit(1)\
+                .execute()
+                
+            if last_values.data:
+                last_metrics = {
+                    'atl': last_values.data[0].get('atl', 50.0),
+                    'ctl': last_values.data[0].get('ctl', 50.0)
+                }
         
         print(f"[Chart Update] Processing date range: {start_date} to {end_date}")
         print(f"[Chart Update] Starting from - ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}")
@@ -106,6 +134,7 @@ def update_chart_data(user_id, email, password):
         
         while current_date <= end_date:
             day_data = activity_data.get(current_date, {'trimp': 0, 'activities': ['Rest day']})
+            date_str = current_date.strftime("%Y-%m-%d")
             
             # Calculate new values
             trimp = day_data['trimp']
@@ -116,37 +145,77 @@ def update_chart_data(user_id, email, password):
             if trimp > 0:
                 print(f"[Chart Update] {current_date} - TRIMP: {trimp}, ATL: {round(atl, 1)}, CTL: {round(ctl, 1)}, TSB: {round(tsb, 1)}")
             
-            updates.append({
+            update_data = {
                 'user_id': user_id,
-                'date': current_date.strftime("%Y-%m-%d"),  # Tylko data bez czasu
+                'date': date_str,
                 'trimp': trimp,
                 'activity': ', '.join(day_data['activities']),
                 'atl': round(atl, 1),
                 'ctl': round(ctl, 1),
                 'tsb': round(tsb, 1)
-            })
+            }
+            
+            # Sprawdź czy dane się zmieniły
+            existing_record = existing_map.get(date_str)
+            if not existing_record or \
+               existing_record['trimp'] != trimp or \
+               existing_record['atl'] != round(atl, 1) or \
+               existing_record['ctl'] != round(ctl, 1):
+                updates.append(update_data)
+                print(f"[Chart Update] Data changed for {date_str}, will update")
+            else:
+                print(f"[Chart Update] No changes for {date_str}, skipping update")
             
             prev_atl = atl
             prev_ctl = ctl
             current_date += timedelta(days=1)
         
-        # Update database
-        print(f"\n[Chart Update] Saving {len(updates)} records to database")
-        for update in updates:
-            try:
-                response = supabase.table('garmin_data')\
-                    .upsert(update, on_conflict='user_id,date')\
-                    .execute()
-            except Exception as e:
-                print(f"[Chart Update] Error saving {update['date']}: {e}")
+        # Update database only for changed records
+        if updates:
+            print(f"\n[Chart Update] Saving {len(updates)} changed records to database")
+            for update in updates:
+                try:
+                    response = supabase.table('garmin_data')\
+                        .upsert(update, on_conflict='user_id,date')\
+                        .execute()
+                except Exception as e:
+                    print(f"[Chart Update] Error saving {update['date']}: {e}")
+        else:
+            print("\n[Chart Update] No changes to save")
         
-        # Prepare chart data
+        # Prepare chart data - use all records for consistent display
+        all_dates = []
+        all_trimps = []
+        all_atl = []
+        all_ctl = []
+        all_tsb = []
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            record = existing_map.get(date_str)
+            
+            # Jeśli rekord został zaktualizowany, użyj nowych wartości
+            for update in updates:
+                if update['date'] == date_str:
+                    record = update
+                    break
+            
+            if record:
+                all_dates.append(date_str)
+                all_trimps.append(record['trimp'])
+                all_atl.append(record['atl'])
+                all_ctl.append(record['ctl'])
+                all_tsb.append(record['tsb'])
+            
+            current_date += timedelta(days=1)
+        
         chart_data = {
-            'dates': [u['date'] for u in updates],  # Już jest w formacie YYYY-MM-DD
-            'trimps': [u['trimp'] for u in updates],
-            'atl': [u['atl'] for u in updates],
-            'ctl': [u['ctl'] for u in updates],
-            'tsb': [u['tsb'] for u in updates]
+            'dates': all_dates,
+            'trimps': all_trimps,
+            'atl': all_atl,
+            'ctl': all_ctl,
+            'tsb': all_tsb
         }
         
         print("[Chart Update] Complete")
