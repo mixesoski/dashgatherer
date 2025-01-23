@@ -110,3 +110,51 @@ def sync_garmin_data(user_id, email, password):
     except Exception as e:
         print(f"Błąd synchronizacji: {str(e)}")
         return {'success': False, 'error': str(e)}
+
+def update_chart_data(user_id, email, password):
+    """Główna funkcja aktualizująca dane wykresu"""
+    try:
+        # Inicjalizacja API Garmin
+        api = init_garmin_api(email, password)
+        if not api:
+            return {'success': False, 'error': 'Błąd autentykacji Garmin'}
+
+        # Okres danych (ostatnie 10 dni)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=9)
+
+        # Synchronizacja i przeliczenie metryk
+        result = sync_garmin_data(user_id, email, password)
+        
+        if not result['success']:
+            return result
+
+        # Pobierz zaktualizowane dane dla wykresu
+        chart_data = get_chart_data(user_id, start_date, end_date)
+        
+        return {
+            'success': True,
+            'data': chart_data,
+            'updated': result['updated']
+        }
+
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def get_chart_data(user_id, start_date, end_date):
+    """Pobiera dane dla wykresu z bazy danych"""
+    records = supabase.table('garmin_data')\
+        .select('date, trimp, atl, ctl, tsb')\
+        .eq('user_id', user_id)\
+        .gte('date', start_date.isoformat())\
+        .lte('date', end_date.isoformat())\
+        .order('date', asc=True)\
+        .execute()
+
+    return {
+        'dates': [rec['date'] for rec in records.data],
+        'trimp': [rec['trimp'] for rec in records.data],
+        'atl': [rec['atl'] for rec in records.data],
+        'ctl': [rec['ctl'] for rec in records.data],
+        'tsb': [rec['tsb'] for rec in records.data]
+    }
