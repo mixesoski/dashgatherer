@@ -38,9 +38,8 @@ def get_last_metrics(user_id):
 
 def process_garmin_activities(api, start_date, end_date):
     """Process Garmin activities and calculate TRIMP values."""
-    print(f"\nFetching activities from {start_date} to {end_date}")
     activities = api.get_activities_by_date(start_date, end_date, sortorder='asc')
-    print(f"Found {len(activities)} activities")
+    print(f"[Chart Update] Found {len(activities)} activities")
     
     activity_data = {}
     for activity in activities:
@@ -55,7 +54,7 @@ def process_garmin_activities(api, start_date, end_date):
                     break
             
             if activity_details['activityTypeDTO']['typeKey'] == 'strength_training':
-                print(f"Applying 2x multiplier for strength training: {trimp} -> {trimp * 2}")
+                print(f"[Chart Update] Applying 2x multiplier for strength training: {trimp} -> {trimp * 2}")
                 trimp = trimp * 2
             
             activity_date = datetime.strptime(
@@ -76,8 +75,7 @@ def process_garmin_activities(api, start_date, end_date):
 def update_chart_data(user_id, email, password):
     """Update chart data with new activities and recalculate metrics."""
     try:
-        print("\n=== Starting chart data update ===")
-        print(f"Updating data for user_id: {user_id}")
+        print(f"\n[Chart Update] Starting for user_id: {user_id}")
         
         # Initialize Garmin API
         api = init_garmin_api(email, password)
@@ -92,8 +90,8 @@ def update_chart_data(user_id, email, password):
         if last_metrics['date']:
             start_date = min(start_date, last_metrics['date'].date())
         
-        print(f"\nDate range: {start_date} to {end_date}")
-        print(f"Last metrics - ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}")
+        print(f"[Chart Update] Processing date range: {start_date} to {end_date}")
+        print(f"[Chart Update] Starting from - ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}")
         
         # Get activities from Garmin
         activity_data = process_garmin_activities(api, start_date, end_date)
@@ -104,7 +102,6 @@ def update_chart_data(user_id, email, password):
         prev_atl = last_metrics['atl']
         prev_ctl = last_metrics['ctl']
         
-        print("\n=== Calculating metrics ===")
         while current_date <= end_date:
             day_data = activity_data.get(current_date, {'trimp': 0, 'activities': ['Rest day']})
             
@@ -114,8 +111,8 @@ def update_chart_data(user_id, email, password):
             ctl = prev_ctl + (trimp - prev_ctl) / 42
             tsb = prev_ctl - prev_atl
             
-            print(f"\nProcessing {current_date}")
-            print(f"TRIMP: {trimp}, ATL: {round(atl, 1)}, CTL: {round(ctl, 1)}, TSB: {round(tsb, 1)}")
+            if trimp > 0:
+                print(f"[Chart Update] {current_date} - TRIMP: {trimp}, ATL: {round(atl, 1)}, CTL: {round(ctl, 1)}, TSB: {round(tsb, 1)}")
             
             updates.append({
                 'user_id': user_id,
@@ -132,15 +129,14 @@ def update_chart_data(user_id, email, password):
             current_date += timedelta(days=1)
         
         # Update database
-        print("\n=== Updating database ===")
+        print(f"\n[Chart Update] Saving {len(updates)} records to database")
         for update in updates:
             try:
                 response = supabase.table('garmin_data')\
                     .upsert(update, on_conflict='user_id,date')\
                     .execute()
-                print(f"Successfully updated {update['date']}")
             except Exception as e:
-                print(f"Error updating {update['date']}: {e}")
+                print(f"[Chart Update] Error saving {update['date']}: {e}")
         
         # Prepare chart data
         chart_data = {
@@ -151,15 +147,14 @@ def update_chart_data(user_id, email, password):
             'tsb': [u['tsb'] for u in updates]
         }
         
+        print("[Chart Update] Complete")
         return {
             'success': True,
             'data': chart_data
         }
         
     except Exception as e:
-        print(f"\n!!! Error updating chart data !!!")
-        print(f"Error type: {type(e)}")
-        print(f"Error message: {str(e)}")
+        print(f"\n[Chart Update] Error: {str(e)}")
         import traceback
         traceback.print_exc()
         return {
