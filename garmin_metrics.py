@@ -26,10 +26,11 @@ def get_last_metrics(user_id):
         
         if result.data:
             last_record = result.data[0]
+            date_str = last_record['date'].split('T')[0]  # Get just the date part
             return {
                 'atl': last_record.get('atl', 50.0),
                 'ctl': last_record.get('ctl', 50.0),
-                'date': pd.to_datetime(last_record['date'])
+                'date': datetime.strptime(date_str, "%Y-%m-%d").date()
             }
         return {'atl': 50.0, 'ctl': 50.0, 'date': None}
     except Exception as e:
@@ -57,9 +58,10 @@ def process_garmin_activities(api, start_date, end_date):
                 print(f"[Chart Update] Applying 2x multiplier for strength training: {trimp} -> {trimp * 2}")
                 trimp = trimp * 2
             
+            # Uproszczone przetwarzanie daty - bierzemy tylko datę bez czasu i strefy
             activity_date = datetime.strptime(
-                activity_details['summaryDTO']['startTimeLocal'].split('.')[0],
-                "%Y-%m-%dT%H:%M:%S"
+                activity_details['summaryDTO']['startTimeLocal'].split('T')[0],
+                "%Y-%m-%d"
             ).date()
             
             activity_name = activity_details['activityName']
@@ -88,7 +90,7 @@ def update_chart_data(user_id, email, password):
         start_date = end_date - timedelta(days=9)
         
         if last_metrics['date']:
-            start_date = min(start_date, last_metrics['date'].date())
+            start_date = min(start_date, last_metrics['date'])
         
         print(f"[Chart Update] Processing date range: {start_date} to {end_date}")
         print(f"[Chart Update] Starting from - ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}")
@@ -116,7 +118,7 @@ def update_chart_data(user_id, email, password):
             
             updates.append({
                 'user_id': user_id,
-                'date': current_date.strftime("%Y-%m-%dT%H:%M:%S"),
+                'date': current_date.strftime("%Y-%m-%d"),  # Tylko data bez czasu
                 'trimp': trimp,
                 'activity': ', '.join(day_data['activities']),
                 'atl': round(atl, 1),
@@ -140,7 +142,7 @@ def update_chart_data(user_id, email, password):
         
         # Prepare chart data
         chart_data = {
-            'dates': [u['date'].split('T')[0] for u in updates],
+            'dates': [u['date'] for u in updates],  # Już jest w formacie YYYY-MM-DD
             'trimps': [u['trimp'] for u in updates],
             'atl': [u['atl'] for u in updates],
             'ctl': [u['ctl'] for u in updates],
