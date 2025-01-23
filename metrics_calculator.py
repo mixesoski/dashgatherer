@@ -14,14 +14,14 @@ def calculate_metrics(user_id, start_date=None):
             if isinstance(start_date, str):
                 print(f"Original start_date string: {start_date}")
                 try:
-                    # Handle ISO 8601 format with timezone
-                    start_date = pd.to_datetime(start_date).replace(tzinfo=None)
+                    # Use pandas to_datetime which handles ISO 8601 better
+                    start_date = pd.to_datetime(start_date)
+                    print(f"Parsed start_date with pandas: {start_date}")
                 except Exception as e:
-                    print(f"Error parsing start_date: {e}")
-                    # Fallback to simpler parsing if needed
+                    print(f"Error parsing with pandas: {e}")
+                    # Fallback to manual parsing if needed
                     start_date = start_date.split('.')[0].split('+')[0].replace('Z', '')
                     start_date = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S")
-                print(f"Parsed start_date: {start_date}")
             start_date = start_date.replace(tzinfo=None)
         else:
             start_date = end_date - timedelta(days=9)
