@@ -8,7 +8,8 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         end_date = datetime.now().replace(tzinfo=None)
         if start_date:
             if isinstance(start_date, str):
-                start_date = datetime.fromisoformat(start_date.replace('Z', ''))
+                # Użyj pandas z format='ISO8601' do obsługi różnych formatów ISO
+                start_date = pd.to_datetime(start_date, format='ISO8601').to_pydatetime()
             start_date = start_date.replace(tzinfo=None)
         else:
             start_date = end_date - timedelta(days=9)
@@ -30,9 +31,9 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
                 'message': 'No data found'
             }
 
-        # Convert to DataFrame and sort by date
+        # Convert to DataFrame and handle dates with ISO8601 format
         df = pd.DataFrame(all_data.data)
-        df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)  # Remove timezone info
+        df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
         
         # Create a complete date range
         date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
@@ -74,7 +75,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         for _, row in df.iterrows():
             metrics_data = {
                 'user_id': user_id,
-                'date': row['date'].isoformat(),
+                'date': row['date'].strftime("%Y-%m-%d"),  # Zapisz tylko datę bez czasu
                 'trimp': float(row['trimp']),
                 'activity': row.get('activity', 'Rest day'),
                 'atl': round(float(row['atl']), 1),
@@ -86,7 +87,7 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
                 supabase.table('garmin_data')\
                     .upsert(metrics_data, on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {row['date']} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
+                print(f"Updated {row['date'].strftime('%Y-%m-%d')} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
             except Exception as e:
                 print(f"Error updating metrics for {row['date']}: {e}")
 
