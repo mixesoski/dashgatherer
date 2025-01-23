@@ -26,18 +26,12 @@ def get_last_metrics(user_id):
         
         if result.data:
             last_record = result.data[0]
-            # Obsługa różnych formatów daty
-            date_str = last_record['date']
-            if '+' in date_str:
-                date_str = date_str.split('+')[0]  # Usuń strefę czasową
-            if '.' in date_str:
-                date_str = date_str.split('.')[0]  # Usuń milisekundy
-            date_str = date_str.split('T')[0]  # Weź tylko datę
-            
+            # Użyj pandas do parsowania daty
+            date = pd.to_datetime(last_record['date']).date()
             return {
                 'atl': last_record.get('atl', 50.0),
                 'ctl': last_record.get('ctl', 50.0),
-                'date': datetime.strptime(date_str, "%Y-%m-%d").date()
+                'date': date
             }
         return {'atl': 50.0, 'ctl': 50.0, 'date': None}
     except Exception as e:
@@ -109,13 +103,9 @@ def update_chart_data(user_id, email, password):
         
         if existing_records.data:
             for record in existing_records.data:
-                # Obsługa różnych formatów daty
-                date_str = record['date']
-                if '+' in date_str:
-                    date_str = date_str.split('+')[0]
-                if '.' in date_str:
-                    date_str = date_str.split('.')[0]
-                date_str = date_str.split('T')[0]
+                # Użyj pandas do parsowania daty
+                date = pd.to_datetime(record['date']).date()
+                date_str = date.strftime("%Y-%m-%d")
                 existing_map[date_str] = record
                 
             # Znajdź ostatnie wartości ATL/CTL przed start_date
