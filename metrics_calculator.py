@@ -13,10 +13,14 @@ def calculate_metrics(user_id, start_date=None):
         if start_date:
             if isinstance(start_date, str):
                 print(f"Original start_date string: {start_date}")
-                # Remove any timezone info and milliseconds
-                start_date = start_date.split('.')[0].split('+')[0].replace('Z', '')
-                print(f"Cleaned start_date string: {start_date}")
-                start_date = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S")
+                try:
+                    # Handle ISO 8601 format with timezone
+                    start_date = pd.to_datetime(start_date).replace(tzinfo=None)
+                except Exception as e:
+                    print(f"Error parsing start_date: {e}")
+                    # Fallback to simpler parsing if needed
+                    start_date = start_date.split('.')[0].split('+')[0].replace('Z', '')
+                    start_date = datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%S")
                 print(f"Parsed start_date: {start_date}")
             start_date = start_date.replace(tzinfo=None)
         else:
@@ -33,39 +37,13 @@ def calculate_metrics(user_id, start_date=None):
             .eq('user_id', user_id)\
             .execute()
         print(f"Found {len(existing_data.data)} records in database")
-        
-        # Check for duplicates in raw data
-        date_counts = {}
-        for record in existing_data.data:
-            date_str = record['date'].split('T')[0]  # Get just the date part
-            if date_str in date_counts:
-                print(f"WARNING: Duplicate date found in database: {date_str}")
-                print(f"  First record: {date_counts[date_str]}")
-                print(f"  Duplicate record: {record}")
-            date_counts[date_str] = record
-
-        print(f"Unique dates in database: {len(date_counts)}")
-        if len(date_counts) != len(existing_data.data):
-            print(f"WARNING: Found {len(existing_data.data) - len(date_counts)} duplicate dates!")
 
         # Convert to DataFrame
         df = pd.DataFrame(existing_data.data)
         if not df.empty:
             print("\n=== Processing dates in DataFrame ===")
-            # Check for duplicates in DataFrame
-            duplicates = df.groupby('date').size()
-            if (duplicates > 1).any():
-                print("WARNING: Duplicate dates found in DataFrame:")
-                for date, count in duplicates[duplicates > 1].items():
-                    print(f"  Date {date}: {count} occurrences")
-                    print("  Records:")
-                    for _, row in df[df['date'] == date].iterrows():
-                        print(f"    {dict(row)}")
-            print("Sample of raw dates:", df['date'].head().tolist())
-            # Clean and convert dates
-            df['date'] = df['date'].apply(lambda x: x.split('.')[0].split('+')[0].replace('Z', ''))
-            print("Sample of cleaned dates:", df['date'].head().tolist())
-            df['date'] = pd.to_datetime(df['date'])
+            # Convert dates using pandas to_datetime which handles ISO 8601 better
+            df['date'] = pd.to_datetime(df['date']).dt.tz_localize(None)
             print("Sample of parsed dates:", df['date'].head().tolist())
             df = df.sort_values('date')
 
@@ -110,10 +88,6 @@ def calculate_metrics(user_id, start_date=None):
                     'ctl': row.get('ctl'),
                     'tsb': row.get('tsb')
                 }
-            print(f"Created map with {len(existing_map)} entries")
-            print("Sample entries:")
-            for day in list(existing_map.keys())[:3]:
-                print(f"  - {day}: {existing_map[day]}")
 
         # Calculate metrics for all days
         print("\n=== Calculating metrics ===")
@@ -136,18 +110,12 @@ def calculate_metrics(user_id, start_date=None):
                 'ctl': None,
                 'tsb': None
             })
-            print(f"Found existing record: {day in existing_map}")
-            print(f"Current values: TRIMP={record['trimp']}, ATL={record['atl']}, CTL={record['ctl']}, TSB={record['tsb']}")
 
             # Calculate new values
             trimp = float(record['trimp'] if record['trimp'] is not None else 0)
             atl = prev_atl + (trimp - prev_atl) / 7
             ctl = prev_ctl + (trimp - prev_ctl) / 42
             tsb = prev_ctl - prev_atl
-
-            print(f"New values: TRIMP={trimp}, ATL={atl:.1f}, CTL={ctl:.1f}, TSB={tsb:.1f}")
-            if record['atl'] is not None:
-                print(f"Changes: ATL: {record['atl']:.1f}->{atl:.1f}, CTL: {record['ctl']:.1f}->{ctl:.1f}, TSB: {record['tsb']:.1f}->{tsb:.1f}")
 
             updates.append({
                 'user_id': user_id,
@@ -164,28 +132,16 @@ def calculate_metrics(user_id, start_date=None):
 
         # Update all records
         print("\n=== Updating database ===")
-        updated_count = 0
         for update in updates:
             try:
-                print(f"\nTrying to update {update['date']}")
-                print(f"Update data: {update}")
                 response = supabase.table('garmin_data')\
                     .upsert(update, on_conflict='user_id,date')\
                     .execute()
-                print(f"Response from database: {response.data}")
-                updated_count += 1
-                print(f"Successfully updated {update['date']} - ATL: {update['atl']:.1f}, CTL: {update['ctl']:.1f}, TSB: {update['tsb']:.1f}")
+                print(f"Successfully updated {update['date']}")
             except Exception as e:
                 print(f"Error updating {update['date']}: {e}")
-                print(f"Failed update data: {update}")
-                print(f"Error details: {str(e)}")
-                import traceback
-                traceback.print_exc()
-
-        print(f"\nSuccessfully updated {updated_count} records")
 
         # Prepare chart data
-        print("\n=== Preparing chart data ===")
         chart_data = {
             'dates': all_days,
             'trimps': [u['trimp'] for u in updates],
@@ -193,12 +149,6 @@ def calculate_metrics(user_id, start_date=None):
             'ctl': [u['ctl'] for u in updates],
             'tsb': [u['tsb'] for u in updates]
         }
-        print("Chart data prepared with:")
-        print(f"  - {len(chart_data['dates'])} days")
-        print(f"  - First day: {chart_data['dates'][0]}, Last day: {chart_data['dates'][-1]}")
-        print(f"  - TRIMP range: {min(chart_data['trimps'])} to {max(chart_data['trimps'])}")
-        print(f"  - ATL range: {min(chart_data['atl'])} to {max(chart_data['atl'])}")
-        print(f"  - CTL range: {min(chart_data['ctl'])} to {max(chart_data['ctl'])}")
 
         return {
             'success': True,
@@ -209,11 +159,9 @@ def calculate_metrics(user_id, start_date=None):
         print(f"\n!!! Error calculating metrics !!!")
         print(f"Error type: {type(e)}")
         print(f"Error message: {str(e)}")
-        print(f"Error details: {e}")
         import traceback
-        print("Traceback:")
         traceback.print_exc()
         return {
             'success': False,
             'error': str(e)
-        } 
+        }
