@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
-from metrics_calculator import calculate_metrics
+from garmin_metrics import update_chart_data
 from supabase_client import supabase
 import traceback
 import numpy as np
@@ -98,7 +98,7 @@ def update_chart():
         start_date = data.get('startDate')
         
         # Calculate metrics for chart update
-        result = calculate_metrics(user_id, start_date)
+        result = update_chart_data(user_id, start_date)
         
         if isinstance(result, dict):
             result = {k: convert_to_serializable(v) for k, v in result.items()}
