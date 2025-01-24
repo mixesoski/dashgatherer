@@ -51,10 +51,6 @@ const Login = () => {
     };
   }, [navigate]);
 
-  const handleViewChange = (newView: 'sign_in' | 'sign_up') => {
-    setView(newView);
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
@@ -100,17 +96,26 @@ const Login = () => {
                 email_label: "Email",
                 password_label: "Hasło",
                 button_label: "Zaloguj się",
-                link_text: "Nie masz konta? Zarejestruj się"
+                email_input_placeholder: "Twój adres email",
+                password_input_placeholder: "Twoje hasło",
+                link_text: "Nie masz konta? Zarejestruj się",
+                loading_button_label: "Logowanie..."
               },
               sign_up: {
                 email_label: "Email",
                 password_label: "Hasło",
                 button_label: "Zarejestruj się",
-                link_text: "Masz już konto? Zaloguj się"
+                email_input_placeholder: "Twój adres email",
+                password_input_placeholder: "Twoje hasło",
+                link_text: "Masz już konto? Zaloguj się",
+                loading_button_label: "Rejestracja..."
               }
             }
           }}
           providers={[]}
+          onViewChange={(newView) => {
+            setView(newView as "sign_in" | "sign_up");
+          }}
           additionalData={{
             role: role
           }}
