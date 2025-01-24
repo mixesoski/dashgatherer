@@ -51,11 +51,15 @@ const Login = () => {
     };
   }, [navigate]);
 
+  const handleViewChange = (newView: 'sign_in' | 'sign_up') => {
+    setView(newView);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-center mb-6">
-          {view === "sign_in" ? "Welcome Back" : "Create Your Account"}
+          {view === "sign_in" ? "Welcome Back" : "Join Us"}
         </h2>
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -78,6 +82,7 @@ const Login = () => {
         )}
         <Auth
           supabaseClient={supabase}
+          view={view}
           appearance={{ 
             theme: ThemeSupa,
             variables: {
@@ -89,8 +94,6 @@ const Login = () => {
               }
             }
           }}
-          providers={[]}
-          view={view}
           localization={{
             variables: {
               sign_in: {
@@ -107,6 +110,7 @@ const Login = () => {
               }
             }
           }}
+          providers={[]}
           additionalData={{
             role: role
           }}
