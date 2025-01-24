@@ -2,9 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
 from chart_updater import update_chart_data
-from supabase_client import supabase
-import traceback
-import numpy as np
 import os
 
 app = Flask(__name__)
@@ -32,18 +29,13 @@ else:
         }
     })
 
-def convert_to_serializable(obj):
-    if isinstance(obj, np.int64):
-        return int(obj)
-    return obj
-
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
         data = request.json
         user_id = data.get('userId')
         start_date = data.get('startDate')
-
+        
         if not user_id:
             return jsonify({
                 'success': False,
@@ -62,7 +54,7 @@ def sync_garmin():
         result = sync_garmin_data(user_id, start_date, is_first_sync)
 
         return jsonify(result)
-
+        
     except Exception as e:
         print(f"Error in sync endpoint: {e}")
         return jsonify({
@@ -75,7 +67,7 @@ def update_chart():
     try:
         data = request.json
         user_id = data.get('userId')
-
+        
         if not user_id:
             return jsonify({
                 'success': False,
@@ -84,7 +76,7 @@ def update_chart():
 
         result = update_chart_data(user_id)
         return jsonify(result)
-
+        
     except Exception as e:
         print(f"Error in update chart endpoint: {e}")
         return jsonify({
