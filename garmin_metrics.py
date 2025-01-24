@@ -41,8 +41,8 @@ def calculate_metrics(user_id, activity_data, start_date, end_date):
         prev_ctl = first_day_data['trimp']
         start_calculating = False
     else:
-        prev_atl = historical_data['atl']
-        prev_ctl = historical_data['ctl']
+        prev_atl = historical_data['atl'] if not math.isnan(float(historical_data['atl'])) else 0.0
+        prev_ctl = historical_data['ctl'] if not math.isnan(float(historical_data['ctl'])) else 0.0
         start_calculating = True
 
     while current_date <= end_date:
@@ -59,28 +59,47 @@ def calculate_metrics(user_id, activity_data, start_date, end_date):
                 current_date += timedelta(days=1)
                 continue
 
-        # Obliczenia
-        atl = prev_atl + (daily_data['trimp'] - prev_atl) / 7
-        ctl = prev_ctl + (daily_data['trimp'] - prev_ctl) / 42
-        tsb = ctl - atl
+        # Zabezpieczenie przed NaN w danych wejściowych
+        trimp = float(daily_data['trimp'])
+        if math.isnan(trimp):
+            trimp = 0.0
         
-        # Zabezpieczenie przed NaN
-        atl = round(atl, 1) if not math.isnan(atl) else 0.0
-        ctl = round(ctl, 1) if not math.isnan(ctl) else 0.0
-        tsb = round(tsb, 1) if not math.isnan(tsb) else 0.0
+        # Obliczenia z zabezpieczeniem przed NaN
+        try:
+            atl = prev_atl + (trimp - prev_atl) / 7 if not math.isnan(prev_atl) else trimp
+            ctl = prev_ctl + (trimp - prev_ctl) / 42 if not math.isnan(prev_ctl) else trimp
+            tsb = ctl - atl if not (math.isnan(ctl) or math.isnan(atl)) else 0.0
+            
+            # Dodatkowe zabezpieczenie przed NaN
+            atl = 0.0 if math.isnan(atl) else round(atl, 1)
+            ctl = 0.0 if math.isnan(ctl) else round(ctl, 1)
+            tsb = 0.0 if math.isnan(tsb) else round(tsb, 1)
+            
+            metrics.append({
+                'user_id': user_id,
+                'date': date_str,
+                'trimp': round(trimp, 1),
+                'activity': ', '.join(daily_data['activities']),
+                'atl': atl,
+                'ctl': ctl,
+                'tsb': tsb
+            })
+            
+            prev_atl = atl
+            prev_ctl = ctl
+        except Exception as e:
+            logging.error(f"Error calculating metrics for {date_str}: {str(e)}")
+            # W przypadku błędu, używamy poprzednich wartości lub zerujemy
+            metrics.append({
+                'user_id': user_id,
+                'date': date_str,
+                'trimp': round(trimp, 1),
+                'activity': ', '.join(daily_data['activities']),
+                'atl': prev_atl if not math.isnan(prev_atl) else 0.0,
+                'ctl': prev_ctl if not math.isnan(prev_ctl) else 0.0,
+                'tsb': 0.0
+            })
         
-        metrics.append({
-            'user_id': user_id,
-            'date': date_str,
-            'trimp': round(daily_data['trimp'], 1),
-            'activity': ', '.join(daily_data['activities']),
-            'atl': atl,
-            'ctl': ctl,
-            'tsb': tsb
-        })
-        
-        prev_atl = atl
-        prev_ctl = ctl
         current_date += timedelta(days=1)
     
     return metrics
