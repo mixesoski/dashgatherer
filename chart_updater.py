@@ -28,7 +28,6 @@ def calculate_metrics(df: pd.DataFrame, last_metrics: Optional[Dict[str, float]]
         prev_atl = last_metrics['atl']
         prev_ctl = last_metrics['ctl']
     else:
-        # Jeśli brak historycznych danych, użyj pierwszego TRIMP lub wartości domyślnej
         first_trimp = float(df['trimp'].iloc[0]) if not df.empty else 50.0
         prev_atl = first_trimp
         prev_ctl = first_trimp
@@ -37,12 +36,10 @@ def calculate_metrics(df: pd.DataFrame, last_metrics: Optional[Dict[str, float]]
     for _, row in df.sort_values('date').iterrows():
         trimp = float(row['trimp'])
         
-        # Oblicz nowe metryki
         atl = prev_atl + (trimp - prev_atl) / 7
         ctl = prev_ctl + (trimp - prev_ctl) / 42
         tsb = ctl - atl
         
-        # Upewnij się, że wartości nie są NaN
         atl = 50.0 if np.isnan(atl) else atl
         ctl = 50.0 if np.isnan(ctl) else ctl
         tsb = 0.0 if np.isnan(tsb) else tsb
@@ -64,7 +61,6 @@ def calculate_metrics(df: pd.DataFrame, last_metrics: Optional[Dict[str, float]]
 def update_chart_data(user_id: str) -> Dict[str, Any]:
     """Aktualizuje dane z gwarancją unikalności dat"""
     try:
-        # Pobierz dane uwierzytelniające
         creds = supabase.table('garmin_credentials')\
             .select('*')\
             .eq('user_id', user_id)\
@@ -77,28 +73,28 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                 'error': 'Nie znaleziono danych uwierzytelniających'
             }
         
-        # Określ zakres dat
         end_date = datetime.now()
         start_date = end_date - timedelta(days=10)
         
-        # Inicjalizacja klienta Garmin
         client = Garmin(creds.data['email'], creds.data['password'])
         client.login()
 
-        # Pobierz i przetwórz aktywności
         activities = client.get_activities_by_date(
             start_date.strftime("%Y-%m-%d"), 
             end_date.strftime("%Y-%m-%d")
         )
         
-        # Agreguj dane dzienne
+        # Agreguj dane dzienne z unikalnymi datami
         daily_data = {}
         for activity in activities:
             try:
-                date_str = datetime.strptime(
+                # Konwertuj datę do formatu YYYY-MM-DD
+                activity_date = datetime.strptime(
                     activity['startTimeLocal'], 
                     "%Y-%m-%d %H:%M:%S"
-                ).strftime("%Y-%m-%d")
+                ).date()
+                
+                date_str = activity_date.isoformat()
                 
                 if date_str not in daily_data:
                     daily_data[date_str] = {
@@ -106,7 +102,6 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                         'activities': []
                     }
 
-                # Pobierz TRIMP
                 details = client.get_activity(activity['activityId'])
                 trimp = next((
                     float(item['value']) 
@@ -114,7 +109,6 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                     if item['developerFieldNumber'] == 4
                 ), 0.0)
 
-                # Modyfikator dla treningu siłowego
                 if activity.get('activityName') in ['strength_training', 'Strength Training', 'Siła']:
                     trimp *= 2
 
@@ -132,7 +126,7 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                 'message': 'Brak nowych aktywności'
             }
 
-        # Przygotuj DataFrame
+        # Przygotuj DataFrame z unikalnymi datami
         df = pd.DataFrame([{
             'date': date,
             'trimp': data['trimp'],
@@ -143,13 +137,16 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
         last_metrics = get_last_metrics(user_id, start_date)
         df_metrics = calculate_metrics(df, last_metrics)
 
-        # Zapisz dane z użyciem UPSERT
+        # Zapisz dane z użyciem UPSERT dla unikalnych dat
         updated_count = 0
         for _, record in df_metrics.iterrows():
             try:
+                # Konwertuj datę do formatu ISO bez czasu
+                date_str = pd.to_datetime(record['date']).date().isoformat()
+                
                 supabase.table('garmin_data').upsert({
                     'user_id': user_id,
-                    'date': record['date'],
+                    'date': date_str,  # Używamy tylko daty bez czasu
                     'trimp': float(record['trimp']),
                     'activity': record['activity'],
                     'atl': float(record['atl']),
