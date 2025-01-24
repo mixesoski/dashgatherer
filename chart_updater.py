@@ -81,17 +81,21 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
         existing_data = supabase.table('garmin_data')\
             .select('date')\
             .eq('user_id', user_id)\
+            .order('date', desc=False)\
             .execute()
         
         existing_dates = {row['date'] for row in existing_data.data} if existing_data.data else set()
+        
+        # Znajdź pierwszą zapisaną datę (jeśli istnieje)
+        first_date = min(existing_dates) if existing_dates else None
         
         # Inicjalizacja klienta Garmin
         client = Garmin(creds.data['email'], creds.data['password'])
         client.login()
 
-        # Pobierz wszystkie aktywności z ostatniego miesiąca (możemy później rozszerzyć)
+        # Pobierz aktywności do pierwszej zapisanej daty lub wszystkie jeśli brak zapisanych dat
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=30)  # Na początek sprawdzamy miesiąc
+        start_date = datetime.strptime(first_date, "%Y-%m-%d") if first_date else end_date - timedelta(days=30)
         
         activities = client.get_activities_by_date(
             start_date.strftime("%Y-%m-%d"), 
