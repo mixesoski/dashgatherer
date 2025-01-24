@@ -61,6 +61,7 @@ def calculate_metrics(df: pd.DataFrame, last_metrics: Optional[Dict[str, float]]
 def update_chart_data(user_id: str) -> Dict[str, Any]:
     """Aktualizuje dane z gwarancją unikalności dat"""
     try:
+        # Get credentials
         creds = supabase.table('garmin_credentials')\
             .select('*')\
             .eq('user_id', user_id)\
@@ -73,6 +74,7 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                 'error': 'Nie znaleziono danych uwierzytelniających'
             }
         
+        # Define date range
         end_date = datetime.now()
         start_date = end_date - timedelta(days=10)
         
@@ -84,20 +86,41 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
             .lte('date', end_date.date().isoformat())\
             .execute()
 
+        # Create a dictionary of existing dates with their data
         existing_dates = {
             record['date'].split('T')[0]: record 
             for record in existing_data.data
         }
         
+        # If we have all dates in range, return early
+        all_dates = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
+        all_dates_str = [date.strftime('%Y-%m-%d') for date in all_dates]
+        
+        if all(date in existing_dates for date in all_dates_str):
+            return {
+                'success': True,
+                'updated': 0,
+                'message': 'All dates already exist in database'
+            }
+
+        # Connect to Garmin
         client = Garmin(creds.data['email'], creds.data['password'])
         client.login()
 
+        # Get activities from Garmin
         activities = client.get_activities_by_date(
             start_date.strftime("%Y-%m-%d"), 
             end_date.strftime("%Y-%m-%d")
         )
         
-        # Agreguj dane dzienne z unikalnymi datami
+        if not activities:
+            return {
+                'success': True,
+                'updated': 0,
+                'message': 'No new activities found'
+            }
+
+        # Process activities only for dates that don't exist
         daily_data = {}
         for activity in activities:
             try:
@@ -105,24 +128,17 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                     activity['startTimeLocal'], 
                     "%Y-%m-%d %H:%M:%S"
                 ).date()
-                
                 date_str = activity_date.isoformat()
                 
+                # Skip if we already have data for this date
+                if date_str in existing_dates:
+                    continue
+                
                 if date_str not in daily_data:
-                    if date_str in existing_dates:
-                        # Use existing metrics if available
-                        daily_data[date_str] = {
-                            'trimp': 0.0,
-                            'activities': [],
-                            'atl': existing_dates[date_str].get('atl'),
-                            'ctl': existing_dates[date_str].get('ctl'),
-                            'tsb': existing_dates[date_str].get('tsb')
-                        }
-                    else:
-                        daily_data[date_str] = {
-                            'trimp': 0.0,
-                            'activities': []
-                        }
+                    daily_data[date_str] = {
+                        'trimp': 0.0,
+                        'activities': []
+                    }
 
                 details = client.get_activity(activity['activityId'])
                 trimp = next((
@@ -138,44 +154,35 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                 daily_data[date_str]['activities'].append(activity.get('activityName', 'Unknown'))
 
             except Exception as e:
-                print(f"Błąd przetwarzania aktywności: {e}")
+                print(f"Error processing activity: {e}")
                 continue
 
         if not daily_data:
             return {
                 'success': True,
                 'updated': 0,
-                'message': 'Brak nowych aktywności'
+                'message': 'No new activities to process'
             }
 
-        # Przygotuj DataFrame z unikalnymi datami
+        # Calculate metrics only for new dates
         df = pd.DataFrame([{
             'date': date,
             'trimp': data['trimp'],
             'activity': ', '.join(data['activities'])
         } for date, data in daily_data.items()])
 
-        # Oblicz metryki tylko dla dat bez istniejących wartości
-        dates_needing_metrics = [
-            date for date in df['date'] 
-            if date not in existing_dates or 
-            existing_dates[date].get('atl') is None
-        ]
+        metrics_df = calculate_metrics(df, get_last_metrics(user_id, start_date))
+        
+        # Update daily_data with calculated metrics
+        for _, record in metrics_df.iterrows():
+            date_str = record['date']
+            daily_data[date_str].update({
+                'atl': record['atl'],
+                'ctl': record['ctl'],
+                'tsb': record['tsb']
+            })
 
-        if dates_needing_metrics:
-            metrics_df = calculate_metrics(
-                df[df['date'].isin(dates_needing_metrics)],
-                get_last_metrics(user_id, start_date)
-            )
-            
-            # Update daily_data with new metrics
-            for _, record in metrics_df.iterrows():
-                date_str = record['date']
-                daily_data[date_str]['atl'] = record['atl']
-                daily_data[date_str]['ctl'] = record['ctl']
-                daily_data[date_str]['tsb'] = record['tsb']
-
-        # Zapisz dane z użyciem UPSERT dla unikalnych dat
+        # Save only new data
         updated_count = 0
         for date_str, data in daily_data.items():
             try:
@@ -183,32 +190,28 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                     'user_id': user_id,
                     'date': date_str,
                     'trimp': float(data['trimp']),
-                    'activity': ', '.join(data['activities'])
+                    'activity': ', '.join(data['activities']),
+                    'atl': float(data['atl']),
+                    'ctl': float(data['ctl']),
+                    'tsb': float(data['tsb'])
                 }
-
-                if 'atl' in data:
-                    record.update({
-                        'atl': float(data['atl']),
-                        'ctl': float(data['ctl']),
-                        'tsb': float(data['tsb'])
-                    })
 
                 supabase.table('garmin_data')\
                     .upsert(record, on_conflict='user_id,date')\
                     .execute()
                 updated_count += 1
             except Exception as e:
-                print(f"Błąd zapisywania danych dla {date_str}: {e}")
+                print(f"Error saving data for {date_str}: {e}")
                 continue
 
         return {
             'success': True,
             'updated': updated_count,
-            'dates': list(daily_data.keys())
+            'message': f'Successfully updated {updated_count} new dates'
         }
 
     except Exception as e:
-        print(f"Błąd aktualizacji danych: {e}")
+        print(f"Error updating data: {e}")
         return {
             'success': False,
             'error': str(e)
