@@ -85,6 +85,17 @@ def calculate_metrics(user_id, activity_data, start_date, end_date):
     
     return metrics
 
+def get_existing_dates(user_id, start_date, end_date):
+    """Pobiera istniejące daty z bazy dla danego okresu"""
+    result = supabase.table('garmin_data')\
+        .select('date')\
+        .eq('user_id', user_id)\
+        .gte('date', start_date.isoformat())\
+        .lte('date', end_date.isoformat())\
+        .execute()
+    
+    return {record['date'] for record in result.data}
+
 def sync_garmin_data(user_id, email, password):
     """Główna funkcja synchronizująca"""
     try:
@@ -95,23 +106,35 @@ def sync_garmin_data(user_id, email, password):
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=9)
         
+        # Pobierz istniejące daty
+        existing_dates = get_existing_dates(user_id, start_date, end_date)
+        logging.info(f"Znaleziono {len(existing_dates)} istniejących wpisów w bazie")
+        
         # Przetwórz aktywności
         activity_data = process_activities(api, start_date, end_date)
         
         # Oblicz metryki
         calculated_metrics = calculate_metrics(user_id, activity_data, start_date, end_date)
         
-        # Aktualizacja bazy
-        if calculated_metrics:
-            response = supabase.table('garmin_data').upsert(
-                calculated_metrics,
-                on_conflict='user_id,date',
+        # Filtruj tylko nowe lub zmienione metryki
+        metrics_to_update = []
+        for metric in calculated_metrics:
+            if metric['date'] not in existing_dates:
+                logging.info(f"Dodawanie nowego wpisu dla daty: {metric['date']}")
+                metrics_to_update.append(metric)
+        
+        # Aktualizacja bazy tylko dla nowych dat
+        if metrics_to_update:
+            response = supabase.table('garmin_data').insert(
+                metrics_to_update,
                 returning='minimal'
             ).execute()
             
-            logging.info(f"Upsert response: {response}")
-        
-        return {'success': True, 'updated': len(calculated_metrics)}
+            logging.info(f"Insert response: {response}")
+            return {'success': True, 'updated': len(metrics_to_update)}
+        else:
+            logging.info("Brak nowych danych do dodania")
+            return {'success': True, 'updated': 0}
     
     except Exception as e:
         logging.error(f"Błąd synchronizacji: {str(e)}")
