@@ -76,6 +76,19 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=10)
         
+        # Get existing data for the date range
+        existing_data = supabase.table('garmin_data')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .gte('date', start_date.date().isoformat())\
+            .lte('date', end_date.date().isoformat())\
+            .execute()
+
+        existing_dates = {
+            record['date'].split('T')[0]: record 
+            for record in existing_data.data
+        }
+        
         client = Garmin(creds.data['email'], creds.data['password'])
         client.login()
 
@@ -88,7 +101,6 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
         daily_data = {}
         for activity in activities:
             try:
-                # Konwertuj datę do formatu YYYY-MM-DD
                 activity_date = datetime.strptime(
                     activity['startTimeLocal'], 
                     "%Y-%m-%d %H:%M:%S"
@@ -97,10 +109,20 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
                 date_str = activity_date.isoformat()
                 
                 if date_str not in daily_data:
-                    daily_data[date_str] = {
-                        'trimp': 0.0,
-                        'activities': []
-                    }
+                    if date_str in existing_dates:
+                        # Use existing metrics if available
+                        daily_data[date_str] = {
+                            'trimp': 0.0,
+                            'activities': [],
+                            'atl': existing_dates[date_str].get('atl'),
+                            'ctl': existing_dates[date_str].get('ctl'),
+                            'tsb': existing_dates[date_str].get('tsb')
+                        }
+                    else:
+                        daily_data[date_str] = {
+                            'trimp': 0.0,
+                            'activities': []
+                        }
 
                 details = client.get_activity(activity['activityId'])
                 trimp = next((
@@ -133,35 +155,56 @@ def update_chart_data(user_id: str) -> Dict[str, Any]:
             'activity': ', '.join(data['activities'])
         } for date, data in daily_data.items()])
 
-        # Oblicz metryki
-        last_metrics = get_last_metrics(user_id, start_date)
-        df_metrics = calculate_metrics(df, last_metrics)
+        # Oblicz metryki tylko dla dat bez istniejących wartości
+        dates_needing_metrics = [
+            date for date in df['date'] 
+            if date not in existing_dates or 
+            existing_dates[date].get('atl') is None
+        ]
+
+        if dates_needing_metrics:
+            metrics_df = calculate_metrics(
+                df[df['date'].isin(dates_needing_metrics)],
+                get_last_metrics(user_id, start_date)
+            )
+            
+            # Update daily_data with new metrics
+            for _, record in metrics_df.iterrows():
+                date_str = record['date']
+                daily_data[date_str]['atl'] = record['atl']
+                daily_data[date_str]['ctl'] = record['ctl']
+                daily_data[date_str]['tsb'] = record['tsb']
 
         # Zapisz dane z użyciem UPSERT dla unikalnych dat
         updated_count = 0
-        for _, record in df_metrics.iterrows():
+        for date_str, data in daily_data.items():
             try:
-                # Konwertuj datę do formatu ISO bez czasu
-                date_str = pd.to_datetime(record['date']).date().isoformat()
-                
-                supabase.table('garmin_data').upsert({
+                record = {
                     'user_id': user_id,
-                    'date': date_str,  # Używamy tylko daty bez czasu
-                    'trimp': float(record['trimp']),
-                    'activity': record['activity'],
-                    'atl': float(record['atl']),
-                    'ctl': float(record['ctl']),
-                    'tsb': float(record['tsb'])
-                }, on_conflict='user_id,date').execute()
+                    'date': date_str,
+                    'trimp': float(data['trimp']),
+                    'activity': ', '.join(data['activities'])
+                }
+
+                if 'atl' in data:
+                    record.update({
+                        'atl': float(data['atl']),
+                        'ctl': float(data['ctl']),
+                        'tsb': float(data['tsb'])
+                    })
+
+                supabase.table('garmin_data')\
+                    .upsert(record, on_conflict='user_id,date')\
+                    .execute()
                 updated_count += 1
             except Exception as e:
-                print(f"Błąd zapisywania danych dla {record['date']}: {e}")
+                print(f"Błąd zapisywania danych dla {date_str}: {e}")
                 continue
 
         return {
             'success': True,
             'updated': updated_count,
-            'dates': df_metrics['date'].tolist()
+            'dates': list(daily_data.keys())
         }
 
     except Exception as e:
