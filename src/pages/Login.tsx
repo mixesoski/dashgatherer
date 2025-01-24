@@ -113,9 +113,6 @@ const Login = () => {
             }
           }}
           providers={[]}
-          onViewChange={(newView) => {
-            setView(newView as "sign_in" | "sign_up");
-          }}
           additionalData={{
             role: role
           }}
