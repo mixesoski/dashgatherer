@@ -2,7 +2,7 @@ import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, UserPlus } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -14,9 +14,10 @@ import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
-import { subMonths, startOfDay, subDays } from 'date-fns';
+import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
+import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 
 // Get the API URL from environment variable or fallback to localhost for development
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
@@ -128,7 +129,8 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-end mb-8">
+        <div className="flex justify-end mb-8 gap-2">
+          <InviteCoachDialog />
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
