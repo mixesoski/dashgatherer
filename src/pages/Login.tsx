@@ -20,7 +20,6 @@ const Login = () => {
   const [role, setRole] = useState<"athlete" | "coach">("athlete");
 
   useEffect(() => {
-    // Check for existing session on mount
     const checkSession = async () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
@@ -93,13 +92,7 @@ const Login = () => {
             }
           }}
           providers={[]}
-          theme="light"
           view={view}
-          onViewChange={(newView) => {
-            if (newView === "sign_in" || newView === "sign_up") {
-              setView(newView);
-            }
-          }}
           localization={{
             variables: {
               sign_in: {
@@ -116,7 +109,7 @@ const Login = () => {
               }
             }
           }}
-          additionalData={{
+          data={{
             role: role
           }}
         />
