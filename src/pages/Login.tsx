@@ -59,7 +59,7 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-center mb-6">
-          {view === "sign_in" ? "Welcome Back" : "Join Us"}
+          {view === "sign_in" ? "Witaj ponownie" : "Dołącz do nas"}
         </h2>
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -68,14 +68,14 @@ const Login = () => {
         )}
         {view === "sign_up" && (
           <div className="mb-6">
-            <Label htmlFor="role">I am a:</Label>
+            <Label htmlFor="role">Jestem:</Label>
             <Select value={role} onValueChange={(value: "athlete" | "coach") => setRole(value)}>
               <SelectTrigger className="w-full mt-2">
-                <SelectValue placeholder="Select your role" />
+                <SelectValue placeholder="Wybierz swoją rolę" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="athlete">Athlete</SelectItem>
-                <SelectItem value="coach">Coach</SelectItem>
+                <SelectItem value="athlete">Zawodnikiem</SelectItem>
+                <SelectItem value="coach">Trenerem</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -98,15 +98,15 @@ const Login = () => {
             variables: {
               sign_in: {
                 email_label: "Email",
-                password_label: "Password",
-                button_label: "Sign In",
-                link_text: "Don't have an account? Sign up"
+                password_label: "Hasło",
+                button_label: "Zaloguj się",
+                link_text: "Nie masz konta? Zarejestruj się"
               },
               sign_up: {
                 email_label: "Email",
-                password_label: "Password",
-                button_label: "Sign Up",
-                link_text: "Already have an account? Sign in"
+                password_label: "Hasło",
+                button_label: "Zarejestruj się",
+                link_text: "Masz już konto? Zaloguj się"
               }
             }
           }}
