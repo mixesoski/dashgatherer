@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
-from garmin_metrics import update_chart_data
+from chart_updater import update_chart_data
 from supabase_client import supabase
 import traceback
 import numpy as np
@@ -71,13 +71,26 @@ def sync_garmin():
         }), 500
 
 @app.route('/api/update-chart', methods=['POST'])
-def handle_chart_update():
-    data = request.get_json()
-    return jsonify(update_chart_data(
-        data['user_id'],
-        data['email'],
-        data['password']
-    ))
+def update_chart():
+    try:
+        data = request.json
+        user_id = data.get('userId')
+
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'userId is required'
+            }), 400
+
+        result = update_chart_data(user_id)
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Error in update chart endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
