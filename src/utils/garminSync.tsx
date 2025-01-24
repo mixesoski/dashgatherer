@@ -78,30 +78,19 @@ export const updateGarminData = async (userId: string) => {
             duration: Infinity
         });
         
-        // Get last 9 days
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 9);
-        
-        const response = await fetch(`${API_URL}/api/sync-garmin`, {
+        const response = await fetch(`${API_URL}/api/update-chart`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ 
-                userId,
-                startDate: startDate.toISOString(),
-                updateOnly: true,
-                recalculateOnly: false
-            })
+            body: JSON.stringify({ userId })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            if (data.newActivities > 0) {
-                toast.loading('Processing new activities...', { id: toastId });
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                toast.success(`Updated ${data.newActivities} new activities!`, { 
+            if (data.updated > 0) {
+                toast.success(`Updated ${data.updated} activities!`, { 
                     id: toastId,
                     duration: 3000
                 });
