@@ -61,130 +61,106 @@ def calculate_metrics(df: pd.DataFrame, last_metrics: Optional[Dict[str, float]]
     
     return pd.DataFrame(metrics)
 
-def update_chart_data(user_id: str) -> Dict[str, Any]:
-    """Aktualizuje dane z gwarancją unikalności dat"""
-    try:
-        # Pobierz dane uwierzytelniające
-        creds = supabase.table('garmin_credentials')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .single()\
-            .execute()
+def update_chart_data(self):
+    """
+    Update a single chart entry with associated metrics and prevent duplicate date issues.
+    
+    Args:
+        self: an instance of the class (likely a `SmartChart` or similar)
         
-        if not creds.data:
-            return {
-                'success': False,
-                'error': 'Nie znaleziono danych uwierzytelniających'
-            }
-        
-        # Pobierz istniejące daty z bazy
-        existing_data = supabase.table('garmin_data')\
-            .select('date')\
-            .eq('user_id', user_id)\
-            .order('date', desc=False)\
-            .execute()
-        
-        existing_dates = {row['date'] for row in existing_data.data} if existing_data.data else set()
-        
-        # Znajdź pierwszą zapisaną datę (jeśli istnieje)
-        first_date = min(existing_dates) if existing_dates else None
-        
-        # Inicjalizacja klienta Garmin
-        client = Garmin(creds.data['email'], creds.data['password'])
-        client.login()
+    Returns:
+        A dictionary containing updated data including count of updates and dates array
+    """
+    df = pd.DataFrame()
+    max_date = None
+    
+    # Get last metrics without triggering update to avoid duplicating existing entries
+    last_metrics = self.get_last_metrics(max_date or None)
+    
+    # Calculate metrics based on aggregated data from last known date to current maximum
+    start_date = max_date if max_date is not None else pd.Timestamp.now().date() - timedelta(days=30)
+    daily_data = {}
+    
+    for _, record in df_metrics.iterrows():
+        try:
+            supabase.table('garmin_data').upsert({
+                'user_id': self.user_id,
+                'date': record['date'],
+                'trimp': float(record['trimp']),
+                'activity': ', '.join(list(record['activities'])),
+                'atl': float(record['atl']),
+                'ctl': float(record['ctl']),
+                'tsb': float(record['tsb'])
+            }, on_conflict='user_id,date').execute()
+            updated_count += 1
+        except Exception as e:
+            print(f"Błąd zapisywania danych dla {record['date']}: {e}")
+            continue
+    
+    if not daily_data:
+        return {
+            'success': True,
+            'updated': 0,
+            'message': 'Brak nowych aktywności'
+        }
 
-        # Pobierz aktywności do pierwszej zapisanej daty lub wszystkie jeśli brak zapisanych dat
-        end_date = datetime.now()
-        start_date = datetime.strptime(first_date, "%Y-%m-%d") if first_date else end_date - timedelta(days=30)
+    max_date = pd.Timestamp.now().date()
+    
+    # Check for any duplicate dates and adjust to the last known date
+    duplicates_dates = df['date'].unique()
+    if len(duplicates_dates) > 1:
+        # Find the last occurrence of the maximum date
+        adjusted_date = max(date for date in duplicates_dates if date == max_date)
+        print(f"Adjusted date: {adjusted_date}")
         
-        activities = client.get_activities_by_date(
-            start_date.strftime("%Y-%m-%d"), 
-            end_date.strftime("%Y-%m-%d")
-        )
-        
-        # Agreguj dane dzienne
+        df = df.sort_values('date').tail(1)
         daily_data = {}
-        for activity in activities:
-            try:
-                date_str = datetime.strptime(
-                    activity['startTimeLocal'], 
-                    "%Y-%m-%d %H:%M:%S"
-                ).strftime("%Y-%m-%d")
-                
-                # Pomijamy daty które już mamy
-                if date_str in existing_dates:
-                    continue
-                
-                if date_str not in daily_data:
-                    daily_data[date_str] = {
-                        'trimp': 0.0,
-                        'activities': []
-                    }
-
-                # Pobierz TRIMP
-                details = client.get_activity(activity['activityId'])
-                trimp = next((
-                    float(item['value']) 
-                    for item in details.get('connectIQMeasurements', []) 
-                    if item['developerFieldNumber'] == 4
-                ), 0.0)
-
-                # Modyfikator dla treningu siłowego
-                if activity.get('activityName') in ['strength_training', 'Strength Training', 'Siła']:
-                    trimp *= 2
-
-                daily_data[date_str]['trimp'] += trimp
-                daily_data[date_str]['activities'].append(activity.get('activityName', 'Unknown'))
-
-            except Exception as e:
-                print(f"Błąd przetwarzania aktywności: {e}")
-                continue
-
-        if not daily_data:
-            return {
-                'success': True,
-                'updated': 0,
-                'message': 'Brak nowych aktywności'
-            }
-
-        # Przygotuj DataFrame
-        df = pd.DataFrame([{
-            'date': date,
-            'trimp': data['trimp'],
-            'activity': ', '.join(data['activities'])
-        } for date, data in daily_data.items()])
-
-        # Oblicz metryki
-        last_metrics = get_last_metrics(user_id, start_date)
-        df_metrics = calculate_metrics(df, last_metrics)
-
-        # Zapisz dane z użyciem UPSERT
-        updated_count = 0
-        for _, record in df_metrics.iterrows():
-            try:
-                supabase.table('garmin_data').upsert({
-                    'user_id': user_id,
-                    'date': record['date'],
-                    'trimp': float(record['trimp']),
-                    'activity': record['activity'],
-                    'atl': float(record['atl']),
-                    'ctl': float(record['ctl']),
-                    'tsb': float(record['tsb'])
-                }, on_conflict='user_id,date').execute()
-                updated_count += 1
-            except Exception as e:
-                print(f"Błąd zapisywania danych dla {record['date']}: {e}")
-                continue
-
+        
+    daily_data_dates = sorted(df['date'])
+    
+    df = pd.DataFrame([{
+        'date': day,
+        'trimp': float(record['trimp']),
+        'activity': ', '.join(record['activities']), 
+        'atl': float(record['atl']),
+        'ctl': float(record['ctl']),
+        'tsb': float(record['tsb'])
+    } for day, record in zip(daily_data_dates, daily_data.items()) if day != max_date]
+    
+    last_metrics = self.get_last_metrics(max_date or None)
+    df_metrics = self.calculate_metrics(df, last_metrics)
+    
+    # Prepare updated data
+    updated = {}
+    for _, record in df_metrics.iterrows():
+        try:
+            supabase.table('garmin_data').upsert({
+                'user_id': self.user_id,
+                'date': record['date'],
+                'trimp': float(record['trimp']),
+                'activity': record['activity'],
+                'atl': float(record['atl']),
+                'ctl': float(record['ctl']),
+                'tsb': float(record['tsb'])
+            }, on_conflict='user_id,date').execute()
+            updated_count += 1
+        except Exception as e:
+            print(f"Błąd zapisywania danych dla {record['date']}: {e}")
+            continue
+    
+    if not daily_data:
         return {
             'success': True,
             'updated': updated_count,
-            'dates': df_metrics['date'].tolist()
+            'message': f'Braknow nowych aktywności'
         }
-
-    except Exception as e:
-        print(f"Błąd aktualizacji danych: {e}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+    
+    return {
+        'success': True,
+        'data': [{'date': str(date), 'trimp': float(record['trimp']), 
+                   'activity': record['activity'], 'atl': float(record['atl']),
+                   'ctl': float(record['ctl']), 'tsb': float(record['tsb'])}
+                  for date, record in zip(daily_data_dates, daily_data.items()) if date != max_date],
+        'count': updated_count,
+        'message': f' updates: {updated_count}, dates array: {list(daily_data_dates)}'
+    }
