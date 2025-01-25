@@ -46,9 +46,18 @@ class ChartUpdater:
                 return None
             
             data = response.data[0]
-            # Ensure the values are properly formatted as floats
-            data['atl'] = float(data['atl'])
-            data['ctl'] = float(data['ctl'])
+            
+            # Debugging: Print the values before conversion
+            print(f"Retrieved ATL: {data['atl']}, CTL: {data['ctl']}")
+            
+            # Validation: Ensure the values are valid numbers
+            try:
+                data['atl'] = float(data['atl'])
+                data['ctl'] = float(data['ctl'])
+            except ValueError as e:
+                print(f"Error converting metrics to float: {e}")
+                return None
+            
             return data
         except Exception as e:
             print(f"Error fetching last metrics: {e}")
