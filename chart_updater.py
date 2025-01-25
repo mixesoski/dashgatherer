@@ -109,7 +109,6 @@ class ChartUpdater:
             # Log activities found
             print("Activities found in Garmin Connect:")
             for activity in activities:
-                # Print only the activity ID and date for debugging
                 activity_date = activity.get('startTimeLocal', 'Unknown')
                 print(f"Activity ID: {activity['activityId']}, Date: {activity_date}")
             
@@ -163,28 +162,22 @@ class ChartUpdater:
                 try:
                     # Check if entry with this date already exists
                     existing_entry = self.client.table('garmin_data') \
-                        .select('id, trimp') \
+                        .select('id, trimp, atl, ctl, tsb') \
                         .eq('user_id', self.user_id) \
                         .eq('date', date_str) \
                         .execute()
                     
                     if existing_entry.data:
-                        # If existing TRIMP is different, update it; otherwise skip
-                        if len(existing_entry.data) == 1 and existing_entry.data[0]['trimp'] != trimp_total:
-                            self.client.table('garmin_data').update({
-                                'trimp': trimp_total,
-                                'activity': ', '.join([details.get('activityName', 'No Activity') for details in activities_by_date[date_str]]),
-                                **new_metrics
-                            }).eq('id', existing_entry.data[0]['id']).execute()
-                            updated_count += 1
-                        else:
-                            # Skip if same TRIMP already stored or multiple rows found
-                            continue
+                        # Update the existing entry with new metrics
+                        self.client.table('garmin_data').update({
+                            'trimp': trimp_total,
+                            'activity': ', '.join([details.get('activityName', 'No Activity') for details in activities_by_date[date_str]]),
+                            **new_metrics
+                        }).eq('id', existing_entry.data[0]['id']).execute()
+                        updated_count += 1
                     else:
-                        # Log activities to be added
-                        print(f"Adding new activity for date: {date_str}, TRIMP: {trimp_total}")
-                        
                         # Insert a new record if none exists for this date
+                        print(f"Adding new activity for date: {date_str}, TRIMP: {trimp_total}")
                         self.client.table('garmin_data').insert({
                             'date': date_str,
                             'trimp': trimp_total,
