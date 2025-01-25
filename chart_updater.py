@@ -103,6 +103,10 @@ class ChartUpdater:
             # Log activities found
             print("Activities found in Garmin Connect:")
             for activity in activities:
+                # Print the entire activity object for debugging
+                print(f"Activity Data: {activity}")
+                
+                # Attempt to retrieve the date
                 activity_date = activity.get('summaryDTO', {}).get('startTimeLocal', 'Unknown')
                 print(f"Activity ID: {activity['activityId']}, Date: {activity_date}")
             
