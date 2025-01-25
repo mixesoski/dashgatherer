@@ -154,8 +154,9 @@ class ChartUpdater:
                 # Calculate new metrics using the previous day's metrics
                 new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
                 
-                # Log the changes in ATL, CTL, and TSB
-                print(f"Date: {date_str}, TRIMP: {trimp_total}, ATL: {new_metrics['atl']}, CTL: {new_metrics['ctl']}, TSB: {new_metrics['tsb']}")
+                # Log the current and recalculated values
+                print(f"Date: {date_str}, Current TRIMP: {trimp_total}, ATL: {previous_metrics['atl']} -> {new_metrics['atl']}, "
+                      f"CTL: {previous_metrics['ctl']} -> {new_metrics['ctl']}, TSB: {previous_metrics['tsb']} -> {new_metrics['tsb']}")
                 
                 previous_metrics = new_metrics  # Update previous metrics for the next iteration
                 
