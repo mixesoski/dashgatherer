@@ -35,23 +35,23 @@ class ChartUpdater:
     
     def get_last_metrics(self):
         try:
+            # Fetch the metrics from exactly 10 days ago
+            target_date = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+            
             response = self.client.table('garmin_data') \
                 .select('date, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .order('date', desc=True) \
-                .limit(1) \
+                .eq('date', target_date) \
+                .single() \
                 .execute()
             
             if not response.data:
                 return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values if no data
             
-            data = response.data[0]
+            data = response.data
             
             # Debugging: Print the raw data retrieved
-            print(f"Raw data retrieved: {data}")
-            
-            # Debugging: Print the values before conversion
-            print(f"Retrieved ATL: {data['atl']}, CTL: {data['ctl']}, TSB: {data['tsb']}")
+            print(f"Raw data retrieved for {target_date}: {data}")
             
             # Validation: Ensure the values are valid numbers
             try:
