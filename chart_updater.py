@@ -88,9 +88,9 @@ class ChartUpdater:
             # Initialize Garmin client with user credentials
             self.initialize_garmin()
             
-            # Get data for the last 9 days
+            # Get data for the last 10 days
             end_date = datetime.date.today()
-            start_date = end_date - datetime.timedelta(days=9)
+            start_date = end_date - datetime.timedelta(days=10)
             
             # Create a list of all dates in the range
             date_range = [start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days + 1)]
@@ -154,6 +154,10 @@ class ChartUpdater:
                 
                 # Calculate new metrics using the previous day's metrics
                 new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                
+                # Log the changes in ATL, CTL, and TSB
+                print(f"Date: {date_str}, TRIMP: {trimp_total}, ATL: {new_metrics['atl']}, CTL: {new_metrics['ctl']}, TSB: {new_metrics['tsb']}")
+                
                 previous_metrics = new_metrics  # Update previous metrics for the next iteration
                 
                 try:
