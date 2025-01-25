@@ -92,44 +92,56 @@ class ChartUpdater:
             end_date = datetime.date.today()
             start_date = end_date - datetime.timedelta(days=9)
             
+            # Create a list of all dates in the range
+            date_range = [start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days + 1)]
+            
             activities = self.garmin.get_activities_by_date(
                 start_date.isoformat(), 
                 end_date.isoformat()
             )
             
+            # Create a dictionary to map dates to activities
+            activities_by_date = {datetime.datetime.fromisoformat(activity['summaryDTO']['startTimeLocal']).date().isoformat(): activity for activity in activities}
+            
             updated_count = 0
-            for activity in activities:
-                activity_id = activity['activityId']
-                details = self.garmin.get_activity(activity_id)
+            for date in date_range:
+                date_str = date.isoformat()
                 
-                trimp = next((item['value'] for item in details.get('connectIQMeasurements', []) 
-                            if item['developerFieldNumber'] == 4), 0)
-                
-                # Debugging: Print the TRIMP value
-                print(f"Retrieved TRIMP: {trimp}")
-                
-                if details['activityTypeDTO']['typeKey'] == 'strength_training':
-                    trimp *= 2
-                
-                # Ensure TRIMP is a float
-                try:
-                    trimp = float(trimp)
-                except ValueError as e:
-                    print(f"Error converting TRIMP to float: {e}")
-                    continue
-                
-                date = datetime.datetime.fromisoformat(details['summaryDTO']['startTimeLocal']).date().isoformat()
-                
-                # Get previous metrics for calculations
-                previous_metrics = self.get_last_metrics()
-                new_metrics = self.calculate_new_metrics(trimp, previous_metrics)
+                if date_str in activities_by_date:
+                    activity = activities_by_date[date_str]
+                    activity_id = activity['activityId']
+                    details = self.garmin.get_activity(activity_id)
+                    
+                    trimp = next((item['value'] for item in details.get('connectIQMeasurements', []) 
+                                if item['developerFieldNumber'] == 4), 0)
+                    
+                    # Debugging: Print the TRIMP value
+                    print(f"Retrieved TRIMP: {trimp}")
+                    
+                    if details['activityTypeDTO']['typeKey'] == 'strength_training':
+                        trimp *= 2
+                    
+                    # Ensure TRIMP is a float
+                    try:
+                        trimp = float(trimp)
+                    except ValueError as e:
+                        print(f"Error converting TRIMP to float: {e}")
+                        continue
+                    
+                    # Get previous metrics for calculations
+                    previous_metrics = self.get_last_metrics()
+                    new_metrics = self.calculate_new_metrics(trimp, previous_metrics)
+                else:
+                    # No activity found for this date, use default TRIMP and metrics
+                    trimp = 0
+                    new_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
                 
                 try:
                     # Check if entry with this date already exists
                     existing_entry = self.client.table('garmin_data') \
                         .select('id, trimp') \
                         .eq('user_id', self.user_id) \
-                        .eq('date', date) \
+                        .eq('date', date_str) \
                         .execute()
                     
                     if existing_entry.data:
@@ -137,7 +149,7 @@ class ChartUpdater:
                         if len(existing_entry.data) == 1 and existing_entry.data[0]['trimp'] != trimp:
                             self.client.table('garmin_data').update({
                                 'trimp': trimp,
-                                'activity': details['activityName'],
+                                'activity': details['activityName'] if date_str in activities_by_date else 'No Activity',
                                 **new_metrics
                             }).eq('id', existing_entry.data[0]['id']).execute()
                             updated_count += 1
@@ -147,15 +159,15 @@ class ChartUpdater:
                     else:
                         # Insert a new record if none exists for this date
                         self.client.table('garmin_data').insert({
-                            'date': date,
+                            'date': date_str,
                             'trimp': trimp,
-                            'activity': details['activityName'],
+                            'activity': details['activityName'] if date_str in activities_by_date else 'No Activity',
                             'user_id': self.user_id,
                             **new_metrics
                         }).execute()
                         updated_count += 1
                 except Exception as e:
-                    print(f"Error updating metrics for {date}: {e}")
+                    print(f"Error updating metrics for {date_str}: {e}")
                     continue
             
             return {
