@@ -101,7 +101,7 @@ class ChartUpdater:
             )
             
             # Create a dictionary to map dates to activities
-            activities_by_date = {datetime.datetime.fromisoformat(activity['summaryDTO']['startTimeLocal']).date().isoformat(): activity for activity in activities}
+            activities_by_date = {datetime.datetime.fromisoformat(activity.get('summaryDTO', {}).get('startTimeLocal', '')).date().isoformat(): activity for activity in activities if 'summaryDTO' in activity}
             
             updated_count = 0
             for date in date_range:
@@ -118,7 +118,7 @@ class ChartUpdater:
                     # Debugging: Print the TRIMP value
                     print(f"Retrieved TRIMP: {trimp}")
                     
-                    if details['activityTypeDTO']['typeKey'] == 'strength_training':
+                    if details.get('activityTypeDTO', {}).get('typeKey') == 'strength_training':
                         trimp *= 2
                     
                     # Ensure TRIMP is a float
@@ -149,7 +149,7 @@ class ChartUpdater:
                         if len(existing_entry.data) == 1 and existing_entry.data[0]['trimp'] != trimp:
                             self.client.table('garmin_data').update({
                                 'trimp': trimp,
-                                'activity': details['activityName'] if date_str in activities_by_date else 'No Activity',
+                                'activity': details.get('activityName', 'No Activity'),
                                 **new_metrics
                             }).eq('id', existing_entry.data[0]['id']).execute()
                             updated_count += 1
@@ -161,7 +161,7 @@ class ChartUpdater:
                         self.client.table('garmin_data').insert({
                             'date': date_str,
                             'trimp': trimp,
-                            'activity': details['activityName'] if date_str in activities_by_date else 'No Activity',
+                            'activity': details.get('activityName', 'No Activity'),
                             'user_id': self.user_id,
                             **new_metrics
                         }).execute()
