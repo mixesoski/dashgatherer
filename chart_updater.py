@@ -43,7 +43,7 @@ class ChartUpdater:
                 .execute()
             
             if not response.data:
-                return None
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values if no data
             
             data = response.data[0]
             
@@ -57,12 +57,12 @@ class ChartUpdater:
                 data['tsb'] = float(data['tsb'])
             except ValueError as e:
                 print(f"Error converting metrics to float: {e}")
-                return None
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
             
             return data
         except Exception as e:
             print(f"Error fetching last metrics: {e}")
-            return None
+            return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
     
     def calculate_new_metrics(self, current_trimp, previous_metrics):
         # Ensure current_trimp is a float
@@ -75,9 +75,11 @@ class ChartUpdater:
         previous_atl = float(previous_metrics['atl'])
         previous_ctl = float(previous_metrics['ctl'])
         
+        # Calculate new ATL, CTL, and TSB
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
         new_tsb = new_ctl - new_atl
+        
         return {
             'atl': round(new_atl, 2),
             'ctl': round(new_ctl, 2),
