@@ -103,7 +103,8 @@ class ChartUpdater:
             # Log activities found
             print("Activities found in Garmin Connect:")
             for activity in activities:
-                print(f"Activity ID: {activity['activityId']}, Date: {activity.get('summaryDTO', {}).get('startTimeLocal', 'Unknown')}")
+                activity_date = activity.get('summaryDTO', {}).get('startTimeLocal', 'Unknown')
+                print(f"Activity ID: {activity['activityId']}, Date: {activity_date}")
             
             # Create a dictionary to map dates to activities
             activities_by_date = {datetime.datetime.fromisoformat(activity.get('summaryDTO', {}).get('startTimeLocal', '')).date().isoformat(): activity for activity in activities if 'summaryDTO' in activity}
@@ -119,14 +120,19 @@ class ChartUpdater:
                     activity_id = activity['activityId']
                     details = self.garmin.get_activity(activity_id)
                     
-                    trimp = next((item['value'] for item in details.get('connectIQMeasurements', []) 
-                                if item['developerFieldNumber'] == 4), 0)
+                    trimp = 0
+                    if 'connectIQMeasurements' in details:
+                        for item in details['connectIQMeasurements']:
+                            if item['developerFieldNumber'] == 4:
+                                trimp = round(float(item['value']), 1)
+                    
+                    # Apply multiplier for Strength Training
+                    if details.get('activityTypeDTO', {}).get('typeKey') in ['strength_training', 'Siła']:
+                        print(f"Applying 2x multiplier for strength training: {trimp} -> {trimp * 2}")
+                        trimp *= 2
                     
                     # Debugging: Print the TRIMP value
                     print(f"Retrieved TRIMP: {trimp}")
-                    
-                    if details.get('activityTypeDTO', {}).get('typeKey') == 'strength_training':
-                        trimp *= 2
                     
                     # Ensure TRIMP is a float
                     try:
