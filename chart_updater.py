@@ -90,16 +90,37 @@ class ChartUpdater:
                 previous_metrics = self.get_last_metrics()
                 new_metrics = self.calculate_new_metrics(trimp, previous_metrics)
                 
-                # Update database
                 try:
-                    self.client.table('garmin_data').upsert({
-                        'date': date,
-                        'trimp': trimp,
-                        'activity': details['activityName'],
-                        'user_id': self.user_id,
-                        **new_metrics
-                    }).execute()
-                    updated_count += 1
+                    # Check if entry with this date already exists
+                    existing_entry = self.client.table('garmin_data') \
+                        .select('id, trimp') \
+                        .eq('user_id', self.user_id) \
+                        .eq('date', date) \
+                        .single() \
+                        .execute()
+                    
+                    if existing_entry.data:
+                        # If existing TRIMP is different, update it; otherwise skip
+                        if existing_entry.data['trimp'] != trimp:
+                            self.client.table('garmin_data').update({
+                                'trimp': trimp,
+                                'activity': details['activityName'],
+                                **new_metrics
+                            }).eq('id', existing_entry.data['id']).execute()
+                            updated_count += 1
+                        else:
+                            # Skip if same TRIMP already stored
+                            continue
+                    else:
+                        # Insert a new record if none exists for this date
+                        self.client.table('garmin_data').insert({
+                            'date': date,
+                            'trimp': trimp,
+                            'activity': details['activityName'],
+                            'user_id': self.user_id,
+                            **new_metrics
+                        }).execute()
+                        updated_count += 1
                 except Exception as e:
                     print(f"Error updating metrics for {date}: {e}")
                     continue
