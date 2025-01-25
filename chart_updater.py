@@ -105,8 +105,18 @@ class ChartUpdater:
                 trimp = next((item['value'] for item in details.get('connectIQMeasurements', []) 
                             if item['developerFieldNumber'] == 4), 0)
                 
+                # Debugging: Print the TRIMP value
+                print(f"Retrieved TRIMP: {trimp}")
+                
                 if details['activityTypeDTO']['typeKey'] == 'strength_training':
                     trimp *= 2
+                
+                # Ensure TRIMP is a float
+                try:
+                    trimp = float(trimp)
+                except ValueError as e:
+                    print(f"Error converting TRIMP to float: {e}")
+                    continue
                 
                 date = datetime.datetime.fromisoformat(details['summaryDTO']['startTimeLocal']).date().isoformat()
                 
