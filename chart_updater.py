@@ -42,11 +42,13 @@ class ChartUpdater:
                 .limit(1) \
                 .execute()
             
-            data = response.data[0] if response.data else None
-            if data:
-                # Convert to float to avoid type errors in calculations
-                data['atl'] = float(data['atl'])
-                data['ctl'] = float(data['ctl'])
+            if not response.data:
+                return None
+            
+            data = response.data[0]
+            # Ensure the values are properly formatted as floats
+            data['atl'] = float(data['atl'])
+            data['ctl'] = float(data['ctl'])
             return data
         except Exception as e:
             print(f"Error fetching last metrics: {e}")
@@ -109,20 +111,19 @@ class ChartUpdater:
                         .select('id, trimp') \
                         .eq('user_id', self.user_id) \
                         .eq('date', date) \
-                        .single() \
                         .execute()
                     
                     if existing_entry.data:
                         # If existing TRIMP is different, update it; otherwise skip
-                        if existing_entry.data['trimp'] != trimp:
+                        if len(existing_entry.data) == 1 and existing_entry.data[0]['trimp'] != trimp:
                             self.client.table('garmin_data').update({
                                 'trimp': trimp,
                                 'activity': details['activityName'],
                                 **new_metrics
-                            }).eq('id', existing_entry.data['id']).execute()
+                            }).eq('id', existing_entry.data[0]['id']).execute()
                             updated_count += 1
                         else:
-                            # Skip if same TRIMP already stored
+                            # Skip if same TRIMP already stored or multiple rows found
                             continue
                     else:
                         # Insert a new record if none exists for this date
