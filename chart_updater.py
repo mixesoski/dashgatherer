@@ -35,13 +35,19 @@ class ChartUpdater:
     
     def get_last_metrics(self):
         try:
-            response = self.client.table('garmin_data')\
-                .select('date, atl, ctl')\
-                .eq('user_id', self.user_id)\
-                .order('date', desc=True)\
-                .limit(1)\
+            response = self.client.table('garmin_data') \
+                .select('date, atl, ctl') \
+                .eq('user_id', self.user_id) \
+                .order('date', desc=True) \
+                .limit(1) \
                 .execute()
-            return response.data[0] if response.data else None
+            
+            data = response.data[0] if response.data else None
+            if data:
+                # Convert to float to avoid type errors in calculations
+                data['atl'] = float(data['atl'])
+                data['ctl'] = float(data['ctl'])
+            return data
         except Exception as e:
             print(f"Error fetching last metrics: {e}")
             return None
