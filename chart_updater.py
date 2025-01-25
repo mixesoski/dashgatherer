@@ -47,6 +47,9 @@ class ChartUpdater:
             
             data = response.data[0]
             
+            # Debugging: Print the raw data retrieved
+            print(f"Raw data retrieved: {data}")
+            
             # Debugging: Print the values before conversion
             print(f"Retrieved ATL: {data['atl']}, CTL: {data['ctl']}, TSB: {data['tsb']}")
             
