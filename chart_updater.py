@@ -53,11 +53,18 @@ class ChartUpdater:
             return None
     
     def calculate_new_metrics(self, current_trimp, previous_metrics):
+        # Ensure current_trimp is a float
+        current_trimp = float(current_trimp)
+        
         if not previous_metrics:
             return {'atl': current_trimp, 'ctl': current_trimp, 'tsb': 0}
         
-        new_atl = previous_metrics['atl'] + (current_trimp - previous_metrics['atl']) / 7
-        new_ctl = previous_metrics['ctl'] + (current_trimp - previous_metrics['ctl']) / 42
+        # Ensure previous_metrics values are floats
+        previous_atl = float(previous_metrics['atl'])
+        previous_ctl = float(previous_metrics['ctl'])
+        
+        new_atl = previous_atl + (current_trimp - previous_atl) / 7
+        new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
         new_tsb = new_ctl - new_atl
         return {
             'atl': round(new_atl, 2),
