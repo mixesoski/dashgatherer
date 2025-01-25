@@ -100,6 +100,11 @@ class ChartUpdater:
                 end_date.isoformat()
             )
             
+            # Log activities found
+            print("Activities found in Garmin Connect:")
+            for activity in activities:
+                print(f"Activity ID: {activity['activityId']}, Date: {activity.get('summaryDTO', {}).get('startTimeLocal', 'Unknown')}")
+            
             # Create a dictionary to map dates to activities
             activities_by_date = {datetime.datetime.fromisoformat(activity.get('summaryDTO', {}).get('startTimeLocal', '')).date().isoformat(): activity for activity in activities if 'summaryDTO' in activity}
             
@@ -159,6 +164,9 @@ class ChartUpdater:
                             # Skip if same TRIMP already stored or multiple rows found
                             continue
                     else:
+                        # Log activities to be added
+                        print(f"Adding new activity for date: {date_str}, TRIMP: {trimp}")
+                        
                         # Insert a new record if none exists for this date
                         self.client.table('garmin_data').insert({
                             'date': date_str,
