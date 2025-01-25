@@ -107,6 +107,8 @@ class ChartUpdater:
             for date in date_range:
                 date_str = date.isoformat()
                 
+                details = None  # Initialize details with a default value
+                
                 if date_str in activities_by_date:
                     activity = activities_by_date[date_str]
                     activity_id = activity['activityId']
@@ -149,7 +151,7 @@ class ChartUpdater:
                         if len(existing_entry.data) == 1 and existing_entry.data[0]['trimp'] != trimp:
                             self.client.table('garmin_data').update({
                                 'trimp': trimp,
-                                'activity': details.get('activityName', 'No Activity'),
+                                'activity': details.get('activityName', 'No Activity') if details else 'No Activity',
                                 **new_metrics
                             }).eq('id', existing_entry.data[0]['id']).execute()
                             updated_count += 1
@@ -161,7 +163,7 @@ class ChartUpdater:
                         self.client.table('garmin_data').insert({
                             'date': date_str,
                             'trimp': trimp,
-                            'activity': details.get('activityName', 'No Activity'),
+                            'activity': details.get('activityName', 'No Activity') if details else 'No Activity',
                             'user_id': self.user_id,
                             **new_metrics
                         }).execute()
