@@ -36,7 +36,7 @@ class ChartUpdater:
     def get_last_metrics(self):
         try:
             response = self.client.table('garmin_data') \
-                .select('date, atl, ctl') \
+                .select('date, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
                 .order('date', desc=True) \
                 .limit(1) \
@@ -48,12 +48,13 @@ class ChartUpdater:
             data = response.data[0]
             
             # Debugging: Print the values before conversion
-            print(f"Retrieved ATL: {data['atl']}, CTL: {data['ctl']}")
+            print(f"Retrieved ATL: {data['atl']}, CTL: {data['ctl']}, TSB: {data['tsb']}")
             
             # Validation: Ensure the values are valid numbers
             try:
                 data['atl'] = float(data['atl'])
                 data['ctl'] = float(data['ctl'])
+                data['tsb'] = float(data['tsb'])
             except ValueError as e:
                 print(f"Error converting metrics to float: {e}")
                 return None
@@ -103,10 +104,7 @@ class ChartUpdater:
             # Log activities found
             print("Activities found in Garmin Connect:")
             for activity in activities:
-                # Print the entire activity object for debugging
-                print(f"Activity Data: {activity}")
-                
-                # Correctly retrieve the date
+                # Print only the activity ID and date for debugging
                 activity_date = activity.get('startTimeLocal', 'Unknown')
                 print(f"Activity ID: {activity['activityId']}, Date: {activity_date}")
             
@@ -137,11 +135,7 @@ class ChartUpdater:
                         
                         # Apply multiplier for Strength Training
                         if details.get('activityTypeDTO', {}).get('typeKey') in ['strength_training', 'Siła']:
-                            print(f"Applying 2x multiplier for strength training: {trimp} -> {trimp * 2}")
                             trimp *= 2
-                        
-                        # Debugging: Print the TRIMP value
-                        print(f"Retrieved TRIMP: {trimp}")
                         
                         trimp_total += trimp
                 
