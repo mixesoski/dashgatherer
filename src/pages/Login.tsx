@@ -102,7 +102,7 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-center mb-6">
-          {view === "sign_in" ? "Login" : "Register"}
+          {view === "sign_in" ? "Zaloguj się" : "Zarejestruj się"}
         </h2>
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -142,7 +142,7 @@ const Login = () => {
               sign_in: {
                 email_label: "Email",
                 password_label: "Hasło",
-                button_label: view === "sign_in" ? "Zaloguj się" : "Zarejestruj się",
+                button_label: "Zaloguj się",
                 email_input_placeholder: "Twój adres email",
                 password_input_placeholder: "Twoje hasło",
                 link_text: "Nie masz konta? Zarejestruj się",
@@ -151,7 +151,7 @@ const Login = () => {
               sign_up: {
                 email_label: "Email",
                 password_label: "Hasło",
-                button_label: view === "sign_in" ? "Zaloguj się" : "Zarejestruj się",
+                button_label: "Zarejestruj się",
                 email_input_placeholder: "Twój adres email",
                 password_input_placeholder: "Twoje hasło",
                 link_text: "Masz już konto? Zaloguj się",
@@ -164,9 +164,6 @@ const Login = () => {
             role: role
           }}
         />
-        <button onClick={() => setIsRegistering(!isRegistering)}>
-          {isRegistering ? 'Switch to Login' : 'Switch to Register'}
-        </button>
       </div>
     </div>
   );
