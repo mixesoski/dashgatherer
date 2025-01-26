@@ -24,7 +24,7 @@ const Login = () => {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error("Session check error:", sessionError);
-        setError("Invalid credentials");
+        setError("Nieprawidłowe dane logowania");
         return;
       }
       if (session) {
@@ -42,7 +42,7 @@ const Login = () => {
         setError(null);
       }
       if (event === 'TOKEN_REFRESHED') {
-        console.log('Token refreshed successfully');
+        console.log('Token odświeżony pomyślnie');
       }
     });
 
