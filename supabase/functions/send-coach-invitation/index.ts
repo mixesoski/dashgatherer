@@ -19,23 +19,31 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const handler = async (req: Request): Promise<Response> => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: corsHeaders,
+      status: 204,
+    });
   }
 
   try {
     const { coachEmail, athleteId }: InviteRequest = await req.json();
+    console.log("Processing invitation request:", { coachEmail, athleteId });
 
-    // Get athlete details
-    const { data: athlete } = await supabase
-      .from("auth")
-      .select("email")
-      .eq("id", athleteId)
+    // Get athlete details using Supabase client
+    const { data: userData, error: userError } = await supabase
+      .from('user_roles')
+      .select('user_id, users:user_id(email)')
+      .eq('user_id', athleteId)
       .single();
 
-    if (!athlete) {
+    if (userError || !userData?.users?.email) {
+      console.error("Error fetching athlete details:", userError);
       throw new Error("Athlete not found");
     }
+
+    const athleteEmail = userData.users.email;
 
     // Create invitation record
     const { data: invitation, error: inviteError } = await supabase
@@ -49,6 +57,7 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     if (inviteError) {
+      console.error("Error creating invitation:", inviteError);
       throw inviteError;
     }
 
@@ -57,6 +66,8 @@ const handler = async (req: Request): Promise<Response> => {
     const acceptUrl = `${baseUrl}/respond-invitation?id=${invitation.id}&action=accept`;
     const rejectUrl = `${baseUrl}/respond-invitation?id=${invitation.id}&action=reject`;
 
+    console.log("Sending email with URLs:", { acceptUrl, rejectUrl });
+
     // Send email
     const emailResponse = await resend.emails.send({
       from: "Lovable <onboarding@resend.dev>",
@@ -64,7 +75,7 @@ const handler = async (req: Request): Promise<Response> => {
       subject: "Coach Invitation Request",
       html: `
         <h1>You've Been Invited to Be a Coach</h1>
-        <p>An athlete (${athlete.email}) has invited you to be their coach.</p>
+        <p>An athlete (${athleteEmail}) has invited you to be their coach.</p>
         <p>Please click one of the following links to respond:</p>
         <p>
           <a href="${acceptUrl}" style="display: inline-block; padding: 10px 20px; margin-right: 10px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Accept Invitation</a>
@@ -77,11 +88,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
     });
   } catch (error) {
     console.error("Error in send-coach-invitation function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: error.stack 
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
