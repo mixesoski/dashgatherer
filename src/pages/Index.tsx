@@ -49,11 +49,13 @@ const Index = () => {
     queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
+      
+      // Updated query to join with auth.users through the athlete_id
       const { data, error } = await supabase
         .from('coach_athletes')
         .select(`
           athlete_id,
-          athletes:athlete_id(
+          athlete:athlete_id (
             email
           )
         `)
@@ -188,7 +190,7 @@ const Index = () => {
               <option value="">Select an athlete</option>
               {athletes.map((athlete: any) => (
                 <option key={athlete.athlete_id} value={athlete.athlete_id}>
-                  {athlete.athletes?.email}
+                  {athlete.athlete?.email}
                 </option>
               ))}
             </select>
