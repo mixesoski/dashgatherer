@@ -30,6 +30,33 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_invitations: {
+        Row: {
+          athlete_id: string
+          coach_email: string
+          created_at: string
+          id: string
+          status: Database["public"]["Enums"]["coach_invitation_status"] | null
+          updated_at: string
+        }
+        Insert: {
+          athlete_id: string
+          coach_email: string
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["coach_invitation_status"] | null
+          updated_at?: string
+        }
+        Update: {
+          athlete_id?: string
+          coach_email?: string
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["coach_invitation_status"] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       garmin_credentials: {
         Row: {
           created_at: string
@@ -137,6 +164,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      coach_invitation_status: "pending" | "accepted" | "rejected"
       user_role: "athlete" | "coach"
     }
     CompositeTypes: {
