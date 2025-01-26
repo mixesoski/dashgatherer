@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import Landing from "./pages/Landing";
+import RespondInvitation from "./pages/RespondInvitation";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const App = () => (
           />
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/respond-invitation" element={<RespondInvitation />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
