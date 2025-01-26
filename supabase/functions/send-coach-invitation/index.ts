@@ -31,6 +31,11 @@ const handler = async (req: Request): Promise<Response> => {
     const { coachEmail, athleteId }: InviteRequest = await req.json();
     console.log("Processing invitation request:", { coachEmail, athleteId });
 
+    // Validate request data
+    if (!coachEmail || !athleteId) {
+      throw new Error("Invalid request data");
+    }
+
     // Get athlete details using Supabase client
     const { data: userData, error: userError } = await supabase
       .from('user_roles')
