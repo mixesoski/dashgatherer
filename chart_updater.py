@@ -197,6 +197,7 @@ class ChartUpdater:
                     print(f"Error updating metrics for {date_str}: {e}")
                     # Add more detailed logging
                     print(f"Failed data: date={date_str}, trimp={trimp_total}, metrics={new_metrics}")
+                    print(f"Existing entry data: {existing_entry.data if existing_entry else 'No existing entry'}")
                     continue
             
             return {
