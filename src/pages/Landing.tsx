@@ -7,7 +7,7 @@ const Landing = () => {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       {/* Navigation */}
       <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl text-white font-bold">
           <Sparkles>Trimpbara</Sparkles>
         </h1>
         <div className="space-x-4">
