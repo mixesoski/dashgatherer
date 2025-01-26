@@ -18,6 +18,13 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign_in" | "sign_up">("sign_in");
   const [role, setRole] = useState<"athlete" | "coach">("athlete");
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    role: ''
+  });
 
   useEffect(() => {
     const checkSession = async () => {
@@ -51,11 +58,51 @@ const Login = () => {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    // Fetch roles from user_roles table
+    const fetchRoles = async () => {
+      const { data, error } = await supabase.from('user_roles').select('role');
+      if (error) console.error('Error fetching roles:', error);
+      else setRoles(data);
+    };
+    fetchRoles();
+  }, []);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (isRegistering) {
+      // Registration logic
+      const { user, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password
+      });
+      if (error) console.error('Error signing up:', error);
+      else {
+        // Assign role to new user
+        await supabase.from('user_roles').insert([{ user_id: user.id, role: formData.role }]);
+        console.log('User registered and role assigned:', user);
+      }
+    } else {
+      // Login logic
+      const { error } = await supabase.auth.signIn({
+        email: formData.email,
+        password: formData.password
+      });
+      if (error) console.error('Error logging in:', error);
+      else console.log('User logged in');
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-center mb-6">
-          {view === "sign_in" ? "Witaj ponownie" : "Dołącz do nas"}
+          {view === "sign_in" ? "Login" : "Register"}
         </h2>
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -117,6 +164,9 @@ const Login = () => {
             role: role
           }}
         />
+        <button onClick={() => setIsRegistering(!isRegistering)}>
+          {isRegistering ? 'Switch to Login' : 'Switch to Register'}
+        </button>
       </div>
     </div>
   );
