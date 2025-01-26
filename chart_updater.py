@@ -76,7 +76,7 @@ class ChartUpdater:
         
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
-        new_tsb = new_ctl - new_atl  # Correct TSB calculation
+        new_tsb = previous_ctl - previous_atl  # Correct TSB calculation
         
         return {
             'atl': round(new_atl, 2),
