@@ -97,16 +97,16 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
-      <div className="w-1/2 p-12">
-        <Link to="/" className="text-white hover:text-gray-200 inline-flex items-center mb-8">
+      <div className="w-1/2 p-12 bg-white text-black">
+        <Link to="/" className="text-black hover:text-gray-700 inline-flex items-center mb-8">
           <span className="mr-2">←</span> Go back home
         </Link>
         
         <div className="max-w-md">
-          <h1 className="text-4xl font-bold text-white mb-2">
+          <h1 className="text-4xl font-bold text-black mb-2">
             {view === "sign_in" ? "Hello again," : "Welcome,"}
           </h1>
-          <p className="text-xl text-white mb-8">
+          <p className="text-xl text-black mb-8">
             {view === "sign_in" ? "Welcome back, you've been missed" : "Create your account"}
           </p>
 
@@ -124,7 +124,7 @@ const Login = () => {
                 placeholder="Email address"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full bg-white/10 text-white placeholder:text-white/60 border-white/20"
+                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300"
               />
             </div>
 
@@ -135,15 +135,15 @@ const Login = () => {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleInputChange}
-                className="w-full bg-white/10 text-white placeholder:text-white/60 border-white/20"
+                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300"
               />
             </div>
 
             {view === "sign_up" && (
               <div>
-                <Label htmlFor="role" className="text-white">I am:</Label>
+                <Label htmlFor="role" className="text-black">I am:</Label>
                 <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
-                  <SelectTrigger className="w-full bg-white/10 text-white border-white/20">
+                  <SelectTrigger className="w-full bg-white text-black border-gray-300">
                     <SelectValue placeholder="Select your role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -158,14 +158,14 @@ const Login = () => {
               {view === "sign_in" ? "Login" : "Sign up"}
             </Button>
 
-            <div className="text-white text-sm">
+            <div className="text-black text-sm">
               {view === "sign_in" ? (
                 <p>
                   Don't have an account yet?{" "}
                   <button
                     type="button"
                     onClick={() => setView("sign_up")}
-                    className="text-white underline hover:text-gray-200"
+                    className="text-black underline hover:text-gray-700"
                   >
                     Sign up
                   </button>
@@ -176,7 +176,7 @@ const Login = () => {
                   <button
                     type="button"
                     onClick={() => setView("sign_in")}
-                    className="text-white underline hover:text-gray-200"
+                    className="text-black underline hover:text-gray-700"
                   >
                     Login
                   </button>
