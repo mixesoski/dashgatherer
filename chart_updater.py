@@ -175,6 +175,7 @@ class ChartUpdater:
                     
                     if existing_entry.data:
                         # Update the existing entry with new metrics
+                        print(f"Updating existing entry for date: {date_str}")
                         self.client.table('garmin_data').update({
                             'trimp': trimp_total,
                             'activity': ', '.join([details.get('activityName', 'No Activity') for details in activities_by_date[date_str]]),
@@ -194,6 +195,8 @@ class ChartUpdater:
                         updated_count += 1
                 except Exception as e:
                     print(f"Error updating metrics for {date_str}: {e}")
+                    # Add more detailed logging
+                    print(f"Failed data: date={date_str}, trimp={trimp_total}, metrics={new_metrics}")
                     continue
             
             return {
