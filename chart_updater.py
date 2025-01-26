@@ -46,6 +46,7 @@ class ChartUpdater:
                 .execute()
             
             if not response.data:
+                print(f"No data found for {target_date}")
                 return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values if no data
             
             data = response.data
