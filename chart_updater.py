@@ -13,7 +13,25 @@ class ChartUpdater:
         self.user_id = user_id
         self.garmin = None
 
-    # ... (pozostałe metody pozostają bez zmian do metody update_chart_data)
+    def get_garmin_credentials(self):
+        try:
+            response = self.client.table('garmin_credentials')\
+                .select('email, password')\
+                .eq('user_id', self.user_id)\
+                .single()\
+                .execute()
+            return response.data
+        except Exception as e:
+            print(f"Error fetching Garmin credentials: {e}")
+            return None
+
+    def initialize_garmin(self):
+        credentials = self.get_garmin_credentials()
+        if not credentials:
+            raise Exception("No Garmin credentials found for user")
+        
+        self.garmin = Garmin(credentials['email'], credentials['password'])
+        self.garmin.login()
 
     def update_chart_data(self):
         try:
