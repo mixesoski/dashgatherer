@@ -2,7 +2,7 @@ import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Database } from "@/integrations/supabase/types";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -21,12 +23,9 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign_in" | "sign_up">("sign_in");
   const [role, setRole] = useState<UserRole>("athlete");
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [roles, setRoles] = useState([]);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    role: ''
   });
 
   useEffect(() => {
@@ -38,7 +37,7 @@ const Login = () => {
         return;
       }
       if (session) {
-        navigate("/");
+        navigate("/dashboard");
       }
     };
 
@@ -46,7 +45,7 @@ const Login = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        navigate("/");
+        navigate("/dashboard");
       }
       if (event === 'SIGNED_OUT') {
         setError(null);
@@ -61,15 +60,6 @@ const Login = () => {
     };
   }, [navigate]);
 
-  useEffect(() => {
-    const fetchRoles = async () => {
-      const { data, error } = await supabase.from('user_roles').select('role');
-      if (error) console.error('Error fetching roles:', error);
-      else setRoles(data);
-    };
-    fetchRoles();
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -77,26 +67,20 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isRegistering) {
+    if (view === "sign_up") {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          data: {
+            role: role
+          }
+        }
       });
 
       if (signUpError) {
         console.error('Error signing up:', signUpError);
         setError(signUpError.message);
-      } else if (data.user) {
-        // Insert role for new user
-        const { error: roleError } = await supabase.from('user_roles').insert({
-          user_id: data.user.id,
-          role: role
-        });
-
-        if (roleError) {
-          console.error('Error assigning role:', roleError);
-          setError('Error assigning user role');
-        }
       }
     } else {
       const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -112,71 +96,98 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold text-center mb-6">
-          {view === "sign_in" ? "Zaloguj się" : "Zarejestruj się"}
-        </h2>
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {view === "sign_up" && (
-          <div className="mb-6">
-            <Label htmlFor="role">Jestem:</Label>
-            <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
-              <SelectTrigger className="w-full mt-2">
-                <SelectValue placeholder="Wybierz swoją rolę" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="athlete">Zawodnikiem</SelectItem>
-                <SelectItem value="coach">Trenerem</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <Auth
-          supabaseClient={supabase}
-          view={view}
-          appearance={{ 
-            theme: ThemeSupa,
-            variables: {
-              default: {
-                colors: {
-                  brand: 'rgb(59 130 246)',
-                  brandAccent: 'rgb(37 99 235)',
-                }
-              }
-            }
-          }}
-          localization={{
-            variables: {
-              sign_in: {
-                email_label: "Email",
-                password_label: "Hasło",
-                button_label: "Zaloguj się",
-                email_input_placeholder: "Twój adres email",
-                password_input_placeholder: "Twoje hasło",
-                link_text: "Nie masz konta? Zarejestruj się",
-                loading_button_label: "Logowanie..."
-              },
-              sign_up: {
-                email_label: "Email",
-                password_label: "Hasło",
-                button_label: "Zarejestruj się",
-                email_input_placeholder: "Twój adres email",
-                password_input_placeholder: "Twoje hasło",
-                link_text: "Masz już konto? Zaloguj się",
-                loading_button_label: "Rejestracja..."
-              }
-            }
-          }}
-          providers={[]}
-          additionalData={{
-            role: role
-          }}
-        />
+    <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
+      <div className="w-1/2 p-12">
+        <Link to="/" className="text-white hover:text-gray-200 inline-flex items-center mb-8">
+          <span className="mr-2">←</span> Go back home
+        </Link>
+        
+        <div className="max-w-md">
+          <h1 className="text-4xl font-bold text-white mb-2">
+            {view === "sign_in" ? "Hello again," : "Welcome,"}
+          </h1>
+          <p className="text-xl text-white mb-8">
+            {view === "sign_in" ? "Welcome back, you've been missed" : "Create your account"}
+          </p>
+
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Input
+                type="email"
+                name="email"
+                placeholder="Email address"
+                value={formData.email}
+                onChange={handleInputChange}
+                className="w-full bg-white/10 text-white placeholder:text-white/60 border-white/20"
+              />
+            </div>
+
+            <div>
+              <Input
+                type="password"
+                name="password"
+                placeholder="Password"
+                value={formData.password}
+                onChange={handleInputChange}
+                className="w-full bg-white/10 text-white placeholder:text-white/60 border-white/20"
+              />
+            </div>
+
+            {view === "sign_up" && (
+              <div>
+                <Label htmlFor="role" className="text-white">I am:</Label>
+                <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
+                  <SelectTrigger className="w-full bg-white/10 text-white border-white/20">
+                    <SelectValue placeholder="Select your role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="athlete">Athlete</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900">
+              {view === "sign_in" ? "Login" : "Sign up"}
+            </Button>
+
+            <div className="text-white text-sm">
+              {view === "sign_in" ? (
+                <p>
+                  Don't have an account yet?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setView("sign_up")}
+                    className="text-white underline hover:text-gray-200"
+                  >
+                    Sign up
+                  </button>
+                </p>
+              ) : (
+                <p>
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => setView("sign_in")}
+                    className="text-white underline hover:text-gray-200"
+                  >
+                    Login
+                  </button>
+                </p>
+              )}
+            </div>
+          </form>
+        </div>
+      </div>
+      <div className="w-1/2 flex items-center justify-center">
+        <h1 className="text-6xl font-bold text-white">Floxfly</h1>
       </div>
     </div>
   );
