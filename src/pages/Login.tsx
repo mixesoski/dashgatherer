@@ -95,7 +95,7 @@ const Login = () => {
               sign_in: {
                 email_label: "Email",
                 password_label: "Hasło",
-                button_label: "Zaloguj się",
+                button_label: view === "sign_in" ? "Zaloguj się" : "Zarejestruj się",
                 email_input_placeholder: "Twój adres email",
                 password_input_placeholder: "Twoje hasło",
                 link_text: "Nie masz konta? Zarejestruj się",
@@ -104,7 +104,7 @@ const Login = () => {
               sign_up: {
                 email_label: "Email",
                 password_label: "Hasło",
-                button_label: "Zarejestruj się",
+                button_label: view === "sign_in" ? "Zaloguj się" : "Zarejestruj się",
                 email_input_placeholder: "Twój adres email",
                 password_input_placeholder: "Twoje hasło",
                 link_text: "Masz już konto? Zaloguj się",
