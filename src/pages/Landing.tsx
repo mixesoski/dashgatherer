@@ -7,7 +7,7 @@ const Landing = () => {
     <div className="min-h-screen bg-[#1A1F2C] text-white">
       {/* Navigation */}
       <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Floxfly</h1>
+        <h1 className="text-2xl font-bold">Trimpbara</h1>
         <div className="space-x-4">
           <Link to="/login">
             <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
@@ -71,7 +71,7 @@ const Landing = () => {
         <div className="max-w-3xl mx-auto text-center space-y-8">
           <h2 className="text-4xl font-bold">Ready to Optimize Your Training?</h2>
           <p className="text-xl text-gray-400">
-            Join athletes who are already using Floxfly to reach their peak performance.
+            Join athletes who are already using Trimpbara to reach their peak performance.
           </p>
           <Link to="/login">
             <Button size="lg" className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
@@ -85,7 +85,7 @@ const Landing = () => {
       {/* Footer */}
       <footer className="container mx-auto px-4 py-8 border-t border-white/10">
         <div className="flex justify-between items-center">
-          <p className="text-gray-400">© 2024 Floxfly. All rights reserved.</p>
+          <p className="text-gray-400">© 2024 Trimpbara. All rights reserved.</p>
           <div className="space-x-4">
             <a href="#" className="text-gray-400 hover:text-white">Privacy Policy</a>
             <a href="#" className="text-gray-400 hover:text-white">Terms of Service</a>
