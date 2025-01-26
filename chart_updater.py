@@ -33,6 +33,41 @@ class ChartUpdater:
         self.garmin = Garmin(credentials['email'], credentials['password'])
         self.garmin.login()
 
+    def get_last_metrics(self):
+        try:
+            # Fetch the metrics from exactly 10 days ago
+            target_date = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+            
+            response = self.client.table('garmin_data') \
+                .select('date, atl, ctl, tsb') \
+                .eq('user_id', self.user_id) \
+                .eq('date', target_date) \
+                .single() \
+                .execute()
+            
+            if not response.data:
+                print(f"No data found for {target_date}")
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values if no data
+            
+            data = response.data
+            
+            # Debugging: Print the raw data retrieved
+            print(f"Raw data retrieved for {target_date}: {data}")
+            
+            # Validation: Ensure the values are valid numbers
+            try:
+                data['atl'] = float(data['atl'])
+                data['ctl'] = float(data['ctl'])
+                data['tsb'] = float(data['tsb'])
+            except ValueError as e:
+                print(f"Error converting metrics to float: {e}")
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
+            
+            return data
+        except Exception as e:
+            print(f"Error fetching last metrics: {e}")
+            return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
+
     def update_chart_data(self):
         try:
             self.initialize_garmin()
