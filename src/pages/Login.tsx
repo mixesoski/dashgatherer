@@ -12,12 +12,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Database } from "@/integrations/supabase/types";
+
+type UserRole = Database["public"]["Enums"]["user_role"];
 
 const Login = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign_in" | "sign_up">("sign_in");
-  const [role, setRole] = useState<"athlete" | "coach">("athlete");
+  const [role, setRole] = useState<UserRole>("athlete");
   const [isRegistering, setIsRegistering] = useState(false);
   const [roles, setRoles] = useState([]);
   const [formData, setFormData] = useState({
@@ -59,7 +62,6 @@ const Login = () => {
   }, [navigate]);
 
   useEffect(() => {
-    // Fetch roles from user_roles table
     const fetchRoles = async () => {
       const { data, error } = await supabase.from('user_roles').select('role');
       if (error) console.error('Error fetching roles:', error);
@@ -68,33 +70,44 @@ const Login = () => {
     fetchRoles();
   }, []);
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isRegistering) {
-      // Registration logic
-      const { user, error } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
-        password: formData.password
+        password: formData.password,
       });
-      if (error) console.error('Error signing up:', error);
-      else {
-        // Assign role to new user
-        await supabase.from('user_roles').insert([{ user_id: user.id, role: formData.role }]);
-        console.log('User registered and role assigned:', user);
+
+      if (signUpError) {
+        console.error('Error signing up:', signUpError);
+        setError(signUpError.message);
+      } else if (data.user) {
+        // Insert role for new user
+        const { error: roleError } = await supabase.from('user_roles').insert({
+          user_id: data.user.id,
+          role: role
+        });
+
+        if (roleError) {
+          console.error('Error assigning role:', roleError);
+          setError('Error assigning user role');
+        }
       }
     } else {
-      // Login logic
-      const { error } = await supabase.auth.signIn({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password
       });
-      if (error) console.error('Error logging in:', error);
-      else console.log('User logged in');
+
+      if (signInError) {
+        console.error('Error logging in:', signInError);
+        setError(signInError.message);
+      }
     }
   };
 
@@ -112,7 +125,7 @@ const Login = () => {
         {view === "sign_up" && (
           <div className="mb-6">
             <Label htmlFor="role">Jestem:</Label>
-            <Select value={role} onValueChange={(value: "athlete" | "coach") => setRole(value)}>
+            <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
               <SelectTrigger className="w-full mt-2">
                 <SelectValue placeholder="Wybierz swoją rolę" />
               </SelectTrigger>
