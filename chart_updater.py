@@ -35,38 +35,54 @@ class ChartUpdater:
 
     def get_last_metrics(self):
         try:
-            # Fetch the metrics from exactly 10 days ago
-            target_date = (datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+            target_date = datetime.date.today() - datetime.timedelta(days=10)
+            date_obj = datetime.datetime.combine(target_date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
+            target_date_iso = date_obj.isoformat()
             
             response = self.client.table('garmin_data') \
                 .select('date, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .eq('date', target_date) \
+                .eq('date', target_date_iso) \
                 .single() \
                 .execute()
             
             if not response.data:
-                print(f"No data found for {target_date}")
-                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values if no data
+                print(f"No data found for {target_date_iso}")
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}
             
             data = response.data
             
-            # Debugging: Print the raw data retrieved
-            print(f"Raw data retrieved for {target_date}: {data}")
-            
-            # Validation: Ensure the values are valid numbers
             try:
                 data['atl'] = float(data['atl'])
                 data['ctl'] = float(data['ctl'])
                 data['tsb'] = float(data['tsb'])
             except ValueError as e:
                 print(f"Error converting metrics to float: {e}")
-                return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}
             
             return data
         except Exception as e:
             print(f"Error fetching last metrics: {e}")
-            return {'atl': 0, 'ctl': 0, 'tsb': 0}  # Default values on error
+            return {'atl': 0, 'ctl': 0, 'tsb': 0}
+
+    def calculate_new_metrics(self, current_trimp, previous_metrics):
+        current_trimp = float(current_trimp)
+        
+        if not previous_metrics:
+            return {'atl': current_trimp, 'ctl': current_trimp, 'tsb': 0}
+        
+        previous_atl = float(previous_metrics['atl'])
+        previous_ctl = float(previous_metrics['ctl'])
+        
+        new_atl = previous_atl + (current_trimp - previous_atl) / 7
+        new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
+        new_tsb = new_ctl - new_atl  # Correct TSB calculation
+        
+        return {
+            'atl': round(new_atl, 2),
+            'ctl': round(new_ctl, 2),
+            'tsb': round(new_tsb, 2)
+        }
 
     def update_chart_data(self):
         try:
@@ -98,7 +114,6 @@ class ChartUpdater:
             updated_count = 0
             previous_metrics = self.get_last_metrics()
             
-            # Logowanie początkowych wartości
             print(f"\n=== Initial metrics from {start_date} ===")
             print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
@@ -110,7 +125,6 @@ class ChartUpdater:
                 trimp_total = 0.0
                 activities_for_date = activities_by_date.get(date_str, [])
                 
-                # Obliczanie TRIMP
                 for activity in activities_for_date:
                     activity_id = activity['activityId']
                     try:
@@ -129,17 +143,15 @@ class ChartUpdater:
                         print(f"Error processing activity {activity_id}: {e}")
                         continue
                 
-                # Formatowanie aktywności
                 if trimp_total == 0:
                     activity_str = "Rest Day"
                 else:
                     activity_names = [activity.get('activityName', 'Unknown Activity') 
                                     for activity in activities_for_date]
-                    activity_str = ', '.join(activity_names) if activity_names else "Unknown Activity"
+                    activity_str = ', '.join(activity_names) or "Unknown Activity"
                 
                 new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
                 
-                # Logowanie zmian
                 print(f"\n=== Processing {date_str} ===")
                 print(f"TRIMP: {trimp_total}")
                 print(f"Activity: {activity_str}")
@@ -158,7 +170,6 @@ class ChartUpdater:
                         .execute()
                     
                     if existing_entry.data:
-                        # Logowanie różnic w istniejących wpisach
                         old_data = existing_entry.data[0]
                         update_log = [
                             f"Updating entry for {date_str}:",
