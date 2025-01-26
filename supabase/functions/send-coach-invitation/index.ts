@@ -33,6 +33,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Validate request data
     if (!coachEmail || !athleteId) {
+      console.error("Invalid request data:", { coachEmail, athleteId });
       throw new Error("Invalid request data");
     }
 
