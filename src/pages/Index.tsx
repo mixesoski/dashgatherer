@@ -2,7 +2,7 @@ import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw, UserPlus } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -19,49 +19,86 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 
-// Get the API URL from environment variable or fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
-
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
   const [isUpdating, setIsUpdating] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+
+  // Fetch user role
+  const { data: roleData } = useQuery({
+    queryKey: ['userRole', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.role;
+    },
+    enabled: !!userId
+  });
+
+  // Fetch athletes if user is a coach
+  const { data: athletes } = useQuery({
+    queryKey: ['athletes', userId],
+    queryFn: async () => {
+      if (!userId || roleData !== 'coach') return [];
+      const { data, error } = await supabase
+        .from('coach_athletes')
+        .select(`
+          athlete_id,
+          athletes:athlete_id(
+            email
+          )
+        `)
+        .eq('coach_id', userId);
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!userId && roleData === 'coach'
+  });
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
-    queryKey: ['garminCredentials'],
+    queryKey: ['garminCredentials', selectedAthleteId || userId],
     queryFn: async () => {
+      const targetUserId = selectedAthleteId || userId;
+      if (!targetUserId) return null;
+      
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
+        .eq('user_id', targetUserId)
         .maybeSingle();
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data;
-    }
+    },
+    enabled: !!(selectedAthleteId || userId)
   });
 
   const { data: garminData, refetch: refetchGarminData } = useQuery({
-    queryKey: ['garminData', userId],
+    queryKey: ['garminData', selectedAthleteId || userId],
     queryFn: async () => {
-      if (!userId) return null;
+      const targetUserId = selectedAthleteId || userId;
+      if (!targetUserId) return null;
       
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', targetUserId)
         .order('date', { ascending: true });
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data;
     },
-    enabled: !!userId
+    enabled: !!(selectedAthleteId || userId)
   });
 
   useEffect(() => {
@@ -80,10 +117,17 @@ const Index = () => {
     }
   }, [garminData]);
 
+  useEffect(() => {
+    if (roleData) {
+      setUserRole(roleData);
+    }
+  }, [roleData]);
+
   const handleDeleteCredentials = async () => {
     const { error } = await supabase
       .from('garmin_credentials')
       .delete()
+      .eq('user_id', userId)
       .single();
 
     if (error) {
@@ -134,13 +178,30 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
+        {userRole === 'coach' && athletes && athletes.length > 0 && (
+          <div className="mb-8">
+            <select
+              className="w-full max-w-xs p-2 border rounded-md"
+              value={selectedAthleteId || ''}
+              onChange={(e) => setSelectedAthleteId(e.target.value || null)}
+            >
+              <option value="">Select an athlete</option>
+              {athletes.map((athlete: any) => (
+                <option key={athlete.athlete_id} value={athlete.athlete_id}>
+                  {athlete.athletes?.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Welcome to Your Dashboard</h1>
           {garminCredentials ? (
             <div className="space-y-4">
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
               <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-              {showButtons && (
+              {showButtons && userRole !== 'coach' && (
                 <div className="flex justify-center gap-4 items-center">
                   <TooltipProvider>
                     <Tooltip>
@@ -184,11 +245,15 @@ const Index = () => {
                 />
               )}
             </div>
-          ) : (
+          ) : userRole !== 'coach' ? (
             <>
               <p className="text-xl text-gray-600">Connect your Garmin account below</p>
               <GarminCredentialsForm />
             </>
+          ) : null}
+          
+          {userRole === 'coach' && !selectedAthleteId && (
+            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
           )}
         </div>
       </div>

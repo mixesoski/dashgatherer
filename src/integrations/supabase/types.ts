@@ -9,6 +9,27 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      coach_athletes: {
+        Row: {
+          athlete_id: string | null
+          coach_id: string | null
+          created_at: string
+          id: string
+        }
+        Insert: {
+          athlete_id?: string | null
+          coach_id?: string | null
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          athlete_id?: string | null
+          coach_id?: string | null
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
       garmin_credentials: {
         Row: {
           created_at: string
