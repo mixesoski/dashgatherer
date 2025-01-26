@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Resend } from "npm:resend@2.0.0";
+import { sendMail } from "https://deno.land/x/smtp/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +13,6 @@ interface InviteRequest {
   athleteId: string;
 }
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -74,12 +73,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Sending email with URLs:", { acceptUrl, rejectUrl });
 
-    // Send email
-    const emailResponse = await resend.emails.send({
-      from: "Lovable <onboarding@resend.dev>",
-      to: [coachEmail],
+    // Send email using SMTP
+    await sendMail({
+      to: coachEmail,
+      from: "onboarding@yourdomain.com",
       subject: "Coach Invitation Request",
-      html: `
+      content: `
         <h1>You've Been Invited to Be a Coach</h1>
         <p>An athlete (${athleteEmail}) has invited you to be their coach.</p>
         <p>Please click one of the following links to respond:</p>
@@ -90,7 +89,7 @@ const handler = async (req: Request): Promise<Response> => {
       `,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("Email sent successfully");
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
