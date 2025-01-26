@@ -121,9 +121,11 @@ class ChartUpdater:
                     activities_by_date[date_str] = []
                 activities_by_date[date_str].append(activity)
             
-            updated_count = 0
-            previous_metrics = self.get_last_metrics()  # Start with the last known metrics
-            for date in date_range:
+            # Fetch the starting metrics from 10 days ago
+            previous_metrics = self.get_last_metrics()
+            
+            # Start calculations from the day after the starting point
+            for date in date_range[1:]:
                 date_str = date.isoformat()
                 
                 trimp_total = 0
