@@ -187,7 +187,7 @@ const Login = () => {
         </div>
       </div>
       <div className="w-1/2 flex items-center justify-center">
-        <h1 className="text-6xl font-bold text-white">Floxfly</h1>
+        <h1 className="text-6xl font-bold text-white">Trimpbara</h1>
       </div>
     </div>
   );
