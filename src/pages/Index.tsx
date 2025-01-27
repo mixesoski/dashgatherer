@@ -19,6 +19,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/CoachDashboard";
+import { User } from '@supabase/supabase-js';
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -75,7 +76,7 @@ const Index = () => {
 
       // Combine the data
       return relationships?.map(rel => {
-        const user = users.find(u => u.id === rel.athlete_id);
+        const user = (users as User[]).find(u => u.id === rel.athlete_id);
         return {
           athlete_id: rel.athlete_id,
           email: user?.email
