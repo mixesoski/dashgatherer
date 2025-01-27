@@ -51,19 +51,32 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data, error } = await supabase
+      // First get the athlete relationships
+      const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select(`
-          athlete_id,
-          athlete:athlete_id (
-            email
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId)
         .eq('status', 'accepted');
 
-      if (error) throw error;
-      return data;
+      if (relationshipsError) throw relationshipsError;
+
+      // Then get the athlete emails
+      const athleteIds = relationships?.map(rel => rel.athlete_id) || [];
+      if (athleteIds.length === 0) return [];
+
+      const { data: users, error: usersError } = await supabase.auth.admin
+        .listUsers();
+
+      if (usersError) throw usersError;
+
+      // Combine the data
+      return relationships?.map(rel => {
+        const user = users?.find(u => u.id === rel.athlete_id);
+        return {
+          athlete_id: rel.athlete_id,
+          email: user?.email
+        };
+      }) || [];
     },
     enabled: !!userId && roleData === 'coach'
   });
@@ -191,10 +204,17 @@ const Index = () => {
               <option value="">Select an athlete</option>
               {athletes.map((athlete: any) => (
                 <option key={athlete.athlete_id} value={athlete.athlete_id}>
-                  {athlete.athlete?.email}
+                  {athlete.email}
                 </option>
               ))}
             </select>
+          </div>
+        )}
+
+        {userRole === 'coach' && !selectedAthleteId && (
+          <div className="space-y-8">
+            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
+            <CoachDashboard />
           </div>
         )}
 
