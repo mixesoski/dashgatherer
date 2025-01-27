@@ -52,42 +52,55 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First get the athlete relationships
+      // First get accepted coach-athlete relationships
       const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
         .select('athlete_id')
         .eq('coach_id', userId)
         .eq('status', 'accepted');
 
-      if (relationshipsError) throw relationshipsError;
+      if (relationshipsError) {
+        console.error('Error fetching relationships:', relationshipsError);
+        return [];
+      }
       
       if (!relationships || relationships.length === 0) return [];
-      
-      // Then get the user roles to filter for athletes
-      const { data: roles, error: rolesError } = await supabase
+
+      // Get user roles for these athletes
+      const { data: athleteRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id')
         .eq('role', 'athlete')
         .in('user_id', relationships.map(r => r.athlete_id));
 
-      if (rolesError) throw rolesError;
-      
-      if (!roles || roles.length === 0) return [];
+      if (rolesError) {
+        console.error('Error fetching roles:', rolesError);
+        return [];
+      }
 
-      // Finally get the athlete emails
+      if (!athleteRoles || athleteRoles.length === 0) return [];
+
+      // Get user details for athletes
       const { data: { users }, error: usersError } = await supabase.auth.admin
         .listUsers();
 
-      if (usersError) throw usersError;
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+        return [];
+      }
 
-      // Combine all the data
-      return roles.map(role => {
-        const user = (users as User[])?.find(u => u.id === role.user_id);
-        return {
-          athlete_id: role.user_id,
-          email: user?.email
-        };
-      }).filter(athlete => athlete.email); // Only return athletes with valid emails
+      // Map athlete roles to user details
+      return athleteRoles
+        .map(role => {
+          const user = users?.find(u => u.id === role.user_id);
+          return user ? {
+            athlete_id: role.user_id,
+            email: user.email
+          } : null;
+        })
+        .filter((athlete): athlete is { athlete_id: string; email: string } => 
+          athlete !== null && athlete.email !== undefined
+        );
     },
     enabled: !!userId && roleData === 'coach'
   });
