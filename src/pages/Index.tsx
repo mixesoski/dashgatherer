@@ -51,12 +51,16 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First get the athlete relationships
+      // First get the athlete relationships and join with user_roles
       const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select('athlete_id')
+        .select(`
+          athlete_id,
+          user_roles!inner(role)
+        `)
         .eq('coach_id', userId)
-        .eq('status', 'accepted');
+        .eq('status', 'accepted')
+        .eq('user_roles.role', 'athlete');
 
       if (relationshipsError) throw relationshipsError;
 
@@ -64,14 +68,14 @@ const Index = () => {
       const athleteIds = relationships?.map(rel => rel.athlete_id) || [];
       if (athleteIds.length === 0) return [];
 
-      const { data: users, error: usersError } = await supabase.auth.admin
+      const { data: { users }, error: usersError } = await supabase.auth.admin
         .listUsers();
 
       if (usersError) throw usersError;
 
       // Combine the data
       return relationships?.map(rel => {
-        const user = users?.find(u => u.id === rel.athlete_id);
+        const user = users.find(u => u.id === rel.athlete_id);
         return {
           athlete_id: rel.athlete_id,
           email: user?.email
