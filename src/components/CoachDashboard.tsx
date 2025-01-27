@@ -8,13 +8,38 @@ const CoachDashboard = () => {
   const [athletes, setAthletes] = useState<any[]>([]);
 
   const searchAthletes = async () => {
-    const { data } = await supabase
+    // First get the user's email from auth.users
+    const { data: authUsers, error: authError } = await supabase.auth.admin
+      .listUsers({
+        search: searchTerm,
+      });
+
+    if (authError) {
+      console.error('Error searching users:', authError);
+      return;
+    }
+
+    // Then get their roles
+    const { data: roleData, error: roleError } = await supabase
       .from('user_roles')
-      .select('user_id, username')
-      .ilike('username', `%${searchTerm}%`)
+      .select('user_id, role')
+      .in('user_id', authUsers?.users.map(u => u.id) || [])
       .neq('role', 'coach');
 
-    setAthletes(data || []);
+    if (roleError) {
+      console.error('Error fetching roles:', roleError);
+      return;
+    }
+
+    // Combine the data
+    const athletes = authUsers?.users
+      .filter(user => roleData?.some(role => role.user_id === user.id))
+      .map(user => ({
+        user_id: user.id,
+        email: user.email
+      })) || [];
+
+    setAthletes(athletes);
   };
 
   const sendInvitation = async (athleteId: string) => {
@@ -52,7 +77,7 @@ const CoachDashboard = () => {
         <div className="flex gap-4 mb-6">
           <Input
             type="text"
-            placeholder="Search by athlete name"
+            placeholder="Search by athlete email"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-sm"
@@ -63,7 +88,7 @@ const CoachDashboard = () => {
         <div className="space-y-4">
           {athletes.map(athlete => (
             <div key={athlete.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
-              <span className="font-medium">{athlete.username}</span>
+              <span className="font-medium">{athlete.email}</span>
               <Button onClick={() => sendInvitation(athlete.user_id)} variant="outline">
                 Send Invitation
               </Button>
