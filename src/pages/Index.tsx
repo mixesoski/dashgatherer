@@ -52,36 +52,42 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First get the athlete relationships and join with user_roles
+      // First get the athlete relationships
       const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select(`
-          athlete_id,
-          user_roles!inner(role)
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId)
-        .eq('status', 'accepted')
-        .eq('user_roles.role', 'athlete');
+        .eq('status', 'accepted');
 
       if (relationshipsError) throw relationshipsError;
+      
+      if (!relationships || relationships.length === 0) return [];
+      
+      // Then get the user roles to filter for athletes
+      const { data: roles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'athlete')
+        .in('user_id', relationships.map(r => r.athlete_id));
 
-      // Then get the athlete emails
-      const athleteIds = relationships?.map(rel => rel.athlete_id) || [];
-      if (athleteIds.length === 0) return [];
+      if (rolesError) throw rolesError;
+      
+      if (!roles || roles.length === 0) return [];
 
+      // Finally get the athlete emails
       const { data: { users }, error: usersError } = await supabase.auth.admin
         .listUsers();
 
       if (usersError) throw usersError;
 
-      // Combine the data
-      return relationships?.map(rel => {
-        const user = (users as User[]).find(u => u.id === rel.athlete_id);
+      // Combine all the data
+      return roles.map(role => {
+        const user = (users as User[])?.find(u => u.id === role.user_id);
         return {
-          athlete_id: rel.athlete_id,
+          athlete_id: role.user_id,
           email: user?.email
         };
-      }) || [];
+      }).filter(athlete => athlete.email); // Only return athletes with valid emails
     },
     enabled: !!userId && roleData === 'coach'
   });
