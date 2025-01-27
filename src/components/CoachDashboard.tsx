@@ -19,7 +19,7 @@ const CoachDashboard = () => {
     }
 
     // Filter users by email containing the search term
-    const filteredUsers = users?.filter(user => 
+    const filteredUsers = (users as User[])?.filter(user => 
       user.email?.toLowerCase().includes(searchTerm.toLowerCase())
     ) || [];
 
