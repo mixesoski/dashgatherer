@@ -2,28 +2,32 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { User } from '@supabase/supabase-js';
 
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [athletes, setAthletes] = useState<any[]>([]);
 
   const searchAthletes = async () => {
-    // First get the user's email from auth.users
-    const { data: authUsers, error: authError } = await supabase.auth.admin
-      .listUsers({
-        search: searchTerm,
-      });
+    // First get all users
+    const { data: { users }, error: authError } = await supabase.auth.admin
+      .listUsers();
 
     if (authError) {
       console.error('Error searching users:', authError);
       return;
     }
 
+    // Filter users by email containing the search term
+    const filteredUsers = users?.filter(user => 
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
+
     // Then get their roles
     const { data: roleData, error: roleError } = await supabase
       .from('user_roles')
       .select('user_id, role')
-      .in('user_id', authUsers?.users.map(u => u.id) || [])
+      .in('user_id', filteredUsers.map(u => u.id))
       .neq('role', 'coach');
 
     if (roleError) {
@@ -32,12 +36,12 @@ const CoachDashboard = () => {
     }
 
     // Combine the data
-    const athletes = authUsers?.users
+    const athletes = filteredUsers
       .filter(user => roleData?.some(role => role.user_id === user.id))
       .map(user => ({
         user_id: user.id,
         email: user.email
-      })) || [];
+      }));
 
     setAthletes(athletes);
   };
