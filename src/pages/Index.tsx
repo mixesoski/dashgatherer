@@ -52,14 +52,15 @@ const Index = () => {
       if (!userId || roleData !== 'coach') return [];
       
       const { data, error } = await supabase
-        .from('coach_athletes')
+        .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          athlete:athlete_id (
+          athletes:athlete_id (
             email
           )
         `)
-        .eq('coach_id', userId);
+        .eq('coach_id', userId)
+        .eq('status', 'accepted');
 
       if (error) throw error;
       return data;
@@ -190,7 +191,7 @@ const Index = () => {
               <option value="">Select an athlete</option>
               {athletes.map((athlete: any) => (
                 <option key={athlete.athlete_id} value={athlete.athlete_id}>
-                  {athlete.athlete?.email}
+                  {athlete.athletes?.email}
                 </option>
               ))}
             </select>

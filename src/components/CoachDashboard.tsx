@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { supabase } from '../utils/supabaseClient';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [athletes, setAthletes] = useState([]);
+  const [athletes, setAthletes] = useState<any[]>([]);
 
   const searchAthletes = async () => {
     const { data } = await supabase
@@ -12,11 +14,12 @@ const CoachDashboard = () => {
       .ilike('username', `%${searchTerm}%`)
       .neq('role', 'coach');
 
-    setAthletes(data);
+    setAthletes(data || []);
   };
 
-  const sendInvitation = async (athleteId) => {
+  const sendInvitation = async (athleteId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
     
     await supabase
       .from('coach_athlete_relationships')
@@ -28,25 +31,54 @@ const CoachDashboard = () => {
   };
 
   return (
-    <div>
-      <h2>Wyszukaj zawodników</h2>
-      <input
-        type="text"
-        placeholder="Wpisz nazwę zawodnika"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-      />
-      <button onClick={searchAthletes}>Szukaj</button>
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
+          <h3 className="text-lg font-semibold mb-2">Total Athletes</h3>
+          <p className="text-3xl font-bold text-purple-600">0</p>
+        </div>
+        <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
+          <h3 className="text-lg font-semibold mb-2">Active Today</h3>
+          <p className="text-3xl font-bold text-green-600">0</p>
+        </div>
+        <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
+          <h3 className="text-lg font-semibold mb-2">Pending Invites</h3>
+          <p className="text-3xl font-bold text-orange-600">0</p>
+        </div>
+      </div>
 
-      <div>
-        {athletes.map(athlete => (
-          <div key={athlete.id}>
-            <p>{athlete.username}</p>
-            <button onClick={() => sendInvitation(athlete.id)}>
-              Wyślij zaproszenie
-            </button>
+      <div className="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
+        <h2 className="text-xl font-bold mb-4">Search Athletes</h2>
+        <div className="flex gap-4 mb-6">
+          <Input
+            type="text"
+            placeholder="Search by athlete name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-sm"
+          />
+          <Button onClick={searchAthletes}>Search</Button>
+        </div>
+
+        <div className="space-y-4">
+          {athletes.map(athlete => (
+            <div key={athlete.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
+              <span className="font-medium">{athlete.username}</span>
+              <Button onClick={() => sendInvitation(athlete.user_id)} variant="outline">
+                Send Invitation
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
+        <h2 className="text-xl font-bold mb-4">Recent Activity</h2>
+        <div className="space-y-4">
+          <div className="p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
+            <p className="text-sm text-gray-600 dark:text-gray-300">No recent activity</p>
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
