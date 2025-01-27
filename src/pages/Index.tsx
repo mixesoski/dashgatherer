@@ -55,7 +55,7 @@ const Index = () => {
         .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          auth.users (
+          athlete:athlete_id (
             email
           )
         `)
@@ -191,17 +191,10 @@ const Index = () => {
               <option value="">Select an athlete</option>
               {athletes.map((athlete: any) => (
                 <option key={athlete.athlete_id} value={athlete.athlete_id}>
-                  {athlete.auth.users?.email}
+                  {athlete.athlete?.email}
                 </option>
               ))}
             </select>
-          </div>
-        )}
-
-        {userRole === 'coach' && !selectedAthleteId && (
-          <div className="space-y-8">
-            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
-            <CoachDashboard />
           </div>
         )}
 
