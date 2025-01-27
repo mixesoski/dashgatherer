@@ -18,7 +18,6 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/CoachDashboard";
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -256,10 +255,7 @@ const Index = () => {
           ) : null}
           
           {userRole === 'coach' && !selectedAthleteId && (
-            <>
-              <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
-              <CoachDashboard />
-            </>
+            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
           )}
         </div>
       </div>
