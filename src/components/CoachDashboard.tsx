@@ -2,61 +2,91 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { User } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [athletes, setAthletes] = useState<any[]>([]);
 
   const searchAthletes = async () => {
-    // First get all users
-    const { data: { users }, error: authError } = await supabase.auth.admin
-      .listUsers();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('You must be logged in to search athletes');
+        return;
+      }
 
-    if (authError) {
-      console.error('Error searching users:', authError);
-      return;
+      // First get athletes from user_roles
+      const { data: athleteRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, email:auth.users!user_roles_user_id_fkey(email)')
+        .eq('role', 'athlete')
+        .ilike('auth.users.email', `%${searchTerm}%`);
+
+      if (rolesError) {
+        console.error('Error fetching athletes:', rolesError);
+        toast.error('Error searching athletes');
+        return;
+      }
+
+      // Filter out any athletes that might already have a relationship with this coach
+      const { data: existingRelations, error: relationsError } = await supabase
+        .from('coach_athlete_relationships')
+        .select('athlete_id')
+        .eq('coach_id', user.id);
+
+      if (relationsError) {
+        console.error('Error checking existing relationships:', relationsError);
+        return;
+      }
+
+      const existingAthleteIds = existingRelations?.map(rel => rel.athlete_id) || [];
+
+      // Format athletes data, excluding those with existing relationships
+      const formattedAthletes = athleteRoles
+        ?.filter(athlete => !existingAthleteIds.includes(athlete.user_id))
+        .map(athlete => ({
+          user_id: athlete.user_id,
+          email: athlete.email?.email // Note the nested email property due to the join
+        }))
+        .filter(athlete => athlete.email) || [];
+
+      setAthletes(formattedAthletes);
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An error occurred while searching athletes');
     }
-
-    // Filter users by email containing the search term
-    const filteredUsers = (users as User[])?.filter(user => 
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    ) || [];
-
-    // Then get their roles
-    const { data: roleData, error: roleError } = await supabase
-      .from('user_roles')
-      .select('user_id, role')
-      .in('user_id', filteredUsers.map(u => u.id))
-      .neq('role', 'coach');
-
-    if (roleError) {
-      console.error('Error fetching roles:', roleError);
-      return;
-    }
-
-    // Combine the data
-    const athletes = filteredUsers
-      .filter(user => roleData?.some(role => role.user_id === user.id))
-      .map(user => ({
-        user_id: user.id,
-        email: user.email
-      }));
-
-    setAthletes(athletes);
   };
 
   const sendInvitation = async (athleteId: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    await supabase
-      .from('coach_athlete_relationships')
-      .insert({
-        coach_id: user.id,
-        athlete_id: athleteId,
-        status: 'pending'
-      });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('You must be logged in to send invitations');
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('coach_athlete_relationships')
+        .insert({
+          coach_id: user.id,
+          athlete_id: athleteId,
+          status: 'pending'
+        });
+
+      if (error) {
+        console.error('Error sending invitation:', error);
+        toast.error('Failed to send invitation');
+        return;
+      }
+
+      toast.success('Invitation sent successfully');
+      // Remove the invited athlete from the list
+      setAthletes(athletes.filter(athlete => athlete.user_id !== athleteId));
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An error occurred while sending the invitation');
+    }
   };
 
   return (
