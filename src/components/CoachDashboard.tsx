@@ -6,6 +6,13 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { GarminChart } from '@/components/dashboard/GarminChart';
 
+interface AthleteEmail {
+  user_id: string;
+  users: {
+    email: string;
+  } | null;
+}
+
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [athletes, setAthletes] = useState<any[]>([]);
@@ -34,7 +41,7 @@ const CoachDashboard = () => {
       // Then get the athlete emails
       const { data: athleteEmails, error: emailsError } = await supabase
         .from('user_roles')
-        .select('user_id, users:user_id(email)')
+        .select<string, AthleteEmail>('user_id, users:user_id(email)')
         .in('user_id', relationships.map(rel => rel.athlete_id))
         .eq('role', 'athlete');
 
@@ -43,7 +50,7 @@ const CoachDashboard = () => {
         return [];
       }
 
-      return athleteEmails.map(athlete => ({
+      return athleteEmails?.map(athlete => ({
         id: athlete.user_id,
         email: athlete.users?.email
       })).filter(athlete => athlete.email);
@@ -91,7 +98,7 @@ const CoachDashboard = () => {
 
       const { data: athleteRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id, users:user_id(email)')
+        .select<string, AthleteEmail>('user_id, users:user_id(email)')
         .eq('role', 'athlete')
         .textSearch('users.email', searchTerm);
 
