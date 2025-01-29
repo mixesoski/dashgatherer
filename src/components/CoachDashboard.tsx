@@ -3,10 +3,73 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+import { GarminChart } from '@/components/dashboard/GarminChart';
 
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [athletes, setAthletes] = useState<any[]>([]);
+
+  // Fetch coach's athletes with accepted relationships
+  const { data: acceptedAthletes } = useQuery({
+    queryKey: ['acceptedAthletes'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data: relationships, error } = await supabase
+        .from('coach_athlete_relationships')
+        .select(`
+          athlete_id,
+          athletes:athlete_id(
+            email:auth.users!user_roles_user_id_fkey(email)
+          )
+        `)
+        .eq('coach_id', user.id)
+        .eq('status', 'accepted');
+
+      if (error) {
+        console.error('Error fetching accepted athletes:', error);
+        return [];
+      }
+
+      return relationships.map(rel => ({
+        id: rel.athlete_id,
+        email: rel.athletes?.email?.email
+      })).filter(athlete => athlete.email);
+    }
+  });
+
+  // Fetch Garmin data for each athlete
+  const { data: athletesData } = useQuery({
+    queryKey: ['athletesGarminData', acceptedAthletes],
+    queryFn: async () => {
+      if (!acceptedAthletes?.length) return [];
+
+      const athletesWithData = await Promise.all(
+        acceptedAthletes.map(async (athlete) => {
+          const { data, error } = await supabase
+            .from('garmin_data')
+            .select('*')
+            .eq('user_id', athlete.id)
+            .order('date', { ascending: true });
+
+          if (error) {
+            console.error(`Error fetching data for athlete ${athlete.email}:`, error);
+            return null;
+          }
+
+          return {
+            ...athlete,
+            garminData: data || []
+          };
+        })
+      );
+
+      return athletesWithData.filter(Boolean);
+    },
+    enabled: !!acceptedAthletes?.length
+  });
 
   const searchAthletes = async () => {
     try {
@@ -16,12 +79,16 @@ const CoachDashboard = () => {
         return;
       }
 
-      // First get athletes from user_roles
       const { data: athleteRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id, email:auth.users!user_roles_user_id_fkey(email)')
+        .select(`
+          user_id,
+          users:user_id(
+            email:auth.users!user_roles_user_id_fkey(email)
+          )
+        `)
         .eq('role', 'athlete')
-        .ilike('auth.users.email', `%${searchTerm}%`);
+        .textSearch('users.email', searchTerm);
 
       if (rolesError) {
         console.error('Error fetching athletes:', rolesError);
@@ -29,7 +96,6 @@ const CoachDashboard = () => {
         return;
       }
 
-      // Filter out any athletes that might already have a relationship with this coach
       const { data: existingRelations, error: relationsError } = await supabase
         .from('coach_athlete_relationships')
         .select('athlete_id')
@@ -42,12 +108,11 @@ const CoachDashboard = () => {
 
       const existingAthleteIds = existingRelations?.map(rel => rel.athlete_id) || [];
 
-      // Format athletes data, excluding those with existing relationships
       const formattedAthletes = athleteRoles
         ?.filter(athlete => !existingAthleteIds.includes(athlete.user_id))
         .map(athlete => ({
           user_id: athlete.user_id,
-          email: athlete.email?.email // Note the nested email property due to the join
+          email: athlete.users?.email?.email
         }))
         .filter(athlete => athlete.email) || [];
 
@@ -81,7 +146,6 @@ const CoachDashboard = () => {
       }
 
       toast.success('Invitation sent successfully');
-      // Remove the invited athlete from the list
       setAthletes(athletes.filter(athlete => athlete.user_id !== athleteId));
     } catch (error) {
       console.error('Error:', error);
@@ -94,7 +158,7 @@ const CoachDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
           <h3 className="text-lg font-semibold mb-2">Total Athletes</h3>
-          <p className="text-3xl font-bold text-purple-600">0</p>
+          <p className="text-3xl font-bold text-purple-600">{acceptedAthletes?.length || 0}</p>
         </div>
         <div className="p-6 bg-white rounded-lg shadow dark:bg-gray-800">
           <h3 className="text-lg font-semibold mb-2">Active Today</h3>
@@ -132,11 +196,21 @@ const CoachDashboard = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow p-6 dark:bg-gray-800">
-        <h2 className="text-xl font-bold mb-4">Recent Activity</h2>
-        <div className="space-y-4">
-          <div className="p-4 bg-gray-50 rounded-lg dark:bg-gray-700">
-            <p className="text-sm text-gray-600 dark:text-gray-300">No recent activity</p>
-          </div>
+        <h2 className="text-xl font-bold mb-6">Athletes Performance</h2>
+        <div className="space-y-8">
+          {athletesData?.map(athlete => (
+            <div key={athlete.id} className="space-y-4">
+              <GarminChart
+                data={athlete.garminData}
+                email={athlete.email}
+                onUpdate={() => {}} // No update needed for coach view
+                isUpdating={false}
+              />
+            </div>
+          ))}
+          {!athletesData?.length && (
+            <p className="text-gray-500 text-center py-4">No athletes data available</p>
+          )}
         </div>
       </div>
     </div>
