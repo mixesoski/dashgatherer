@@ -66,20 +66,6 @@ const Index = () => {
       
       if (!relationships || relationships.length === 0) return [];
 
-      // Get user roles for these athletes
-      const { data: athleteRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'athlete')
-        .in('user_id', relationships.map(r => r.athlete_id));
-
-      if (rolesError) {
-        console.error('Error fetching roles:', rolesError);
-        return [];
-      }
-
-      if (!athleteRoles || athleteRoles.length === 0) return [];
-
       // Get user details for athletes
       const { data: { users }, error: usersError } = await supabase.auth.admin
         .listUsers();
@@ -89,12 +75,14 @@ const Index = () => {
         return [];
       }
 
-      // Map athlete roles to user details
-      return athleteRoles
-        .map(role => {
-          const user = users?.find(u => u.id === role.user_id);
+      const usersList = users as User[];
+
+      // Map relationships to user details
+      return relationships
+        .map(rel => {
+          const user = usersList.find(u => u.id === rel.athlete_id);
           return user ? {
-            athlete_id: role.user_id,
+            athlete_id: rel.athlete_id,
             email: user.email
           } : null;
         })
@@ -226,7 +214,7 @@ const Index = () => {
               onChange={(e) => setSelectedAthleteId(e.target.value || null)}
             >
               <option value="">Select an athlete</option>
-              {athletes.map((athlete: any) => (
+              {athletes.map((athlete) => (
                 <option key={athlete.athlete_id} value={athlete.athlete_id}>
                   {athlete.email}
                 </option>
