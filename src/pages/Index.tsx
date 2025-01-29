@@ -198,6 +198,8 @@ const Index = () => {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
+  const selectedAthleteEmail = athletes?.find(athlete => athlete.athlete_id === selectedAthleteId)?.email;
+
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -235,7 +237,7 @@ const Index = () => {
           {garminCredentials ? (
             <div className="space-y-4">
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
-              <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
+              <p className="text-md text-gray-500">Connected email: {selectedAthleteEmail || garminCredentials.email}</p>
               {showButtons && userRole !== 'coach' && (
                 <div className="flex justify-center gap-4 items-center">
                   <TooltipProvider>
@@ -274,7 +276,7 @@ const Index = () => {
               {garminData && garminData.length > 0 && (
                 <GarminChart 
                   data={garminData} 
-                  email={garminCredentials.email}
+                  email={selectedAthleteEmail || garminCredentials.email}
                   onUpdate={handleUpdate}
                   isUpdating={isUpdating}
                 />
