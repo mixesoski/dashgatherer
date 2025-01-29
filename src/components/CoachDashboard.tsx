@@ -17,25 +17,35 @@ const CoachDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data: relationships, error } = await supabase
+      // First get the relationships
+      const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select(`
-          athlete_id,
-          athletes:athlete_id(
-            email:auth.users!user_roles_user_id_fkey(email)
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', user.id)
         .eq('status', 'accepted');
 
-      if (error) {
-        console.error('Error fetching accepted athletes:', error);
+      if (relationshipsError) {
+        console.error('Error fetching accepted athletes:', relationshipsError);
         return [];
       }
 
-      return relationships.map(rel => ({
-        id: rel.athlete_id,
-        email: rel.athletes?.email?.email
+      if (!relationships.length) return [];
+
+      // Then get the athlete emails
+      const { data: athleteEmails, error: emailsError } = await supabase
+        .from('user_roles')
+        .select('user_id, users:user_id(email)')
+        .in('user_id', relationships.map(rel => rel.athlete_id))
+        .eq('role', 'athlete');
+
+      if (emailsError) {
+        console.error('Error fetching athlete emails:', emailsError);
+        return [];
+      }
+
+      return athleteEmails.map(athlete => ({
+        id: athlete.user_id,
+        email: athlete.users?.email
       })).filter(athlete => athlete.email);
     }
   });
@@ -81,12 +91,7 @@ const CoachDashboard = () => {
 
       const { data: athleteRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select(`
-          user_id,
-          users:user_id(
-            email:auth.users!user_roles_user_id_fkey(email)
-          )
-        `)
+        .select('user_id, users:user_id(email)')
         .eq('role', 'athlete')
         .textSearch('users.email', searchTerm);
 
@@ -109,12 +114,14 @@ const CoachDashboard = () => {
       const existingAthleteIds = existingRelations?.map(rel => rel.athlete_id) || [];
 
       const formattedAthletes = athleteRoles
-        ?.filter(athlete => !existingAthleteIds.includes(athlete.user_id))
-        .map(athlete => ({
+        ?.map(athlete => ({
           user_id: athlete.user_id,
-          email: athlete.users?.email?.email
+          email: athlete.users?.email
         }))
-        .filter(athlete => athlete.email) || [];
+        .filter(athlete => 
+          athlete.email && 
+          !existingAthleteIds.includes(athlete.user_id)
+        ) || [];
 
       setAthletes(formattedAthletes);
     } catch (error) {
@@ -203,7 +210,7 @@ const CoachDashboard = () => {
               <GarminChart
                 data={athlete.garminData}
                 email={athlete.email}
-                onUpdate={() => {}} // No update needed for coach view
+                onUpdate={() => Promise.resolve()} // No update needed for coach view
                 isUpdating={false}
               />
             </div>
