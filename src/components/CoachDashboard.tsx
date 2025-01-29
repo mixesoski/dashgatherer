@@ -11,6 +11,13 @@ interface AthleteData {
   email: string | null;
 }
 
+interface UserRoleData {
+  user_id: string;
+  user: {
+    email: string | null;
+  } | null;
+}
+
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [athletes, setAthletes] = useState<any[]>([]);
@@ -22,26 +29,39 @@ const CoachDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      // Get relationships and join with auth.users through user_roles
-      const { data: relationships, error } = await supabase
+      // First get the relationships
+      const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select(`
-          athlete_id,
-          athlete:athlete_id (
-            email
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', user.id)
         .eq('status', 'accepted');
 
-      if (error) {
-        console.error('Error fetching accepted athletes:', error);
+      if (relationshipsError) {
+        console.error('Error fetching relationships:', relationshipsError);
         return [];
       }
 
-      return relationships.map(rel => ({
-        id: rel.athlete_id,
-        email: rel.athlete?.email
+      if (!relationships?.length) return [];
+
+      // Then get the athlete emails from auth.users through user_roles
+      const { data: athleteEmails, error: emailsError } = await supabase
+        .from('user_roles')
+        .select(`
+          user_id,
+          user:user_id (
+            email
+          )
+        `)
+        .in('user_id', relationships.map(rel => rel.athlete_id));
+
+      if (emailsError) {
+        console.error('Error fetching athlete emails:', emailsError);
+        return [];
+      }
+
+      return (athleteEmails || []).map((athlete: UserRoleData) => ({
+        id: athlete.user_id,
+        email: athlete.user?.email
       })).filter((athlete): athlete is AthleteData => 
         athlete.id !== null && athlete.email !== null
       );
@@ -116,15 +136,14 @@ const CoachDashboard = () => {
 
       const existingAthleteIds = existingRelations?.map(rel => rel.athlete_id) || [];
 
-      const formattedAthletes = athleteRoles
-        ?.map(athlete => ({
-          user_id: athlete.user_id,
-          email: athlete.user?.email
-        }))
-        .filter(athlete => 
-          athlete.email && 
-          !existingAthleteIds.includes(athlete.user_id)
-        ) || [];
+      const formattedAthletes = (athleteRoles || []).map((athlete: UserRoleData) => ({
+        user_id: athlete.user_id,
+        email: athlete.user?.email
+      }))
+      .filter(athlete => 
+        athlete.email && 
+        !existingAthleteIds.includes(athlete.user_id)
+      );
 
       setAthletes(formattedAthletes);
     } catch (error) {
