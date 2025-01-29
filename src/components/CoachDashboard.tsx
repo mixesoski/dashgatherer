@@ -6,11 +6,9 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { GarminChart } from '@/components/dashboard/GarminChart';
 
-interface AthleteEmail {
-  user_id: string;
-  users: {
-    email: string;
-  } | null;
+interface AthleteData {
+  id: string;
+  email: string | null;
 }
 
 const CoachDashboard = () => {
@@ -24,36 +22,29 @@ const CoachDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      // First get the relationships
-      const { data: relationships, error: relationshipsError } = await supabase
+      // Get relationships and join with auth.users through user_roles
+      const { data: relationships, error } = await supabase
         .from('coach_athlete_relationships')
-        .select('athlete_id')
+        .select(`
+          athlete_id,
+          athlete:athlete_id (
+            email
+          )
+        `)
         .eq('coach_id', user.id)
         .eq('status', 'accepted');
 
-      if (relationshipsError) {
-        console.error('Error fetching accepted athletes:', relationshipsError);
+      if (error) {
+        console.error('Error fetching accepted athletes:', error);
         return [];
       }
 
-      if (!relationships.length) return [];
-
-      // Then get the athlete emails
-      const { data: athleteEmails, error: emailsError } = await supabase
-        .from('user_roles')
-        .select<string, AthleteEmail>('user_id, users:user_id(email)')
-        .in('user_id', relationships.map(rel => rel.athlete_id))
-        .eq('role', 'athlete');
-
-      if (emailsError) {
-        console.error('Error fetching athlete emails:', emailsError);
-        return [];
-      }
-
-      return athleteEmails?.map(athlete => ({
-        id: athlete.user_id,
-        email: athlete.users?.email
-      })).filter(athlete => athlete.email);
+      return relationships.map(rel => ({
+        id: rel.athlete_id,
+        email: rel.athlete?.email
+      })).filter((athlete): athlete is AthleteData => 
+        athlete.id !== null && athlete.email !== null
+      );
     }
   });
 
@@ -98,9 +89,14 @@ const CoachDashboard = () => {
 
       const { data: athleteRoles, error: rolesError } = await supabase
         .from('user_roles')
-        .select<string, AthleteEmail>('user_id, users:user_id(email)')
+        .select(`
+          user_id,
+          user:user_id (
+            email
+          )
+        `)
         .eq('role', 'athlete')
-        .textSearch('users.email', searchTerm);
+        .textSearch('user.email', searchTerm);
 
       if (rolesError) {
         console.error('Error fetching athletes:', rolesError);
@@ -123,7 +119,7 @@ const CoachDashboard = () => {
       const formattedAthletes = athleteRoles
         ?.map(athlete => ({
           user_id: athlete.user_id,
-          email: athlete.users?.email
+          email: athlete.user?.email
         }))
         .filter(athlete => 
           athlete.email && 
@@ -217,7 +213,7 @@ const CoachDashboard = () => {
               <GarminChart
                 data={athlete.garminData}
                 email={athlete.email}
-                onUpdate={() => Promise.resolve()} // No update needed for coach view
+                onUpdate={() => Promise.resolve()}
                 isUpdating={false}
               />
             </div>
