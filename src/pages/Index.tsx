@@ -15,6 +15,13 @@ import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
+interface AthleteWithEmail {
+  athlete_id: string;
+  athlete: {
+    email: string;
+  };
+}
+
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -62,7 +69,7 @@ const Index = () => {
         return [];
       }
 
-      return data.map(relationship => ({
+      return (data as AthleteWithEmail[]).map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
           email: relationship.athlete.email
