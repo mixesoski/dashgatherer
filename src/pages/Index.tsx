@@ -203,7 +203,6 @@ const Index = () => {
         )}
 
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4">Welcome to Your Dashboard</h1>
           {garminCredentials ? (
             <div className="space-y-4">
               <p className="text-xl text-gray-600">Your Garmin account is connected</p>
@@ -260,7 +259,6 @@ const Index = () => {
           ) : null}
           
           {userRole === 'coach' && !selectedAthleteId && (
-            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
           )}
         </div>
       </div>
