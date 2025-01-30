@@ -18,7 +18,7 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/CoachDashboard";
+import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
 interface Athlete {
   user_id: string;
@@ -58,7 +58,6 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First get accepted coach-athlete relationships
       const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
         .select('athlete_id')
@@ -73,7 +72,7 @@ const Index = () => {
       if (!relationships || relationships.length === 0) return [];
 
       // Get user details for athletes
-      const { data: users, error: usersError } = await supabase.auth.admin
+      const { data, error: usersError } = await supabase.auth.admin
         .listUsers();
 
       if (usersError) {
@@ -84,7 +83,7 @@ const Index = () => {
       // Map relationships to user details
       return relationships
         .map(rel => {
-          const user = users?.find(u => u.id === rel.athlete_id);
+          const user = data?.users?.find(u => u.id === rel.athlete_id);
           return user ? {
             user_id: rel.athlete_id,
             user: {
