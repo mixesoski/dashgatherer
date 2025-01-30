@@ -19,7 +19,13 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/CoachDashboard";
-import { User } from '@supabase/supabase-js';
+
+interface Athlete {
+  user_id: string;
+  user: {
+    email: string;
+  };
+}
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -47,7 +53,7 @@ const Index = () => {
   });
 
   // Fetch athletes if user is a coach
-  const { data: athletes } = useQuery({
+  const { data: athletes } = useQuery<Athlete[]>({
     queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
@@ -67,7 +73,7 @@ const Index = () => {
       if (!relationships || relationships.length === 0) return [];
 
       // Get user details for athletes
-      const { data: { users }, error: usersError } = await supabase.auth.admin
+      const { data: users, error: usersError } = await supabase.auth.admin
         .listUsers();
 
       if (usersError) {
@@ -75,19 +81,19 @@ const Index = () => {
         return [];
       }
 
-      const usersList = users as User[];
-
       // Map relationships to user details
       return relationships
         .map(rel => {
-          const user = usersList.find(u => u.id === rel.athlete_id);
+          const user = users?.find(u => u.id === rel.athlete_id);
           return user ? {
-            athlete_id: rel.athlete_id,
-            email: user.email
+            user_id: rel.athlete_id,
+            user: {
+              email: user.email || ''
+            }
           } : null;
         })
-        .filter((athlete): athlete is { athlete_id: string; email: string } => 
-          athlete !== null && athlete.email !== undefined
+        .filter((athlete): athlete is Athlete => 
+          athlete !== null
         );
     },
     enabled: !!userId && roleData === 'coach'
@@ -198,7 +204,7 @@ const Index = () => {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
-  const selectedAthleteEmail = athletes?.find(athlete => athlete.athlete_id === selectedAthleteId)?.email;
+  const selectedAthleteEmail = athletes?.find(athlete => athlete.user_id === selectedAthleteId)?.user.email;
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -217,8 +223,8 @@ const Index = () => {
             >
               <option value="">Select an athlete</option>
               {athletes.map((athlete) => (
-                <option key={athlete.athlete_id} value={athlete.athlete_id}>
-                  {athlete.email}
+                <option key={athlete.user_id} value={athlete.user_id}>
+                  {athlete.user.email}
                 </option>
               ))}
             </select>
