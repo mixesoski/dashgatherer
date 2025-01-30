@@ -46,7 +46,6 @@ const Index = () => {
     enabled: !!userId
   });
 
-  // Fetch athletes if user is a coach
   const { data: athletes } = useQuery({
     queryKey: ['athletes', userId],
     queryFn: async () => {
@@ -55,7 +54,11 @@ const Index = () => {
       // First get accepted coach-athlete relationships
       const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
+<<<<<<< HEAD
         .select('athlete_id')
+=======
+        .select('athlete_id, users:auth.users(email)')
+>>>>>>> b0c3c59200e020a0291a04763d2b1514fad1b924
         .eq('coach_id', userId)
         .eq('status', 'accepted');
 
@@ -75,6 +78,7 @@ const Index = () => {
         return [];
       }
 
+<<<<<<< HEAD
       const usersList = users as User[];
 
       // Map relationships to user details
@@ -89,6 +93,14 @@ const Index = () => {
         .filter((athlete): athlete is { athlete_id: string; email: string } => 
           athlete !== null && athlete.email !== undefined
         );
+=======
+      return data.map(relationship => ({
+        user_id: relationship.athlete_id,
+        user: {
+          email: relationship.users.email
+        }
+      }));
+>>>>>>> b0c3c59200e020a0291a04763d2b1514fad1b924
     },
     enabled: !!userId && roleData === 'coach'
   });
@@ -287,10 +299,13 @@ const Index = () => {
               <GarminCredentialsForm />
             </>
           ) : null}
+<<<<<<< HEAD
           
           {userRole === 'coach' && !selectedAthleteId && (
             <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
           )}
+=======
+>>>>>>> b0c3c59200e020a0291a04763d2b1514fad1b924
         </div>
       </div>
     </div>
