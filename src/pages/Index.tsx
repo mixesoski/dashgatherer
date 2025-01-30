@@ -16,8 +16,10 @@ import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
 interface AthleteWithEmail {
-  athlete_id: string;
-  user_email: string;
+  user_id: string;
+  user: {
+    email: string;
+  };
 }
 
 const Index = () => {
@@ -55,7 +57,7 @@ const Index = () => {
         .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          user_email:auth.users!coach_athlete_relationships_athlete_id_fkey(email)
+          users:auth.users!coach_athlete_relationships_athlete_id_fkey(email)
         `)
         .eq('coach_id', userId)
         .eq('status', 'accepted');
@@ -68,7 +70,7 @@ const Index = () => {
       return data.map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
-          email: relationship.user_email
+          email: relationship.users.email
         }
       }));
     },
