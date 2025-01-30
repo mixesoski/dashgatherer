@@ -17,9 +17,7 @@ import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
 interface AthleteWithEmail {
   athlete_id: string;
-  athlete: {
-    email: string;
-  };
+  user_email: string;
 }
 
 const Index = () => {
@@ -57,9 +55,7 @@ const Index = () => {
         .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          athlete:athlete_id (
-            email
-          )
+          user_email:auth.users!coach_athlete_relationships_athlete_id_fkey(email)
         `)
         .eq('coach_id', userId)
         .eq('status', 'accepted');
@@ -69,10 +65,10 @@ const Index = () => {
         return [];
       }
 
-      return (data as AthleteWithEmail[]).map(relationship => ({
+      return data.map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
-          email: relationship.athlete.email
+          email: relationship.user_email
         }
       }));
     },
