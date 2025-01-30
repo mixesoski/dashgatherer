@@ -1,12 +1,62 @@
 import React from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const CoachDashboard = () => {
+interface Athlete {
+  user_id: string;
+  user: {
+    email: string;
+  };
+}
+
+interface CoachDashboardProps {
+  athletes?: Athlete[];
+  selectedAthleteId: string | null;
+  onAthleteSelect: (athleteId: string | null) => void;
+}
+
+const CoachDashboard = ({ 
+  athletes = [], 
+  selectedAthleteId,
+  onAthleteSelect 
+}: CoachDashboardProps) => {
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-4">Coach Dashboard</h2>
-      <p className="text-gray-600">
-        Welcome to your coach dashboard. Select an athlete from the dropdown above to view their training data.
-      </p>
+      
+      <div className="space-y-4">
+        <div className="max-w-xs">
+          <label htmlFor="athlete-select" className="block text-sm font-medium text-gray-700 mb-2">
+            Select Athlete
+          </label>
+          <Select
+            value={selectedAthleteId || ""}
+            onValueChange={(value) => onAthleteSelect(value || null)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select an athlete" />
+            </SelectTrigger>
+            <SelectContent>
+              {athletes.map((athlete) => (
+                <SelectItem key={athlete.user_id} value={athlete.user_id}>
+                  {athlete.user.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {!selectedAthleteId && (
+          <p className="text-gray-600">
+            Please select an athlete from the dropdown above to view their training data.
+          </p>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,16 +1,11 @@
+import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
@@ -72,16 +67,13 @@ const Index = () => {
       
       if (!relationships || relationships.length === 0) return [];
 
-      // Get user details for athletes
-      const { data, error: usersError } = await supabase.auth.admin
-        .listUsers();
+      const { data, error: usersError } = await supabase.auth.admin.listUsers();
 
       if (usersError) {
         console.error('Error fetching users:', usersError);
         return [];
       }
 
-      // Map relationships to user details
       return relationships
         .map(rel => {
           const user = data?.users?.find((u: User) => u.id === rel.athlete_id);
@@ -212,27 +204,13 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
-        {userRole === 'coach' && athletes && athletes.length > 0 && (
-          <div className="mb-8">
-            <select
-              className="w-full max-w-xs p-2 border rounded-md"
-              value={selectedAthleteId || ''}
-              onChange={(e) => setSelectedAthleteId(e.target.value || null)}
-            >
-              <option value="">Select an athlete</option>
-              {athletes.map((athlete) => (
-                <option key={athlete.user_id} value={athlete.user_id}>
-                  {athlete.user.email}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {userRole === 'coach' && !selectedAthleteId && (
+        {userRole === 'coach' && (
           <div className="space-y-8">
-            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
-            <CoachDashboard />
+            <CoachDashboard
+              athletes={athletes}
+              selectedAthleteId={selectedAthleteId}
+              onAthleteSelect={setSelectedAthleteId}
+            />
           </div>
         )}
 
