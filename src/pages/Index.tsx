@@ -57,7 +57,7 @@ const Index = () => {
         .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          athlete:auth.users(email)
+          athlete:auth_users!coach_athlete_relationships_athlete_id_fkey(email)
         `)
         .eq('coach_id', userId)
         .eq('status', 'accepted');
