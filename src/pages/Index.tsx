@@ -14,14 +14,6 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
-import { User } from '@supabase/supabase-js';
-
-interface Athlete {
-  user_id: string;
-  user: {
-    email: string;
-  };
-}
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -54,37 +46,28 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data: relationships, error: relationshipsError } = await supabase
+      const { data, error } = await supabase
         .from('coach_athlete_relationships')
-        .select('athlete_id')
+        .select(`
+          athlete_id,
+          athlete:athlete_id (
+            email
+          )
+        `)
         .eq('coach_id', userId)
         .eq('status', 'accepted');
 
-      if (relationshipsError) {
-        console.error('Error fetching relationships:', relationshipsError);
-        return [];
-      }
-      
-      if (!relationships || relationships.length === 0) return [];
-
-      const { data, error: usersError } = await supabase.auth.admin.listUsers();
-
-      if (usersError) {
-        console.error('Error fetching users:', usersError);
+      if (error) {
+        console.error('Error fetching relationships:', error);
         return [];
       }
 
-      return relationships
-        .map(rel => {
-          const user = data?.users?.find((u: User) => u.id === rel.athlete_id);
-          return user ? {
-            user_id: rel.athlete_id,
-            user: {
-              email: user.email || ''
-            }
-          } : null;
-        })
-        .filter((athlete): athlete is Athlete => athlete !== null);
+      return data.map(relationship => ({
+        user_id: relationship.athlete_id,
+        user: {
+          email: relationship.athlete.email
+        }
+      }));
     },
     enabled: !!userId && roleData === 'coach'
   });
