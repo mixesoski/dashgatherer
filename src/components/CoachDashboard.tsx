@@ -15,12 +15,19 @@ interface UserRoleData {
   user_id: string;
   user: {
     email: string | null;
+  };
+}
+
+interface AthleteRole {
+  user_id: string;
+  user: {
+    email: string;
   } | null;
 }
 
 const CoachDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [athletes, setAthletes] = useState<any[]>([]);
+  const [athletes, setAthletes] = useState<AthleteRole[]>([]);
 
   // Fetch coach's athletes with accepted relationships
   const { data: acceptedAthletes } = useQuery({
@@ -59,12 +66,14 @@ const CoachDashboard = () => {
         return [];
       }
 
-      return (athleteEmails || []).map((athlete: UserRoleData) => ({
-        id: athlete.user_id,
-        email: athlete.user?.email
-      })).filter((athlete): athlete is AthleteData => 
-        athlete.id !== null && athlete.email !== null
-      );
+      return (athleteEmails || [])
+        .map((athlete: UserRoleData) => ({
+          id: athlete.user_id,
+          email: athlete.user?.email
+        }))
+        .filter((athlete): athlete is AthleteData => 
+          athlete.id !== null && athlete.email !== null
+        );
     }
   });
 
@@ -136,14 +145,15 @@ const CoachDashboard = () => {
 
       const existingAthleteIds = existingRelations?.map(rel => rel.athlete_id) || [];
 
-      const formattedAthletes = (athleteRoles || []).map((athlete: UserRoleData) => ({
-        user_id: athlete.user_id,
-        email: athlete.user?.email
-      }))
-      .filter(athlete => 
-        athlete.email && 
-        !existingAthleteIds.includes(athlete.user_id)
-      );
+      const formattedAthletes = (athleteRoles || [])
+        .map((athlete: UserRoleData) => ({
+          user_id: athlete.user_id,
+          user: athlete.user
+        }))
+        .filter(athlete => 
+          athlete.user?.email && 
+          !existingAthleteIds.includes(athlete.user_id)
+        );
 
       setAthletes(formattedAthletes);
     } catch (error) {
