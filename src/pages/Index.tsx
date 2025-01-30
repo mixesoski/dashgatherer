@@ -47,7 +47,6 @@ const Index = () => {
     enabled: !!userId
   });
 
-  // Fetch athletes if user is a coach
   const { data: athletes } = useQuery({
     queryKey: ['athletes', userId],
     queryFn: async () => {
@@ -254,9 +253,6 @@ const Index = () => {
               <GarminCredentialsForm />
             </>
           ) : null}
-          
-          {userRole === 'coach' && !selectedAthleteId && (
-          )}
         </div>
       </div>
     </div>
