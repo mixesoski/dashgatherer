@@ -19,6 +19,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
+import { User } from '@supabase/supabase-js';
 
 interface Athlete {
   user_id: string;
@@ -53,7 +54,7 @@ const Index = () => {
   });
 
   // Fetch athletes if user is a coach
-  const { data: athletes } = useQuery<Athlete[]>({
+  const { data: athletes } = useQuery({
     queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
@@ -83,7 +84,7 @@ const Index = () => {
       // Map relationships to user details
       return relationships
         .map(rel => {
-          const user = data?.users?.find(u => u.id === rel.athlete_id);
+          const user = data?.users?.find((u: User) => u.id === rel.athlete_id);
           return user ? {
             user_id: rel.athlete_id,
             user: {
@@ -91,9 +92,7 @@ const Index = () => {
             }
           } : null;
         })
-        .filter((athlete): athlete is Athlete => 
-          athlete !== null
-        );
+        .filter((athlete): athlete is Athlete => athlete !== null);
     },
     enabled: !!userId && roleData === 'coach'
   });
