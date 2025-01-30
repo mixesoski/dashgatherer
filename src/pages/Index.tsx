@@ -1,11 +1,16 @@
-import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
+import { useEffect, useState } from 'react';
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
 import { GarminChart } from "@/components/dashboard/GarminChart";
 import DatePicker from 'react-datepicker';
@@ -13,14 +18,8 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/dashboard/CoachDashboard";
-
-interface AthleteWithEmail {
-  user_id: string;
-  user: {
-    email: string;
-  };
-}
+import CoachDashboard from "@/components/CoachDashboard";
+import { User } from '@supabase/supabase-js';
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -53,26 +52,43 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data, error } = await supabase
+      // First get accepted coach-athlete relationships
+      const { data: relationships, error: relationshipsError } = await supabase
         .from('coach_athlete_relationships')
-        .select(`
-          athlete_id,
-          user:auth.users!coach_athlete_relationships_athlete_id_fkey(email)
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId)
         .eq('status', 'accepted');
 
-      if (error) {
-        console.error('Error fetching relationships:', error);
+      if (relationshipsError) {
+        console.error('Error fetching relationships:', relationshipsError);
+        return [];
+      }
+      
+      if (!relationships || relationships.length === 0) return [];
+
+      // Get user details for athletes
+      const { data: { users }, error: usersError } = await supabase.auth.admin
+        .listUsers();
+
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
         return [];
       }
 
-      return data.map(relationship => ({
-        user_id: relationship.athlete_id,
-        user: {
-          email: relationship.user.email
-        }
-      }));
+      const usersList = users as User[];
+
+      // Map relationships to user details
+      return relationships
+        .map(rel => {
+          const user = usersList.find(u => u.id === rel.athlete_id);
+          return user ? {
+            athlete_id: rel.athlete_id,
+            email: user.email
+          } : null;
+        })
+        .filter((athlete): athlete is { athlete_id: string; email: string } => 
+          athlete !== null && athlete.email !== undefined
+        );
     },
     enabled: !!userId && roleData === 'coach'
   });
@@ -182,7 +198,7 @@ const Index = () => {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
-  const selectedAthleteEmail = athletes?.find(athlete => athlete.user_id === selectedAthleteId)?.user.email;
+  const selectedAthleteEmail = athletes?.find(athlete => athlete.athlete_id === selectedAthleteId)?.email;
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -192,13 +208,27 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
-        {userRole === 'coach' && (
+        {userRole === 'coach' && athletes && athletes.length > 0 && (
+          <div className="mb-8">
+            <select
+              className="w-full max-w-xs p-2 border rounded-md"
+              value={selectedAthleteId || ''}
+              onChange={(e) => setSelectedAthleteId(e.target.value || null)}
+            >
+              <option value="">Select an athlete</option>
+              {athletes.map((athlete) => (
+                <option key={athlete.athlete_id} value={athlete.athlete_id}>
+                  {athlete.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {userRole === 'coach' && !selectedAthleteId && (
           <div className="space-y-8">
-            <CoachDashboard
-              athletes={athletes}
-              selectedAthleteId={selectedAthleteId}
-              onAthleteSelect={setSelectedAthleteId}
-            />
+            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
+            <CoachDashboard />
           </div>
         )}
 
@@ -259,6 +289,7 @@ const Index = () => {
           ) : null}
           
           {userRole === 'coach' && !selectedAthleteId && (
+            <p className="text-xl text-gray-600 mt-8">Please select an athlete to view their data</p>
           )}
         </div>
       </div>
