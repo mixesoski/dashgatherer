@@ -57,7 +57,7 @@ const Index = () => {
         .from('coach_athlete_relationships')
         .select(`
           athlete_id,
-          athlete:auth_users!coach_athlete_relationships_athlete_id_fkey(email)
+          user:auth.users!coach_athlete_relationships_athlete_id_fkey(email)
         `)
         .eq('coach_id', userId)
         .eq('status', 'accepted');
@@ -70,7 +70,7 @@ const Index = () => {
       return data.map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
-          email: relationship.athlete.email
+          email: relationship.user.email
         }
       }));
     },
