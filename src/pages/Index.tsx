@@ -27,6 +27,13 @@ interface AthleteWithEmail {
   };
 }
 
+interface CoachAthleteJoin {
+  athlete_id: string;
+  athlete: {
+    email: string;
+  };
+}
+
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -58,7 +65,7 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data: coachAthletes, error: coachAthletesError } = await supabase
+      const { data, error } = await supabase
         .from('coach_athletes')
         .select(`
           athlete_id,
@@ -68,15 +75,15 @@ const Index = () => {
         `)
         .eq('coach_id', userId);
 
-      if (coachAthletesError) {
-        console.error('Error fetching coach athletes:', coachAthletesError);
+      if (error) {
+        console.error('Error fetching coach athletes:', error);
         return [];
       }
 
-      return coachAthletes.map(athlete => ({
-        user_id: athlete.athlete_id,
+      return data.map((relationship: CoachAthleteJoin) => ({
+        user_id: relationship.athlete_id,
         user: {
-          email: athlete.athlete.email
+          email: relationship.athlete.email
         }
       }));
     },
