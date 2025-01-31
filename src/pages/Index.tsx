@@ -68,7 +68,7 @@ const Index = () => {
       const athleteIds = data.map((relationship: { athlete_id: string }) => relationship.athlete_id);
       const { data: athleteDetails, error: athleteError } = await supabase
         .from('user_roles')
-        .select('user_id, users: user_id (email)')
+        .select('user_id, users (email)')
         .in('user_id', athleteIds)
         .eq('role', 'athlete');
 
@@ -79,12 +79,17 @@ const Index = () => {
 
       console.log('Fetched athlete details:', athleteDetails);
 
-      return athleteDetails.map((athlete: { user_id: string, users: { email: string } }) => ({
+      return athleteDetails.map((athlete: { user_id: string, users: { email: string }[] }) => ({
         id: athlete.user_id,
-        email: athlete.users.email
+        email: athlete.users[0]?.email // Access the first element of the users array
       }));
     },
-    enabled: !!userId && roleData === 'coach'
+    enabled: !!userId && roleData === 'coach',
+    onSuccess: (athletes) => {
+      if (athletes.length > 0 && !selectedAthleteId) {
+        setSelectedAthleteId(athletes[0].id); // Automatically select the first athlete
+      }
+    }
   });
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
