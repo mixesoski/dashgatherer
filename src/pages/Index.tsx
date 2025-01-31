@@ -62,6 +62,8 @@ const Index = () => {
         return [];
       }
 
+      console.log('Fetched athlete IDs:', data);
+
       // Fetch athlete details using athlete_id from the user_roles table
       const athleteIds = data.map((relationship: { athlete_id: string }) => relationship.athlete_id);
       const { data: athleteDetails, error: athleteError } = await supabase
@@ -74,6 +76,8 @@ const Index = () => {
         console.error('Error fetching athlete details:', athleteError);
         return [];
       }
+
+      console.log('Fetched athlete details:', athleteDetails);
 
       return athleteDetails.map((athlete: { user_id: string, users: { email: string } }) => ({
         id: athlete.user_id,
