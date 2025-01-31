@@ -18,7 +18,7 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/CoachDashboard";
+import CoachDashboard from "@/components/dashboard/CoachDashboard";
 import { User } from '@supabase/supabase-js';
 
 const Index = () => {
@@ -62,19 +62,23 @@ const Index = () => {
         return [];
       }
 
-      // Fetch athlete details using athlete_id
+      // Fetch athlete details using athlete_id from the user_roles table
       const athleteIds = data.map((relationship: { athlete_id: string }) => relationship.athlete_id);
       const { data: athleteDetails, error: athleteError } = await supabase
-        .from('athletes')
-        .select('id, email')
-        .in('id', athleteIds);
+        .from('user_roles')
+        .select('user_id, users: user_id (email)')
+        .in('user_id', athleteIds)
+        .eq('role', 'athlete');
 
       if (athleteError) {
         console.error('Error fetching athlete details:', athleteError);
         return [];
       }
 
-      return athleteDetails;
+      return athleteDetails.map((athlete: { user_id: string, users: { email: string } }) => ({
+        id: athlete.user_id,
+        email: athlete.users.email
+      }));
     },
     enabled: !!userId && roleData === 'coach'
   });
