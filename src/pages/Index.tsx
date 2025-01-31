@@ -54,12 +54,7 @@ const Index = () => {
       
       const { data, error } = await supabase
         .from('coach_athletes')
-        .select(`
-          athlete_id,
-          athlete:athlete_id (
-            email
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId);
 
       if (error) {
@@ -67,12 +62,19 @@ const Index = () => {
         return [];
       }
 
-      return data.map((relationship: CoachAthleteJoin) => ({
-        user_id: relationship.athlete_id,
-        user: {
-          email: relationship.athlete.email
-        }
-      }));
+      // Fetch athlete details using athlete_id
+      const athleteIds = data.map((relationship: { athlete_id: string }) => relationship.athlete_id);
+      const { data: athleteDetails, error: athleteError } = await supabase
+        .from('athletes')
+        .select('id, email')
+        .in('id', athleteIds);
+
+      if (athleteError) {
+        console.error('Error fetching athlete details:', athleteError);
+        return [];
+      }
+
+      return athleteDetails;
     },
     enabled: !!userId && roleData === 'coach'
   });
@@ -182,7 +184,7 @@ const Index = () => {
     return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
-  const selectedAthleteEmail = athletes?.find(athlete => athlete.user_id === selectedAthleteId)?.user.email;
+  const selectedAthleteEmail = athletes?.find(athlete => athlete.id === selectedAthleteId)?.email;
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
