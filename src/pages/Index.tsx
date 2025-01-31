@@ -18,7 +18,7 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/CoachDashboard";
+import CoachDashboard from "@/components/dashboard/CoachDashboard";
 import { User } from '@supabase/supabase-js';
 
 const Index = () => {
