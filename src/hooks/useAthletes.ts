@@ -6,7 +6,7 @@ export const fetchAthletes = async () => {
     .from("coach_athletes")
     .select(`
       athlete_id,
-      athlete:auth.users (
+      user:auth.users (
         email
       )
     `);
