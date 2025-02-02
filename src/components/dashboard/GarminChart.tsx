@@ -50,9 +50,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const latestData = sortedData[sortedData.length - 1];
   console.log('Latest data:', latestData);
   
-  // Default to "No data" if TSB is null
-  const status = latestData?.tsb !== null 
-    ? (latestData.tsb < 0 ? 'Zmęczenie' : 'Wypoczęty')
+  // Get TSB value safely using optional chaining
+  const tsb = latestData?.tsb;
+  const status = (tsb !== undefined && tsb !== null)
+    ? (tsb < 0 ? 'Zmęczenie' : 'Wypoczęty')
     : 'No data';
   
   const chartData = {
