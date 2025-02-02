@@ -58,22 +58,31 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data, error } = await supabase
+      // First get athlete IDs from coach_athletes
+      const { data: coachRelationships, error: coachError } = await supabase
         .from('coach_athletes')
-        .select(`
-          athlete_id,
-          users (
-            email
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId);
 
-      return data?.map(relationship => ({
-        user_id: relationship.athlete_id,
+      if (coachError || !coachRelationships) return [];
+
+      // Then get emails from user_roles
+      const athleteIds = coachRelationships.map(r => r.athlete_id);
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, email')
+        .in('user_id', athleteIds)
+        .eq('role', 'athlete');
+
+      if (rolesError || !userRoles) return [];
+
+      // Map athlete IDs to emails
+      return athleteIds.map(athleteId => ({
+        user_id: athleteId,
         user: {
-          email: relationship.users?.email || 'No email'
+          email: userRoles.find(ur => ur.user_id === athleteId)?.email || 'No email'
         }
-      })) || [];
+      }));
     },
     enabled: !!userId && roleData === 'coach'
   });
