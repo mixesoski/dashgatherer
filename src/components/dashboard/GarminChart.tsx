@@ -55,7 +55,17 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const status = (tsb !== undefined && tsb !== null)
     ? (tsb < 0 ? 'Zmęczenie' : 'Wypoczęty')
     : 'No data';
-  
+
+  // Helper function to determine TSB status and color
+  const getTsbStatus = (tsb: number | null | undefined) => {
+    if (tsb === undefined || tsb === null) return { text: 'No data', color: 'text-gray-500' };
+    
+    if (tsb < -70) return { text: 'Bardzo duże zmęczenie', color: 'text-red-700' };
+    if (tsb < 0) return { text: 'Zmęczenie', color: 'text-red-500' };
+    if (tsb >= 0 && tsb <= 30) return { text: 'Optymalna forma', color: 'text-green-600' };
+    return { text: 'Wypoczęty', color: 'text-blue-600' };
+  };
+
   const chartData = {
     labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
     datasets: [
@@ -176,17 +186,33 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       
       <div className="relative">
         <div className="absolute top-4 right-4 z-10">
-          <div className="bg-orange-50 rounded-lg p-4 border border-orange-100 w-64">
-            <div className="flex items-center space-x-2">
-              <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span className="font-medium text-orange-800">{status}</span>
-            </div>
-            <div className="mt-2 text-sm text-orange-700">
-              TSB: {latestData?.tsb?.toFixed(1) ?? 'N/A'} | CTL: {latestData?.ctl?.toFixed(1) ?? 'N/A'}
-              <br />
-              Data: {latestData ? new Date(latestData.date).toLocaleDateString() : 'N/A'}
+          <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm w-56">
+            <div className="grid gap-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Status:</span>
+                <span className={`${getTsbStatus(latestData?.tsb).color} font-semibold`}>
+                  {getTsbStatus(latestData?.tsb).text}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex flex-col">
+                  <span className="text-blue-600 font-medium">ATL (Zmęczenie)</span>
+                  <span>{latestData?.atl?.toFixed(1) ?? 'N/A'}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-yellow-600 font-medium">CTL (Wydolność)</span>
+                  <span>{latestData?.ctl?.toFixed(1) ?? 'N/A'}</span>
+                </div>
+              </div>
+              
+              <div className="flex flex-col text-xs pt-1 border-t">
+                <span className="text-red-600 font-medium">TSB (Forma)</span>
+                <span>{latestData?.tsb?.toFixed(1) ?? 'N/A'}</span>
+                <span className="text-[10px] text-gray-500 mt-0.5">
+                  {new Date(latestData?.date ?? '').toLocaleDateString()}
+                </span>
+              </div>
             </div>
           </div>
         </div>
