@@ -52,6 +52,7 @@ const Index = () => {
 
   // Fetch athletes if user is a coach
   const { data: athletes } = useQuery<Athlete[]>({
+    queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
@@ -65,7 +66,7 @@ const Index = () => {
 
       const athleteIds = coachData.map(a => a.athlete_id);
 
-      // Instead of querying auth.users (which is unavailable), use a fallback default email.
+      // Instead of querying auth.users (which is unavailable), use fallback default email for each athlete
       return athleteIds.map(id => ({
         user_id: id,
         user: { email: 'No email' }
