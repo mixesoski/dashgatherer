@@ -62,8 +62,10 @@ const Index = () => {
         .from('coach_athletes')
         .select(`
           athlete_id,
-          users:athlete_id (
-            email
+          user_roles:athlete_id (
+            user:user_id (
+              email
+            )
           )
         `)
         .eq('coach_id', userId);
@@ -76,7 +78,7 @@ const Index = () => {
       return data.map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
-          email: relationship.users.email
+          email: relationship.user_roles?.user?.email || 'No email'
         }
       }));
     },
