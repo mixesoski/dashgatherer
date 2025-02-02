@@ -36,8 +36,8 @@ export const InviteCoachDialog = () => {
     },
   });
 
-  // Don't render anything if user is a coach
-  if (userRole === 'coach') return null;
+  // Show the button only for athletes (or when role is not yet loaded)
+  if (userRole && userRole !== 'athlete') return null;
 
   const handleInvite = async () => {
     try {
