@@ -29,14 +29,11 @@ const CoachDashboard = ({
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-4">
-        {selectedAthlete ? selectedAthlete.user.email : "Coach Dashboard"}
+        {selectedAthlete && selectedAthlete.user ? selectedAthlete.user.email : "Coach Dashboard"}
       </h2>
       
       <div className="space-y-4">
         <div className="max-w-xs">
-          <label htmlFor="athlete-select" className="block text-sm font-medium text-gray-700 mb-2">
-            Select Athlete
-          </label>
           <Select
             value={selectedAthleteId || ""}
             onValueChange={(value) => onAthleteSelect(value || null)}
