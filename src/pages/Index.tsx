@@ -58,17 +58,18 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First, get athlete IDs managed by this coach without any join alias
+      // Get athlete IDs managed by this coach
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select('athlete_id')
         .eq('coach_id', userId);
 
-      if (coachError || !coachData) return [];
+      if (coachError) return [];
+      if (!coachData || !Array.isArray(coachData)) return [];
+      const typedCoachData = coachData as { athlete_id: string | null }[];
+      const athleteIds = typedCoachData.map(a => a.athlete_id).filter((id): id is string => Boolean(id));
 
-      const athleteIds = coachData.map(a => a.athlete_id);
-
-      // Instead of querying auth.users (which is unavailable), use fallback default email for each athlete
+      // Use fallback email for each athlete
       return athleteIds.map(id => ({
         user_id: id,
         user: { email: 'No email' }
@@ -101,7 +102,7 @@ const Index = () => {
   const { data: garminData, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', relevantUserId],
     queryFn: async () => {
-      if (!relevantUserId) return null;
+      if (!relevantUserId) return [];
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
@@ -196,7 +197,7 @@ const Index = () => {
             {selectedAthleteId ? (
               <div className="bg-white p-6 rounded-lg shadow mb-8">
                 <GarminChart 
-                  data={garminData || []}
+                  data={garminData?.filter(Boolean) || []}
                   email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"}
                   onUpdate={handleUpdate}
                   isUpdating={isUpdating}
@@ -256,7 +257,7 @@ const Index = () => {
             )}
             <div className="bg-white p-6 rounded-lg shadow mb-8">
               <GarminChart 
-                data={garminData || []}
+                data={garminData?.filter(Boolean) || []}
                 email={garminCredentials?.email || ""}
                 onUpdate={handleUpdate}
                 isUpdating={isUpdating}
