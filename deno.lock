@@ -93,7 +93,7 @@
         "npm:@supabase/auth-helpers-react@0.5",
         "npm:@supabase/auth-ui-react@~0.4.7",
         "npm:@supabase/auth-ui-shared@~0.1.8",
-        "npm:@supabase/supabase-js@^2.47.16",
+        "npm:@supabase/supabase-js@^2.48.1",
         "npm:@tailwindcss/typography@~0.5.15",
         "npm:@tanstack/react-query@^5.56.2",
         "npm:@types/node@^22.5.5",
