@@ -19,6 +19,13 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 
+interface Athlete {
+  user_id: string;
+  user: {
+    email: string;
+  };
+}
+
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -44,27 +51,28 @@ const Index = () => {
   });
 
   // Fetch athletes if user is a coach
-  const { data: athletes } = useQuery({
+  const { data: athletes } = useQuery<Athlete[]>({
     queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      const { data, error } = await supabase
+      const { data: coachAthletes, error: coachError } = await supabase
         .from('coach_athletes')
         .select(`
           athlete_id,
-          athlete:athlete_id(
+          athlete:athlete_id (
+            id,
             email
           )
         `)
         .eq('coach_id', userId);
 
-      if (error) throw error;
+      if (coachError) throw coachError;
       
-      return data.map(relationship => ({
+      return (coachAthletes || []).map(relationship => ({
         user_id: relationship.athlete_id,
         user: { 
-          email: relationship.athlete.email 
+          email: relationship.athlete?.email || 'No email'
         }
       }));
     },
