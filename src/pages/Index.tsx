@@ -62,23 +62,18 @@ const Index = () => {
         .from('coach_athletes')
         .select(`
           athlete_id,
-          users!coach_athletes_athlete_id_fkey (
+          users (
             email
           )
         `)
         .eq('coach_id', userId);
 
-      if (error) {
-        console.error('Error fetching coach athletes:', error);
-        return [];
-      }
-
-      return data.map(relationship => ({
+      return data?.map(relationship => ({
         user_id: relationship.athlete_id,
         user: {
           email: relationship.users?.email || 'No email'
         }
-      }));
+      })) || [];
     },
     enabled: !!userId && roleData === 'coach'
   });
