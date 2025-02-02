@@ -206,6 +206,7 @@ const Index = () => {
                 <AthleteChart 
                   athleteId={athlete.user_id}
                   email={athlete.user.email}
+                  hideSelect={true}
                 />
               </div>
             ))}
