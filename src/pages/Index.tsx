@@ -136,7 +136,7 @@ const Index = () => {
         .from('coach_athletes')
         .select(`
           athlete_id,
-          user:users (email)
+          user:users!athlete_id (email)
         `)
         .eq('coach_id', userId);
 
@@ -223,8 +223,7 @@ const Index = () => {
     const { error } = await supabase
       .from('garmin_credentials')
       .delete()
-      .eq('user_id', userId)
-      .single();
+      .eq('user_id', userId);
 
     if (error) {
       toast.error("Failed to delete Garmin credentials");
