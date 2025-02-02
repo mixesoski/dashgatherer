@@ -18,7 +18,7 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import CoachDashboard from "@/components/dashboard/CoachDashboard";
+import { AthleteChart } from "@/components/dashboard/AthleteChart";
 
 interface AthleteWithEmail {
   user_id: string;
@@ -58,29 +58,28 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First get athlete IDs from coach_athletes
-      const { data: coachRelationships, error: coachError } = await supabase
+      // Get coach's athletes
+      const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select('athlete_id')
         .eq('coach_id', userId);
 
-      if (coachError || !coachRelationships) return [];
+      if (coachError || !coachData) return [];
 
-      // Then get emails from user_roles
-      const athleteIds = coachRelationships.map(r => r.athlete_id);
-      const { data: userRoles, error: rolesError } = await supabase
+      // Get athlete details from user_roles
+      const athleteIds = coachData.map(a => a.athlete_id);
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, email')
         .in('user_id', athleteIds)
         .eq('role', 'athlete');
 
-      if (rolesError || !userRoles) return [];
+      if (rolesError || !rolesData) return [];
 
-      // Map athlete IDs to emails
-      return athleteIds.map(athleteId => ({
-        user_id: athleteId,
+      return rolesData.map(role => ({
+        user_id: role.user_id,
         user: {
-          email: userRoles.find(ur => ur.user_id === athleteId)?.email || 'No email'
+          email: role.email || 'No email'
         }
       }));
     },
@@ -202,13 +201,18 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
-        {userRole === 'coach' && (
+        {userRole === 'coach' && athletes && (
           <div className="space-y-8">
-            <CoachDashboard
-              athletes={athletes}
-              selectedAthleteId={selectedAthleteId}
-              onAthleteSelect={setSelectedAthleteId}
-            />
+            <h2 className="text-2xl font-bold mb-4">Athletes Performance</h2>
+            {athletes.map(athlete => (
+              <div key={athlete.user_id} className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold mb-4">{athlete.user.email}'s Training Load</h3>
+                <AthleteChart 
+                  athleteId={athlete.user_id}
+                  email={athlete.user.email}
+                />
+              </div>
+            ))}
           </div>
         )}
 
