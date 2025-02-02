@@ -55,7 +55,7 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // First, get athlete IDs managed by this coach
+      // First, get athlete IDs managed by this coach without any join alias
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select('athlete_id')
