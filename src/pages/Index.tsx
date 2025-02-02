@@ -109,7 +109,7 @@ const Index = () => {
         .eq('user_id', relevantUserId)
         .order('date', { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []).filter(r => r !== undefined);
     },
     enabled: !!relevantUserId
   });

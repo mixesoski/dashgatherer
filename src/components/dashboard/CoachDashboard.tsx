@@ -25,9 +25,12 @@ const CoachDashboard = ({
   selectedAthleteId,
   onAthleteSelect 
 }: CoachDashboardProps) => {
+  const selectedAthlete = athletes.find(a => a.user_id === selectedAthleteId);
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-2xl font-bold mb-4">Coach Dashboard</h2>
+      <h2 className="text-2xl font-bold mb-4">
+        {selectedAthlete ? selectedAthlete.user.email : "Coach Dashboard"}
+      </h2>
       
       <div className="space-y-4">
         <div className="max-w-xs">
