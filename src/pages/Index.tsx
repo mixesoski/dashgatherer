@@ -53,12 +53,12 @@ const Index = () => {
   });
 
   // Fetch athletes if user is a coach
-  const { data: athletes } = useQuery({
+  const { data: athletes } = useQuery<AthleteWithEmail[]>({
     queryKey: ['athletes', userId],
-    queryFn: async () => {
+    queryFn: async (): Promise<AthleteWithEmail[]> => {
       if (!userId || roleData !== 'coach') return [];
       
-      // Get coach's athletes
+      // Get athlete IDs managed by this coach
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select('athlete_id')
@@ -66,20 +66,21 @@ const Index = () => {
 
       if (coachError || !coachData) return [];
 
-      // Get athlete details from user_roles
       const athleteIds = coachData.map(a => a.athlete_id);
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, email')
-        .in('user_id', athleteIds)
-        .eq('role', 'athlete');
 
-      if (rolesError || !rolesData) return [];
+      // Get athlete details (including email) from the auth.users table
+      const { data: usersData, error: usersError } = await supabase
+        .from('auth.users')
+        .select('id, email')
+        .in('id', athleteIds);
 
-      return rolesData.map(role => ({
-        user_id: role.user_id,
+      if (usersError || !usersData) return [];
+
+      // Map the user data to the expected structure
+      return usersData.map(user => ({
+        user_id: user.id,
         user: {
-          email: role.email || 'No email'
+          email: user.email || 'No email'
         }
       }));
     },
