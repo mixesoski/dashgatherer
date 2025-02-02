@@ -204,7 +204,7 @@ const Index = () => {
                 />
               </div>
             ) : (
-              <p className="text-gray-600">Proszę wybrać zawodnika, aby zobaczyć dane treningowe.</p>
+              <p className="text-gray-600"></p>
             )}
           </>
         ) : (
