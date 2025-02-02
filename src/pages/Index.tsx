@@ -18,14 +18,6 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
-import { AthleteChart } from "@/components/dashboard/AthleteChart";
-
-interface AthleteWithEmail {
-  user_id: string;
-  user: {
-    email: string;
-  };
-}
 
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
@@ -52,33 +44,28 @@ const Index = () => {
   });
 
   // Fetch athletes if user is a coach
-  const { data: athletes } = useQuery<AthleteWithEmail[]>({
+  const { data: athletes } = useQuery({
     queryKey: ['athletes', userId],
-    queryFn: async (): Promise<AthleteWithEmail[]> => {
+    queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // Get athlete IDs managed by this coach
-      const { data: coachData, error: coachError } = await supabase
+      const { data, error } = await supabase
         .from('coach_athletes')
-        .select('athlete_id')
+        .select(`
+          athlete_id,
+          athlete:athlete_id(
+            email
+          )
+        `)
         .eq('coach_id', userId);
 
-      if (coachError || !coachData) return [];
-
-      const athleteIds = coachData.map(a => a.athlete_id);
+      if (error) throw error;
       
-      // Get athlete details (including email) from the auth.users table
-      const { data: usersData, error: usersError } = await supabase
-        .from('auth.users')
-        .select('id, email')
-        .in('id', athleteIds);
-
-      if (usersError || !usersData) return [];
-
-      // Map the user data to the expected structure
-      return usersData.map(user => ({
-        user_id: user.id,
-        user: { email: user.email || 'No email' }
+      return data.map(relationship => ({
+        user_id: relationship.athlete_id,
+        user: { 
+          email: relationship.athlete.email 
+        }
       }));
     },
     enabled: !!userId && roleData === 'coach'
@@ -140,7 +127,6 @@ const Index = () => {
     }
   }, [roleData]);
 
-  // Define the handleDeleteCredentials function
   const handleDeleteCredentials = async () => {
     if (!userId) return;
     
@@ -197,21 +183,16 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
-        {userRole === 'coach' && athletes && (
-          <div className="space-y-8">
-            <h2 className="text-2xl font-bold mb-4">Athletes Performance</h2>
-            {athletes.map(athlete => (
-              <div key={athlete.user_id} className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">{athlete.user.email}'s Training Load</h3>
-                <AthleteChart 
-                  athleteId={athlete.user_id}
-                  email={athlete.user.email}
-                  hideSelect={true}
-                />
-              </div>
-            ))}
+        {userRole === 'coach' && athletes && athletes.map(athlete => (
+          <div key={athlete.user_id} className="bg-white p-6 rounded-lg shadow mb-8">
+            <GarminChart 
+              data={garminData || []} 
+              email={athlete.user.email}
+              onUpdate={handleUpdate}
+              isUpdating={isUpdating}
+            />
           </div>
-        )}
+        ))}
 
         <div className="text-center mb-12">
           {garminCredentials ? (
@@ -253,7 +234,7 @@ const Index = () => {
                   </div>
                 </div>
               )}
-              {garminData && garminData.length > 0 && (
+              {garminData && garminData.length > 0 && userRole !== 'coach' && (
                 <GarminChart 
                   data={garminData} 
                   email={garminCredentials.email}
