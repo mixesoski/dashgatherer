@@ -67,7 +67,7 @@ const Index = () => {
       if (coachError || !coachData) return [];
 
       const athleteIds = coachData.map(a => a.athlete_id);
-
+      
       // Get athlete details (including email) from the auth.users table
       const { data: usersData, error: usersError } = await supabase
         .from('auth.users')
@@ -79,9 +79,7 @@ const Index = () => {
       // Map the user data to the expected structure
       return usersData.map(user => ({
         user_id: user.id,
-        user: {
-          email: user.email || 'No email'
-        }
+        user: { email: user.email || 'No email' }
       }));
     },
     enabled: !!userId && roleData === 'coach'
