@@ -65,17 +65,10 @@ const Index = () => {
 
       const athleteIds = coachData.map(a => a.athlete_id);
 
-      // Next, get athlete details (including email) from the auth.users table
-      const { data: usersData, error: usersError } = await supabase
-        .from('auth.users')
-        .select('id, email')
-        .in('id', athleteIds);
-
-      if (usersError || !usersData) return [];
-
-      return usersData.map(user => ({
-        user_id: user.id,
-        user: { email: user.email || 'No email' }
+      // Instead of querying auth.users (which is unavailable), use a fallback default email.
+      return athleteIds.map(id => ({
+        user_id: id,
+        user: { email: 'No email' }
       }));
     },
     enabled: !!userId && roleData === 'coach'
