@@ -18,12 +18,18 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
+import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
 interface CoachAthleteJoin {
   athlete_id: string;
   user: {
     email: string;
-  };
+  } | null;
+}
+
+interface Athlete {
+  id: string;
+  email: string;
 }
 
 const AthleteChart = ({ athleteId, email }: { athleteId: string, email: string }) => {
@@ -101,7 +107,9 @@ const Index = () => {
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
   const [isUpdating, setIsUpdating] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
 
+  // Fetch user role
   const { data: roleData } = useQuery({
     queryKey: ['userRole', userId],
     queryFn: async () => {
@@ -118,7 +126,8 @@ const Index = () => {
     enabled: !!userId
   });
 
-  const { data: athletes } = useQuery({
+  // Fetch athletes if user is a coach
+  const { data: athletes } = useQuery<Athlete[]>({
     queryKey: ['athletes', userId],
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
@@ -127,18 +136,28 @@ const Index = () => {
         .from('coach_athletes')
         .select(`
           athlete_id,
-          user:athlete_id (email)
+          user:users (email)
         `)
         .eq('coach_id', userId);
 
-      if (error) return [];
+      if (error) {
+        console.error('Error fetching coach athletes:', error);
+        return [];
+      }
 
-      return (data as unknown as CoachAthleteJoin[]).map((relationship) => ({
+      console.log('Fetched athlete IDs:', data);
+
+      return (data as CoachAthleteJoin[]).map((relationship) => ({
         id: relationship.athlete_id,
         email: relationship.user?.email || 'No email'
       }));
     },
-    enabled: !!userId && roleData === 'coach'
+    enabled: !!userId && roleData === 'coach',
+    onSuccess: (athletes) => {
+      if (athletes.length > 0 && !selectedAthleteId) {
+        setSelectedAthleteId(athletes[0].id); // Automatically select the first athlete
+      }
+    }
   });
 
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
@@ -197,6 +216,7 @@ const Index = () => {
     }
   }, [roleData]);
 
+  // Define the handleDeleteCredentials function
   const handleDeleteCredentials = async () => {
     if (!userId) return;
     
