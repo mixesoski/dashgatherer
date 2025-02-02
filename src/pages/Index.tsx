@@ -18,6 +18,7 @@ import { subMonths, startOfDay } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
+import CoachDashboard from "@/components/dashboard/CoachDashboard";
 
 interface Athlete {
   user_id: string;
@@ -32,6 +33,7 @@ const Index = () => {
   const [startDate, setStartDate] = useState<Date | null>(subMonths(new Date(), 5));
   const [isUpdating, setIsUpdating] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
 
   // Fetch user role
   const { data: roleData } = useQuery({
@@ -75,11 +77,14 @@ const Index = () => {
     enabled: !!userId && roleData === 'coach'
   });
 
+  // Before garminData query, define relevantUserId
+  const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
+
+  // Update garminCredentials query to run only for athletes
   const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials', userId],
     queryFn: async () => {
       if (!userId) return null;
-      
       const { data, error } = await supabase
         .from('garmin_credentials')
         .select('*')
@@ -89,24 +94,23 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
-    enabled: !!userId
+    enabled: !!userId && userRole !== 'coach'
   });
 
+  // Update garminData query to use relevantUserId
   const { data: garminData, refetch: refetchGarminData } = useQuery({
-    queryKey: ['garminData', userId],
+    queryKey: ['garminData', relevantUserId],
     queryFn: async () => {
-      if (!userId) return null;
-      
+      if (!relevantUserId) return null;
       const { data, error } = await supabase
         .from('garmin_data')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', relevantUserId)
         .order('date', { ascending: true });
-
       if (error) throw error;
       return data;
     },
-    enabled: !!userId
+    enabled: !!relevantUserId
   });
 
   useEffect(() => {
@@ -149,12 +153,12 @@ const Index = () => {
   };
 
   const handleSync = async () => {
-    if (!userId || !startDate) {
+    if (!relevantUserId || !startDate) {
       toast.error('No user logged in or start date not selected');
       return;
     }
+    const success = await syncGarminData(relevantUserId, startDate);
 
-    const success = await syncGarminData(userId, startDate);
     if (success) {
       setShowButtons(false);
       await refetchGarminData();
@@ -162,11 +166,10 @@ const Index = () => {
   };
 
   const handleUpdate = async () => {
-    if (!userId) return;
-    
+    if (!relevantUserId) return;
     try {
       setIsUpdating(true);
-      const success = await updateGarminData(userId);
+      const success = await updateGarminData(relevantUserId);
       if (success) {
         await refetchGarminData();
       }
@@ -187,73 +190,80 @@ const Index = () => {
           <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
         </div>
 
-        {userRole === 'coach' && athletes && athletes.map(athlete => (
-          <div key={athlete.user_id} className="bg-white p-6 rounded-lg shadow mb-8">
-            <GarminChart 
-              data={garminData || []} 
-              email={athlete.user.email}
-              onUpdate={handleUpdate}
-              isUpdating={isUpdating}
-            />
-          </div>
-        ))}
-
-        <div className="text-center mb-12">
-          {garminCredentials ? (
-            <div className="space-y-4">
-              <p className="text-xl text-gray-600">Your Garmin account is connected</p>
-              <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-              {showButtons && userRole !== 'coach' && (
-                <div className="flex justify-center gap-4 items-center">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
-                          <RefreshCw className="h-4 w-4" />
-                          Sync Garmin
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Sync Garmin activities and TRIMP data</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Start from:</span>
-                    <DatePicker
-                      selected={startDate}
-                      onChange={(date: Date) => setStartDate(startOfDay(date))}
-                      maxDate={new Date()}
-                      minDate={subMonths(new Date(), 5)}
-                      className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      dateFormat="yyyy-MM-dd"
-                      placeholderText="Select start date"
-                      popperPlacement="bottom-end"
-                      popperProps={{
-                        strategy: "fixed"
-                      }}
-                      calendarClassName="translate-y-2"
-                    />
-                  </div>
-                </div>
-              )}
-              {garminData && garminData.length > 0 && userRole !== 'coach' && (
+        {userRole === 'coach' ? (
+          <>
+            <CoachDashboard athletes={athletes} selectedAthleteId={selectedAthleteId} onAthleteSelect={setSelectedAthleteId} />
+            {selectedAthleteId ? (
+              <div className="bg-white p-6 rounded-lg shadow mb-8">
                 <GarminChart 
-                  data={garminData} 
-                  email={garminCredentials.email}
+                  data={garminData || []}
+                  email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"}
                   onUpdate={handleUpdate}
                   isUpdating={isUpdating}
                 />
-              )}
+              </div>
+            ) : (
+              <p className="text-gray-600">Proszę wybrać zawodnika, aby zobaczyć dane treningowe.</p>
+            )}
+          </>
+        ) : (
+          <>
+            {garminCredentials ? (
+              <div className="space-y-4">
+                <p className="text-xl text-gray-600">Your Garmin account is connected</p>
+                <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
+                {showButtons && (
+                  <div className="flex justify-center gap-4 items-center">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
+                            <RefreshCw className="h-4 w-4" />
+                            Sync Garmin
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Sync Garmin activities and TRIMP data</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">Start from:</span>
+                      <DatePicker
+                        selected={startDate}
+                        onChange={(date: Date) => setStartDate(startOfDay(date))}
+                        maxDate={new Date()}
+                        minDate={subMonths(new Date(), 5)}
+                        className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        dateFormat="yyyy-MM-dd"
+                        placeholderText="Select start date"
+                        popperPlacement="bottom-end"
+                        popperProps={{
+                          strategy: "fixed"
+                        }}
+                        calendarClassName="translate-y-2"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="text-xl text-gray-600">Connect your Garmin account below</p>
+                <GarminCredentialsForm />
+              </>
+            )}
+            <div className="bg-white p-6 rounded-lg shadow mb-8">
+              <GarminChart 
+                data={garminData || []}
+                email={garminCredentials?.email || ""}
+                onUpdate={handleUpdate}
+                isUpdating={isUpdating}
+              />
             </div>
-          ) : userRole !== 'coach' ? (
-            <>
-              <p className="text-xl text-gray-600">Connect your Garmin account below</p>
-              <GarminCredentialsForm />
-            </>
-          ) : null}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
