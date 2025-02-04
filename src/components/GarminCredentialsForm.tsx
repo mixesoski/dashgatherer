@@ -58,29 +58,26 @@ export function GarminCredentialsForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        toast.error("You must be logged in to save Garmin credentials")
-        return
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        toast.error("You must be logged in to connect your Garmin account");
+        return;
       }
-
-      const { error } = await supabase
-        .from('garmin_credentials')
-        .upsert({ 
-          user_id: user.id,
-          email: values.email,
-          password: values.password
-        })
-
-      if (error) throw error
-
-      toast.success("Garmin credentials saved successfully!")
-      form.reset()
-      refetch() // Refresh the credentials data
+    
+      const { error } = await supabase.rpc('update_garmin_credentials_both', {
+        p_user_id: user.id,
+        p_garmin_email: values.email,
+        p_garmin_password: values.password,
+      });
+    
+      if (error) throw error;
+    
+      toast.success("Garmin credentials saved securely!");
+      form.reset();
+      refetch(); // if needed
     } catch (error) {
-      console.error('Error saving Garmin credentials:', error)
-      toast.error("Failed to save Garmin credentials")
+      console.error("Error saving Garmin credentials:", error);
+      toast.error("Failed to save Garmin credentials securely");
     }
   }
 
