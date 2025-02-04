@@ -125,6 +125,7 @@ export type Database = {
           created_at: string
           email: string | null
           garmin_email: string | null
+          garmin_password: string | null
           id: number
           role: Database["public"]["Enums"]["user_role"] | null
           user_id: string | null
@@ -133,6 +134,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           garmin_email?: string | null
+          garmin_password?: string | null
           id?: number
           role?: Database["public"]["Enums"]["user_role"] | null
           user_id?: string | null
@@ -141,6 +143,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           garmin_email?: string | null
+          garmin_password?: string | null
           id?: number
           role?: Database["public"]["Enums"]["user_role"] | null
           user_id?: string | null
@@ -188,7 +191,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_garmin_credentials: {
+        Args: {
+          p_user_id: string
+          p_garmin_email: string
+          p_garmin_password: string
+        }
+        Returns: undefined
+      }
+      update_garmin_credentials_both: {
+        Args: {
+          p_user_id: string
+          p_garmin_email: string
+          p_garmin_password: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       coach_invitation_status: "pending" | "accepted" | "rejected"

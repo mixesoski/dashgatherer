@@ -56,6 +56,40 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
     }
   };
 
+  const handleDeleteGarminCredentials = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error('You must be logged in to delete your credentials');
+        return;
+      }
+
+      // Update profiles table to clear Garmin credentials
+      const { error: profilesError } = await supabase
+        .from('profiles')
+        .update({
+          garmin_email: null,
+          garmin_password: null
+        })
+        .eq('user_id', user.id);
+
+      if (profilesError) {
+        console.error('Error updating profiles:', profilesError);
+        toast.error('Failed to delete Garmin credentials from profiles');
+        return;
+      }
+
+      // Call the original handler to delete from garmin_credentials table
+      await onDeleteGarminCredentials();
+
+      toast.success('Garmin credentials deleted successfully');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -65,7 +99,7 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={onDeleteGarminCredentials}
+          onClick={handleDeleteGarminCredentials}
           className="text-red-600 cursor-pointer"
         >
           Delete Garmin Credentials
