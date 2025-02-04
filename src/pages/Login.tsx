@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Database } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -81,6 +82,11 @@ const Login = () => {
       if (signUpError) {
         console.error('Error signing up:', signUpError);
         setError(signUpError.message);
+      } else {
+        toast({
+          title: "Success!",
+          description: "Please check your email to confirm your account.",
+        });
       }
     } else {
       const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -91,6 +97,11 @@ const Login = () => {
       if (signInError) {
         console.error('Error logging in:', signInError);
         setError(signInError.message);
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "Successfully logged in.",
+        });
       }
     }
   };
