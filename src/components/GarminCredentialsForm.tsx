@@ -75,6 +75,17 @@ export function GarminCredentialsForm() {
 
       if (error) throw error
 
+      // Update profiles table with garmin_email and garmin_password
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          garmin_email: values.email,
+          garmin_password: values.password
+        })
+        .eq('user_id', user.id)
+
+      if (profileError) throw profileError
+
       toast.success("Garmin credentials saved successfully!")
       form.reset()
       refetch() // Refresh the credentials data

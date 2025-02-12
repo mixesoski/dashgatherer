@@ -1,4 +1,0 @@
-project_id = "eeaebxnbcxhzafzpzqsu"
-
-[functions.send-coach-invitation]
-verify_jwt = true

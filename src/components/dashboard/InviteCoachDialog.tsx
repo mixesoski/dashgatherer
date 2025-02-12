@@ -50,7 +50,7 @@ export const InviteCoachDialog = () => {
         return;
       }
 
-      // Call the edge function to send invitation
+      // Invoke the edge function to create the coach-athlete relationship
       const { error } = await supabase.functions.invoke('send-coach-invitation', {
         body: {
           coachEmail: email,
