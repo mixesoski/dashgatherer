@@ -75,14 +75,14 @@ export function GarminCredentialsForm() {
 
       if (error) throw error
 
-      // Update profiles table with garmin_email and garmin_password
+      // Update profiles table with garmin_email and garmin_password using upsert
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          user_id: user.id,
           garmin_email: values.email,
           garmin_password: values.password
-        })
-        .eq('user_id', user.id)
+        }, { onConflict: 'user_id' })
 
       if (profileError) throw profileError
 
