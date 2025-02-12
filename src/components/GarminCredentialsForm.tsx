@@ -85,7 +85,7 @@ export function GarminCredentialsForm() {
           user_id: user.id,
           garmin_email: values.email,
           garmin_password: values.password
-        })
+        }, { onConflict: 'user_id' })
 
       if (profileError) {
         console.error('Error saving to profiles:', profileError)
