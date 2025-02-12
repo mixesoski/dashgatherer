@@ -73,7 +73,10 @@ export function GarminCredentialsForm() {
           password: values.password
         })
 
-      if (error) throw error
+      if (error) {
+        console.error('Error saving to garmin_credentials:', error)
+        throw error
+      }
 
       // Update profiles table with garmin_email and garmin_password using upsert
       const { error: profileError } = await supabase
@@ -82,16 +85,19 @@ export function GarminCredentialsForm() {
           user_id: user.id,
           garmin_email: values.email,
           garmin_password: values.password
-        }, { onConflict: 'user_id' })
+        })
 
-      if (profileError) throw profileError
+      if (profileError) {
+        console.error('Error saving to profiles:', profileError)
+        throw profileError
+      }
 
       toast.success("Garmin credentials saved successfully!")
       form.reset()
       refetch() // Refresh the credentials data
-    } catch (error) {
-      console.error('Error saving Garmin credentials:', error)
-      toast.error("Failed to save Garmin credentials")
+    } catch (error: any) {
+      console.error('Full error details:', error)
+      toast.error(error.message || "Failed to save Garmin credentials")
     }
   }
 
