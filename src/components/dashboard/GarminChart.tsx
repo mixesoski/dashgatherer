@@ -1,3 +1,4 @@
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,6 +14,15 @@ import {
 } from 'chart.js';
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { format } from "date-fns";
 
 ChartJS.register(
   CategoryScale,
@@ -44,11 +54,14 @@ interface Props {
 export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   console.log('GarminChart data:', data);
   
-  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sortedData = [...data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   console.log('Sorted data:', sortedData);
   
-  const latestData = sortedData[sortedData.length - 1];
+  const latestData = sortedData[0];
   console.log('Latest data:', latestData);
+  
+  // Get last 10 days of activities
+  const last10Days = sortedData.slice(0, 10);
   
   // Get TSB value safely using optional chaining
   const tsb = latestData?.tsb;
@@ -223,6 +236,29 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
           <Line data={chartData} options={options} />
         </div>
+      </div>
+
+      {/* Recent Activities Table */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold mb-4">Recent Activities</h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Activity</TableHead>
+              <TableHead className="text-right">TRIMP</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {last10Days.map((day) => (
+              <TableRow key={day.date}>
+                <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
+                <TableCell>{day.activity}</TableCell>
+                <TableCell className="text-right">{day.trimp.toFixed(1)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
