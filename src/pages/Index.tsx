@@ -58,43 +58,50 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
+      console.log('Fetching athletes for coach:', userId);
+      
       // Get athlete IDs managed by this coach with their auth and profile information
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select(`
           athlete_id,
-          users:athlete_id (
-            email
-          ),
-          profiles:athlete_id (
+          athlete:profiles!inner (
+            email:user_id,
             garmin_email
           )
         `)
         .eq('coach_id', userId);
 
+      console.log('Raw coach data:', coachData);
+      console.log('Coach data error:', coachError);
+
       if (coachError) {
         console.error('Coach data fetch error:', coachError);
         return [];
       }
-      if (!coachData || !Array.isArray(coachData)) return [];
+      if (!coachData || !Array.isArray(coachData)) {
+        console.log('No coach data or not an array');
+        return [];
+      }
 
       // Add type assertion for coachData
       const typedCoachData = coachData as unknown as Array<{
         athlete_id: string;
-        users: {
+        athlete: {
           email: string;
-        } | null;
-        profiles: {
           garmin_email: string | null;
-        } | null;
+        };
       }>;
 
-      return typedCoachData.map(row => ({
+      const mappedAthletes = typedCoachData.map(row => ({
         user_id: row.athlete_id,
         user: { 
-          email: row.users?.email || row.profiles?.garmin_email || 'No email'
+          email: row.athlete.email || row.athlete.garmin_email || 'No email'
         }
       }));
+
+      console.log('Mapped athletes:', mappedAthletes);
+      return mappedAthletes;
     },
     enabled: !!userId && roleData === 'coach'
   });
