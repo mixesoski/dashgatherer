@@ -60,10 +60,10 @@ const Index = () => {
       
       console.log('Fetching athletes for coach:', userId);
       
-      // First get athlete IDs from coach_athletes
+      // Get basic coach_athletes data
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
-        .select('athlete_id')
+        .select('*')
         .eq('coach_id', userId);
 
       console.log('Raw coach data:', coachData);
@@ -72,36 +72,19 @@ const Index = () => {
         console.error('Coach data fetch error:', coachError);
         return [];
       }
+
       if (!coachData || !Array.isArray(coachData)) {
         console.log('No coach data or not an array');
         return [];
       }
 
-      // Get athlete emails from auth.users
-      const athleteIds = coachData.map(row => row.athlete_id);
-      console.log('Athlete IDs:', athleteIds);
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, garmin_email')
-        .in('user_id', athleteIds);
-
-      if (profilesError) {
-        console.error('Profiles fetch error:', profilesError);
-        return [];
-      }
-
-      console.log('Profiles data:', profilesData);
-
-      return athleteIds.map(id => {
-        const profile = profilesData?.find(p => p.user_id === id);
-        return {
-          user_id: id,
-          user: {
-            email: profile?.garmin_email || id
-          }
-        };
-      });
+      // Map to required format
+      return coachData.map(row => ({
+        user_id: row.athlete_id,
+        user: { 
+          email: row.athlete_id // temporarily use ID as email
+        }
+      }));
     },
     enabled: !!userId && roleData === 'coach'
   });
