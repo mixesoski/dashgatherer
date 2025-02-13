@@ -54,14 +54,17 @@ interface Props {
 export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   console.log('GarminChart data:', data);
   
-  const sortedData = [...data].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Sort data from oldest to newest for the chart
+  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   console.log('Sorted data:', sortedData);
   
-  const latestData = sortedData[0];
+  // For the table and stats, we want the newest data first
+  const reverseSortedData = [...sortedData].reverse();
+  const latestData = reverseSortedData[0];
   console.log('Latest data:', latestData);
   
   // Get last 10 days of activities
-  const last10Days = sortedData.slice(0, 10);
+  const last10Days = reverseSortedData.slice(0, 10);
   
   // Get TSB value safely using optional chaining
   const tsb = latestData?.tsb;
@@ -80,7 +83,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   };
 
   const chartData = {
-    labels: sortedData.map(d => new Date(d.date).toLocaleDateString()),
+    labels: sortedData.map(d => format(new Date(d.date), 'dd/MM/yyyy')),
     datasets: [
       {
         label: 'Acute Load (ATL)',
