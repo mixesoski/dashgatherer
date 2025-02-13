@@ -58,13 +58,16 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       
-      // Get athlete IDs managed by this coach with their profile information
+      // Get athlete IDs managed by this coach with their profile and auth information
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select(`
           athlete_id,
           athlete:profiles!athlete_id (
-            garmin_email
+            garmin_email,
+            user:user_id (
+              email
+            )
           )
         `)
         .eq('coach_id', userId);
@@ -77,13 +80,16 @@ const Index = () => {
         athlete_id: string;
         athlete: {
           garmin_email: string | null;
+          user: {
+            email: string;
+          };
         } | null;
       }>;
 
       return typedCoachData.map(row => ({
         user_id: row.athlete_id,
         user: { 
-          email: row.athlete?.garmin_email || 'No email'
+          email: row.athlete?.user?.email || row.athlete?.garmin_email || 'No email'
         }
       }));
     },
