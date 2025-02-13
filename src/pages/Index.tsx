@@ -60,21 +60,14 @@ const Index = () => {
       
       console.log('Fetching athletes for coach:', userId);
       
-      // Get athlete IDs managed by this coach with their auth and profile information
+      // First get athlete IDs from coach_athletes
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
-        .select(`
-          athlete_id,
-          athlete:profiles!inner (
-            email:user_id,
-            garmin_email
-          )
-        `)
+        .select('athlete_id')
         .eq('coach_id', userId);
 
       console.log('Raw coach data:', coachData);
-      console.log('Coach data error:', coachError);
-
+      
       if (coachError) {
         console.error('Coach data fetch error:', coachError);
         return [];
@@ -84,24 +77,31 @@ const Index = () => {
         return [];
       }
 
-      // Add type assertion for coachData
-      const typedCoachData = coachData as unknown as Array<{
-        athlete_id: string;
-        athlete: {
-          email: string;
-          garmin_email: string | null;
+      // Get athlete emails from auth.users
+      const athleteIds = coachData.map(row => row.athlete_id);
+      console.log('Athlete IDs:', athleteIds);
+
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, garmin_email')
+        .in('user_id', athleteIds);
+
+      if (profilesError) {
+        console.error('Profiles fetch error:', profilesError);
+        return [];
+      }
+
+      console.log('Profiles data:', profilesData);
+
+      return athleteIds.map(id => {
+        const profile = profilesData?.find(p => p.user_id === id);
+        return {
+          user_id: id,
+          user: {
+            email: profile?.garmin_email || id
+          }
         };
-      }>;
-
-      const mappedAthletes = typedCoachData.map(row => ({
-        user_id: row.athlete_id,
-        user: { 
-          email: row.athlete.email || row.athlete.garmin_email || 'No email'
-        }
-      }));
-
-      console.log('Mapped athletes:', mappedAthletes);
-      return mappedAthletes;
+      });
     },
     enabled: !!userId && roleData === 'coach'
   });
