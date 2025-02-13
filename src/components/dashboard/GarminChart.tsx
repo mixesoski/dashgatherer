@@ -209,45 +209,43 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         </Button>
       </div>
       
-      <div className="relative">
-        <div className="absolute top-4 right-4 z-10">
-          <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm w-72">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Status:</span>
-                <span className={`${getTsbStatus(latestData?.tsb).color} font-semibold`}>
-                  {getTsbStatus(latestData?.tsb).text}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div className="flex flex-col items-center">
-                  <span className="text-blue-600 font-medium whitespace-nowrap">ATL</span>
-                  <span className="text-sm">{latestData?.atl?.toFixed(1) ?? 'N/A'}</span>
-                  <span className="text-[10px] text-gray-500">Zmęczenie</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-yellow-600 font-medium whitespace-nowrap">CTL</span>
-                  <span className="text-sm">{latestData?.ctl?.toFixed(1) ?? 'N/A'}</span>
-                  <span className="text-[10px] text-gray-500">Wydolność</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-red-600 font-medium whitespace-nowrap">TSB</span>
-                  <span className="text-sm">{latestData?.tsb?.toFixed(1) ?? 'N/A'}</span>
-                  <span className="text-[10px] text-gray-500">Forma</span>
-                </div>
-              </div>
-              
-              <div className="text-center text-[10px] text-gray-500 pt-1 border-t">
-                {new Date(latestData?.date ?? '').toLocaleDateString()}
-              </div>
+      {/* Stats Card - Now above the chart */}
+      <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm w-72 ml-auto">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">Status:</span>
+            <span className={`${getTsbStatus(latestData?.tsb).color} font-semibold`}>
+              {getTsbStatus(latestData?.tsb).text}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="flex flex-col items-center">
+              <span className="text-blue-600 font-medium whitespace-nowrap">ATL</span>
+              <span className="text-sm">{latestData?.atl?.toFixed(1) ?? 'N/A'}</span>
+              <span className="text-[10px] text-gray-500">Zmęczenie</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-yellow-600 font-medium whitespace-nowrap">CTL</span>
+              <span className="text-sm">{latestData?.ctl?.toFixed(1) ?? 'N/A'}</span>
+              <span className="text-[10px] text-gray-500">Wydolność</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-red-600 font-medium whitespace-nowrap">TSB</span>
+              <span className="text-sm">{latestData?.tsb?.toFixed(1) ?? 'N/A'}</span>
+              <span className="text-[10px] text-gray-500">Forma</span>
             </div>
           </div>
+          
+          <div className="text-center text-[10px] text-gray-500 pt-1 border-t">
+            {new Date(latestData?.date ?? '').toLocaleDateString()}
+          </div>
         </div>
+      </div>
 
-        <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
-          <Line data={chartData} options={options} />
-        </div>
+      {/* Chart */}
+      <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
+        <Line data={chartData} options={options} />
       </div>
 
       {/* Recent Activities Table */}
