@@ -1,4 +1,3 @@
-
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -23,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
+import { useState } from "react";
 
 ChartJS.register(
   CategoryScale,
@@ -52,6 +52,8 @@ interface Props {
 }
 
 export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
+  const [visibleActivities, setVisibleActivities] = useState(10);
+
   console.log('GarminChart data:', data);
   
   // Sort data from oldest to newest for the chart
@@ -63,8 +65,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const latestData = reverseSortedData[0];
   console.log('Latest data:', latestData);
   
-  // Get last 10 days of activities
-  const last10Days = reverseSortedData.slice(0, 10);
+  // Get visible activities
+  const visibleDays = reverseSortedData.slice(0, visibleActivities);
+  
+  // Check if there are more activities to load
+  const hasMoreActivities = visibleActivities < reverseSortedData.length;
+
+  const handleLoadMore = () => {
+    setVisibleActivities(prev => prev + 10);
+  };
   
   // Get TSB value safely using optional chaining
   const tsb = latestData?.tsb;
@@ -253,7 +262,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {last10Days.map((day) => (
+            {visibleDays.map((day) => (
               <TableRow key={day.date}>
                 <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
                 <TableCell>{day.activity}</TableCell>
@@ -262,6 +271,18 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             ))}
           </TableBody>
         </Table>
+        
+        {hasMoreActivities && (
+          <div className="mt-4 flex justify-center">
+            <Button 
+              variant="outline"
+              onClick={handleLoadMore}
+              className="w-full sm:w-auto"
+            >
+              Load More Activities
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
