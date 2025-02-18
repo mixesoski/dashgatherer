@@ -11,19 +11,28 @@ load_dotenv()
 app = Flask(__name__)
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# Configure CORS to allow requests from your frontend domain
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "https://*.lovable.app",
-            "*-preview--*-lovable.app"
-        ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+# Configure CORS
+if os.environ.get('FLASK_ENV') == 'development':
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
+else:
+    # In production, accept requests from specific domains without port numbers
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": [
+                "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
+                "https://id-preview--b517f268-2dee-41b5-963d-5ba7555908cb.lovable.app",
+                "https://eeaebxnbcxhzafzpzqsu.supabase.co"
+            ],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
