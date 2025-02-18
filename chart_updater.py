@@ -33,37 +33,42 @@ class ChartUpdater:
         self.garmin = Garmin(credentials['email'], credentials['password'])
         self.garmin.login()
 
-    def get_last_metrics(self):
+    def find_last_existing_date(self):
         try:
-            target_date = datetime.date.today() - datetime.timedelta(days=10)
-            date_obj = datetime.datetime.combine(target_date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
-            target_date_iso = date_obj.isoformat()
+            # Start from today and go backwards
+            current_date = datetime.date.today()
+            max_days_back = 180  # Set a reasonable limit to prevent infinite loop
             
-            response = self.client.table('garmin_data') \
-                .select('date, atl, ctl, tsb') \
-                .eq('user_id', self.user_id) \
-                .eq('date', target_date_iso) \
-                .single() \
-                .execute()
+            for days_back in range(max_days_back):
+                check_date = current_date - datetime.timedelta(days=days_back)
+                date_obj = datetime.datetime.combine(check_date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
+                date_iso = date_obj.isoformat()
+                
+                response = self.client.table('garmin_data') \
+                    .select('date, atl, ctl, tsb') \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', date_iso) \
+                    .single() \
+                    .execute()
+                
+                if response.data:
+                    data = response.data
+                    try:
+                        data['atl'] = float(data['atl'])
+                        data['ctl'] = float(data['ctl'])
+                        data['tsb'] = float(data['tsb'])
+                        print(f"Found last existing date: {check_date}")
+                        return check_date, data
+                    except ValueError as e:
+                        print(f"Error converting metrics to float: {e}")
+                        continue
             
-            if not response.data:
-                print(f"No data found for {target_date_iso}")
-                return {'atl': 0, 'ctl': 0, 'tsb': 0}
+            print("No existing data found in the last 180 days")
+            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
-            data = response.data
-            
-            try:
-                data['atl'] = float(data['atl'])
-                data['ctl'] = float(data['ctl'])
-                data['tsb'] = float(data['tsb'])
-            except ValueError as e:
-                print(f"Error converting metrics to float: {e}")
-                return {'atl': 0, 'ctl': 0, 'tsb': 0}
-            
-            return data
         except Exception as e:
-            print(f"Error fetching last metrics: {e}")
-            return {'atl': 0, 'ctl': 0, 'tsb': 0}
+            print(f"Error finding last existing date: {e}")
+            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
 
     def calculate_new_metrics(self, current_trimp, previous_metrics):
         current_trimp = float(current_trimp)
@@ -88,11 +93,25 @@ class ChartUpdater:
         try:
             self.initialize_garmin()
             
+            # Find the last existing date and its metrics
+            start_date, previous_metrics = self.find_last_existing_date()
+            if not start_date:
+                start_date = datetime.date.today() - datetime.timedelta(days=180)
+            
             end_date = datetime.date.today()
-            start_date = end_date - datetime.timedelta(days=10)
             
-            date_range = [start_date + datetime.timedelta(days=i) for i in range((end_date - start_date).days + 1)]
+            # Create date range from the day after last existing date to today
+            start_date = start_date + datetime.timedelta(days=1)  # Start from next day
+            date_range = [start_date + datetime.timedelta(days=i) 
+                         for i in range((end_date - start_date).days + 1)]
             
+            if not date_range:
+                print("No new dates to process")
+                return {'success': True, 'updated': 0}
+            
+            print(f"\nProcessing dates from {start_date} to {end_date}")
+            
+            # Get activities for the entire date range
             activities = self.garmin.get_activities_by_date(
                 start_date.isoformat(), 
                 end_date.isoformat()
@@ -112,12 +131,11 @@ class ChartUpdater:
                     continue
             
             updated_count = 0
-            previous_metrics = self.get_last_metrics()
             
             print(f"\n=== Initial metrics from {start_date} ===")
             print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
-            for date in date_range[1:]:
+            for date in date_range:
                 date_str = date.isoformat()
                 date_obj = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
                 date_iso = date_obj.isoformat()
@@ -163,44 +181,21 @@ class ChartUpdater:
                 previous_metrics = new_metrics
                 
                 try:
-                    existing_entry = self.client.table('garmin_data') \
-                        .select('id, atl, ctl, tsb') \
-                        .eq('user_id', self.user_id) \
-                        .eq('date', date_iso) \
-                        .execute()
+                    # Always insert new data since we're only processing new dates
+                    print(f"Inserting new entry for {date_str}:")
+                    print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
+                          f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
                     
-                    if existing_entry.data:
-                        old_data = existing_entry.data[0]
-                        update_log = [
-                            f"Updating entry for {date_str}:",
-                            f"TRIMP: {old_data.get('trimp', 'N/A')} -> {trimp_total}",
-                            f"ATL: {old_data.get('atl', 'N/A')} -> {new_metrics['atl']}",
-                            f"CTL: {old_data.get('ctl', 'N/A')} -> {new_metrics['ctl']}",
-                            f"TSB: {old_data.get('tsb', 'N/A')} -> {new_metrics['tsb']}"
-                        ]
-                        print("\n".join(update_log))
-                        
-                        self.client.table('garmin_data').update({
-                            'trimp': trimp_total,
-                            'activity': activity_str,
-                            **new_metrics
-                        }).eq('id', old_data['id']).execute()
-                        updated_count += 1
-                    else:
-                        print(f"Inserting new entry for {date_str}:")
-                        print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
-                            f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
-                        
-                        self.client.table('garmin_data').insert({
-                            'date': date_iso,
-                            'trimp': trimp_total,
-                            'activity': activity_str,
-                            'user_id': self.user_id,
-                            **new_metrics
-                        }).execute()
-                        updated_count += 1
+                    self.client.table('garmin_data').insert({
+                        'date': date_iso,
+                        'trimp': trimp_total,
+                        'activity': activity_str,
+                        'user_id': self.user_id,
+                        **new_metrics
+                    }).execute()
+                    updated_count += 1
                 except Exception as e:
-                    print(f"Error updating/inserting metrics for {date_iso}: {e}")
+                    print(f"Error inserting metrics for {date_iso}: {e}")
                     continue
             
             print(f"\n=== Update completed ===")
