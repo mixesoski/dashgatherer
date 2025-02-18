@@ -35,35 +35,29 @@ class ChartUpdater:
 
     def find_last_existing_date(self):
         try:
-            # Start from today and go backwards
-            current_date = datetime.date.today()
-            max_days_back = 180  # Set a reasonable limit to prevent infinite loop
+            # Get the most recent date for this user
+            response = self.client.table('garmin_data') \
+                .select('date, atl, ctl, tsb') \
+                .eq('user_id', self.user_id) \
+                .order('date', desc=True) \
+                .limit(1) \
+                .single() \
+                .execute()
             
-            for days_back in range(max_days_back):
-                check_date = current_date - datetime.timedelta(days=days_back)
-                date_obj = datetime.datetime.combine(check_date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
-                date_iso = date_obj.isoformat()
-                
-                response = self.client.table('garmin_data') \
-                    .select('date, atl, ctl, tsb') \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', date_iso) \
-                    .single() \
-                    .execute()
-                
-                if response.data:
-                    data = response.data
-                    try:
-                        data['atl'] = float(data['atl'])
-                        data['ctl'] = float(data['ctl'])
-                        data['tsb'] = float(data['tsb'])
-                        print(f"Found last existing date: {check_date}")
-                        return check_date, data
-                    except ValueError as e:
-                        print(f"Error converting metrics to float: {e}")
-                        continue
+            if response.data:
+                data = response.data
+                try:
+                    date = datetime.datetime.fromisoformat(data['date']).date()
+                    data['atl'] = float(data['atl'])
+                    data['ctl'] = float(data['ctl'])
+                    data['tsb'] = float(data['tsb'])
+                    print(f"Found last existing date: {date}")
+                    return date, data
+                except ValueError as e:
+                    print(f"Error converting metrics to float: {e}")
+                    return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
-            print("No existing data found in the last 180 days")
+            print("No existing data found")
             return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
         except Exception as e:
@@ -94,14 +88,22 @@ class ChartUpdater:
             self.initialize_garmin()
             
             # Find the last existing date and its metrics
-            start_date, previous_metrics = self.find_last_existing_date()
-            if not start_date:
+            last_date, previous_metrics = self.find_last_existing_date()
+            if not last_date:
+                # If no data exists, start from 180 days ago
                 start_date = datetime.date.today() - datetime.timedelta(days=180)
+            else:
+                # Start from the day after the last existing date
+                start_date = last_date + datetime.timedelta(days=1)
             
             end_date = datetime.date.today()
             
-            # Create date range from the day after last existing date to today
-            start_date = start_date + datetime.timedelta(days=1)  # Start from next day
+            # If start_date is after end_date, there's nothing to update
+            if start_date > end_date:
+                print("No new dates to process - data is up to date")
+                return {'success': True, 'updated': 0}
+            
+            # Create date range from start_date to today
             date_range = [start_date + datetime.timedelta(days=i) 
                          for i in range((end_date - start_date).days + 1)]
             
