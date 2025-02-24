@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,21 +38,28 @@ const RespondInvitation = () => {
 
           if (updateError) throw updateError;
 
-          // Get the invitation details
+          // Get the invitation details and athlete's email
           const { data: invitation, error: invitationError } = await supabase
             .from("coach_invitations")
-            .select("athlete_id")
+            .select("athlete_id, athlete:athlete_id(email)")
             .eq("id", invitationId)
             .single();
 
           if (invitationError) throw invitationError;
 
-          // Create coach-athlete relationship
+          // Get athlete's email from auth.users
+          const { data: athleteData, error: athleteError } = await supabase
+            .rpc('get_user_email', { user_id: invitation.athlete_id });
+
+          if (athleteError) throw athleteError;
+
+          // Create coach-athlete relationship with required athlete_email
           const { error: relationError } = await supabase
             .from("coach_athletes")
             .insert({
               coach_id: user.id,
-              athlete_id: invitation.athlete_id
+              athlete_id: invitation.athlete_id,
+              athlete_email: athleteData
             });
 
           if (relationError) throw relationError;
