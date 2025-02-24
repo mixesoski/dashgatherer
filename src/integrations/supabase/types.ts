@@ -11,18 +11,21 @@ export type Database = {
     Tables: {
       coach_athletes: {
         Row: {
+          athlete_email: string
           athlete_id: string | null
           coach_id: string | null
           created_at: string
           id: string
         }
         Insert: {
+          athlete_email: string
           athlete_id?: string | null
           coach_id?: string | null
           created_at?: string
           id?: string
         }
         Update: {
+          athlete_email?: string
           athlete_id?: string | null
           coach_id?: string | null
           created_at?: string
@@ -191,6 +194,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_email: {
+        Args: {
+          user_id: string
+        }
+        Returns: string
+      }
       update_garmin_credentials: {
         Args: {
           p_user_id: string

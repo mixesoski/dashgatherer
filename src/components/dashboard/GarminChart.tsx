@@ -23,6 +23,12 @@ import {
 } from "@/components/ui/table";
 import { format } from "date-fns";
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@radix-ui/react-popover";
+import { cn } from "@/lib/utils";
+import { CalendarIcon } from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -53,35 +59,32 @@ interface Props {
 
 export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [visibleActivities, setVisibleActivities] = useState(10);
+  const [date, setDate] = useState<Date>(new Date());
+  const [trimp, setTrimp] = useState("");
+  const [activityName, setActivityName] = useState("");
 
   console.log('GarminChart data:', data);
   
-  // Sort data from oldest to newest for the chart
   const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   console.log('Sorted data:', sortedData);
   
-  // For the table and stats, we want the newest data first
   const reverseSortedData = [...sortedData].reverse();
   const latestData = reverseSortedData[0];
   console.log('Latest data:', latestData);
   
-  // Get visible activities
   const visibleDays = reverseSortedData.slice(0, visibleActivities);
   
-  // Check if there are more activities to load
   const hasMoreActivities = visibleActivities < reverseSortedData.length;
 
   const handleLoadMore = () => {
     setVisibleActivities(prev => prev + 10);
   };
-  
-  // Get TSB value safely using optional chaining
+
   const tsb = latestData?.tsb;
   const status = (tsb !== undefined && tsb !== null)
     ? (tsb < 0 ? 'Zmęczenie' : 'Wypoczęty')
     : 'No data';
 
-  // Helper function to determine TSB status and color
   const getTsbStatus = (tsb: number | null | undefined) => {
     if (tsb === undefined || tsb === null) return { text: 'No data', color: 'text-gray-500' };
     
@@ -190,6 +193,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     }
   };
 
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log({
+      date: format(date, 'yyyy-MM-dd'),
+      trimp: parseFloat(trimp),
+      activity: activityName
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -209,7 +221,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         </Button>
       </div>
       
-      {/* Stats Card - Now above the chart */}
       <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm w-72 ml-auto">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -243,12 +254,75 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         </div>
       </div>
 
-      {/* Chart */}
       <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
         <Line data={chartData} options={options} />
       </div>
 
-      {/* Recent Activities Table */}
+      <div className="bg-white rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold mb-4">Add Training Manually</h3>
+        <form onSubmit={handleManualSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="date">Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date ? format(date, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={(newDate) => newDate && setDate(newDate)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="trimp">TRIMP Value</Label>
+              <Input
+                id="trimp"
+                type="number"
+                step="0.1"
+                min="0"
+                value={trimp}
+                onChange={(e) => setTrimp(e.target.value)}
+                placeholder="Enter TRIMP value"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="activity">Activity Name</Label>
+              <Input
+                id="activity"
+                type="text"
+                value={activityName}
+                onChange={(e) => setActivityName(e.target.value)}
+                placeholder="Enter activity name"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button type="submit">
+              Add Training
+            </Button>
+          </div>
+        </form>
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold mb-4">Recent Activities</h3>
         <Table>
