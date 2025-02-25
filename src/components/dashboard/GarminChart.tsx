@@ -26,11 +26,9 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@radix-ui/react-popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 ChartJS.register(
   CategoryScale,
@@ -57,10 +55,9 @@ interface Props {
   email: string;
   onUpdate: () => Promise<void>;
   isUpdating?: boolean;
-  userId: string;
 }
 
-export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props) => {
+export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [visibleActivities, setVisibleActivities] = useState(10);
   const [date, setDate] = useState<Date>(new Date());
   const [trimp, setTrimp] = useState("");
@@ -214,7 +211,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         return;
       }
 
-      // Get current user ID from auth
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id;
 
@@ -223,7 +219,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         return;
       }
 
-      // Use the currentUserId instead of passed userId prop
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
@@ -234,7 +229,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
 
       console.log('Last metrics:', lastMetrics);
 
-      // Calculate new metrics
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
       const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
       const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
@@ -258,11 +252,9 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
 
       toast.success("Training data saved successfully!");
       
-      // Reset form
       setTrimp("");
       setActivityName("");
       
-      // Refresh chart data
       await onUpdate();
       
     } catch (error: any) {
@@ -327,7 +319,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         <Line data={chartData} options={options} />
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-white rounded-lg shadow-sm p-6 relative">
         <h3 className="text-lg font-semibold mb-4">Add Training Manually</h3>
         <form onSubmit={handleManualSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-3">
@@ -346,7 +338,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
                     {date ? format(date, "PPP") : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="z-[60] bg-white p-0" align="start">
                   <Calendar
                     mode="single"
                     selected={date}
