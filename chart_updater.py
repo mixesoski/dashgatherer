@@ -96,6 +96,85 @@ class ChartUpdater:
                 # If no data exists, start from 180 days ago
                 start_date = datetime.date.today() - datetime.timedelta(days=180)
             else:
+                # First check if there are new activities for the last existing date
+                activities = self.garmin.get_activities_by_date(
+                    last_date.isoformat(),
+                    last_date.isoformat()
+                )
+                
+                trimp_total = 0.0
+                activity_names = []
+                
+                for activity in activities:
+                    activity_id = activity['activityId']
+                    try:
+                        details = self.garmin.get_activity(activity_id)
+                        trimp = 0.0
+                        if 'connectIQMeasurements' in details:
+                            for item in details['connectIQMeasurements']:
+                                if item['developerFieldNumber'] == 4:
+                                    trimp = round(float(item['value']), 1)
+                                    break
+                        activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
+                        if activity_type in ['strength_training', 'Siła']:
+                            trimp *= 2
+                        trimp_total += trimp
+                        activity_names.append(activity.get('activityName', 'Unknown Activity'))
+                    except Exception as e:
+                        print(f"Error processing activity {activity_id}: {e}")
+                        continue
+                
+                # Get current values for last date
+                response = self.client.table('garmin_data') \
+                    .select('trimp, activity') \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', last_date.isoformat()) \
+                    .single() \
+                    .execute()
+                
+                current_data = response.data
+                
+                if trimp_total > 0 and trimp_total != current_data['trimp']:
+                    print(f"\n=== Updating last existing date: {last_date} ===")
+                    print(f"Current TRIMP: {current_data['trimp']} -> New TRIMP: {trimp_total}")
+                    print(f"Current activities: {current_data['activity']}")
+                    print(f"New activities: {', '.join(activity_names)}")
+                    
+                    # Update the last date with new values
+                    self.client.table('garmin_data').update({
+                        'trimp': trimp_total,
+                        'activity': ', '.join(activity_names)
+                    }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
+                    
+                    # Recalculate metrics for this day
+                    previous_response = self.client.table('garmin_data') \
+                        .select('atl, ctl, tsb') \
+                        .eq('user_id', self.user_id) \
+                        .lt('date', last_date.isoformat()) \
+                        .order('date', desc=True) \
+                        .limit(1) \
+                        .single() \
+                        .execute()
+                    
+                    if previous_response.data:
+                        prev_metrics = {
+                            'atl': float(previous_response.data['atl']),
+                            'ctl': float(previous_response.data['ctl']),
+                            'tsb': float(previous_response.data['tsb'])
+                        }
+                    else:
+                        prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
+                    
+                    new_metrics = self.calculate_new_metrics(trimp_total, prev_metrics)
+                    
+                    # Update metrics for the last date
+                    self.client.table('garmin_data').update({
+                        **new_metrics
+                    }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
+                    
+                    # Update previous_metrics for next calculations
+                    previous_metrics = new_metrics
+                
                 # Start from the day after the last existing date
                 start_date = last_date + datetime.timedelta(days=1)
             
