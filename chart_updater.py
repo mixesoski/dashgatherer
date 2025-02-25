@@ -37,7 +37,7 @@ class ChartUpdater:
         try:
             # Get the most recent date for this user
             response = self.client.table('garmin_data') \
-                .select('date, atl, ctl, tsb') \
+                .select('date, trimp, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
                 .order('date', desc=True) \
                 .limit(1) \
@@ -48,11 +48,14 @@ class ChartUpdater:
                 data = response.data
                 try:
                     date = datetime.datetime.fromisoformat(data['date']).date()
-                    data['atl'] = float(data['atl'])
-                    data['ctl'] = float(data['ctl'])
-                    data['tsb'] = float(data['tsb'])
+                    last_metrics = {
+                        'atl': float(data['atl']),
+                        'ctl': float(data['ctl']),
+                        'tsb': float(data['tsb'])
+                    }
                     print(f"Found last existing date: {date}")
-                    return date, data
+                    print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
+                    return date, last_metrics
                 except ValueError as e:
                     print(f"Error converting metrics to float: {e}")
                     return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
@@ -75,7 +78,7 @@ class ChartUpdater:
         
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
-        new_tsb = previous_ctl - previous_atl  # Correct TSB calculation
+        new_tsb = previous_ctl - previous_atl  # TSB calculation uses previous values
         
         return {
             'atl': round(new_atl, 2),
@@ -112,6 +115,8 @@ class ChartUpdater:
                 return {'success': True, 'updated': 0}
             
             print(f"\nProcessing dates from {start_date} to {end_date}")
+            print(f"\n=== Initial metrics from {start_date} ===")
+            print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
             # Get activities for the entire date range
             activities = self.garmin.get_activities_by_date(
@@ -133,9 +138,6 @@ class ChartUpdater:
                     continue
             
             updated_count = 0
-            
-            print(f"\n=== Initial metrics from {start_date} ===")
-            print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
             for date in date_range:
                 date_str = date.isoformat()
@@ -183,21 +185,21 @@ class ChartUpdater:
                 previous_metrics = new_metrics
                 
                 try:
-                    # Always insert new data since we're only processing new dates
-                    print(f"Inserting new entry for {date_str}:")
+                    # Use upsert to handle existing entries
+                    print(f"Upserting data for {date_str}:")
                     print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
                           f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
                     
-                    self.client.table('garmin_data').insert({
+                    self.client.table('garmin_data').upsert({
                         'date': date_iso,
                         'trimp': trimp_total,
                         'activity': activity_str,
                         'user_id': self.user_id,
                         **new_metrics
-                    }).execute()
+                    }, on_conflict='user_id,date').execute()
                     updated_count += 1
                 except Exception as e:
-                    print(f"Error inserting metrics for {date_iso}: {e}")
+                    print(f"Error upserting metrics for {date_iso}: {e}")
                     continue
             
             print(f"\n=== Update completed ===")
