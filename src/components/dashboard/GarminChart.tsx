@@ -222,51 +222,60 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
+      // Check if entry for this date already exists
+      const { data: existingEntry } = await supabase
+        .from('garmin_data')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .eq('date', formattedDate)
+        .single();
+
       // Get the last metrics for calculation
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
         .eq('user_id', currentUserId)
+        .lt('date', formattedDate)
         .order('date', { ascending: false })
         .limit(1)
         .single();
 
       console.log('Last metrics:', lastMetrics);
 
-      // Calculate new metrics
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
-      const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
-      const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
+
+      let finalTrimp = trimpValue;
+      let finalActivity = activityName;
+
+      if (existingEntry) {
+        // Add new TRIMP to existing TRIMP
+        finalTrimp = existingEntry.trimp + trimpValue;
+        // Combine activities
+        finalActivity = existingEntry.activity === 'Rest Day' 
+          ? activityName 
+          : `${existingEntry.activity}, ${activityName}`;
+      }
+
+      // Calculate new metrics
+      const newAtl = previousMetrics.atl + (finalTrimp - previousMetrics.atl) / 7;
+      const newCtl = previousMetrics.ctl + (finalTrimp - previousMetrics.ctl) / 42;
       const newTsb = previousMetrics.ctl - previousMetrics.atl;
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
-      // Check if entry for this date already exists to determine if we're updating or creating
-      const { data: existingEntry } = await supabase
-        .from('garmin_data')
-        .select('trimp, activity')
-        .eq('user_id', currentUserId)
-        .eq('date', formattedDate)
-        .single();
-
-      // Prepare the data for upsert
-      const updatedTrimp = existingEntry ? existingEntry.trimp + trimpValue : trimpValue;
-      const updatedActivity = existingEntry
-        ? existingEntry.activity === 'Rest Day'
-          ? activityName
-          : `${existingEntry.activity}, ${activityName}`
-        : activityName;
-
+      // Use upsert to handle both new and existing entries
       const { error } = await supabase
         .from('garmin_data')
         .upsert({
           user_id: currentUserId,
           date: formattedDate,
-          trimp: updatedTrimp,
-          activity: updatedActivity,
+          trimp: finalTrimp,
+          activity: finalActivity,
           atl: parseFloat(newAtl.toFixed(2)),
           ctl: parseFloat(newCtl.toFixed(2)),
           tsb: parseFloat(newTsb.toFixed(2))
+        }, {
+          onConflict: 'user_id,date'
         });
 
       if (error) throw error;
