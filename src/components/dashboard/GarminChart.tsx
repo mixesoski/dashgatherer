@@ -222,14 +222,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // Check if entry for this date already exists
-      const { data: existingEntry } = await supabase
-        .from('garmin_data')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .eq('date', formattedDate)
-        .single();
-
       // Get the last metrics for calculation
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
@@ -244,22 +236,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
 
-      let finalTrimp = trimpValue;
-      let finalActivity = activityName;
-
-      if (existingEntry) {
-        // Add new TRIMP to existing TRIMP
-        finalTrimp = existingEntry.trimp + trimpValue;
-        // Combine activities
-        finalActivity = existingEntry.activity === 'Rest Day' 
-          ? activityName 
-          : `${existingEntry.activity}, ${activityName}`;
-      }
-
-      // Calculate new metrics
-      const newAtl = previousMetrics.atl + (finalTrimp - previousMetrics.atl) / 7;
-      const newCtl = previousMetrics.ctl + (finalTrimp - previousMetrics.ctl) / 42;
-      const newTsb = previousMetrics.ctl - previousMetrics.atl;
+      // Calculate new metrics based on previous day's metrics
+      const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
+      const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
+      const newTsb = previousMetrics.ctl - previousMetrics.atl;  // TSB uses previous values
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
@@ -269,20 +249,16 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         .upsert({
           user_id: currentUserId,
           date: formattedDate,
-          trimp: finalTrimp,
-          activity: finalActivity,
+          trimp: trimpValue,
+          activity: activityName,
           atl: parseFloat(newAtl.toFixed(2)),
           ctl: parseFloat(newCtl.toFixed(2)),
           tsb: parseFloat(newTsb.toFixed(2))
-        }, {
-          onConflict: 'user_id,date'
         });
 
       if (error) throw error;
 
-      toast.success(existingEntry 
-        ? "Training data updated successfully!" 
-        : "Training data saved successfully!");
+      toast.success("Training data saved successfully!");
       
       // Reset form
       setTrimp("");
