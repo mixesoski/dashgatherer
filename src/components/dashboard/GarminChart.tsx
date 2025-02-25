@@ -222,14 +222,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // Check if entry for this date already exists
-      const { data: existingEntry } = await supabase
-        .from('garmin_data')
-        .select('*')
-        .eq('user_id', currentUserId)
-        .eq('date', formattedDate)
-        .single();
-
       // Get the last metrics for calculation
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
@@ -249,45 +241,33 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
-      let error;
+      // Check if entry for this date already exists to determine if we're updating or creating
+      const { data: existingEntry } = await supabase
+        .from('garmin_data')
+        .select('trimp, activity')
+        .eq('user_id', currentUserId)
+        .eq('date', formattedDate)
+        .single();
 
-      if (existingEntry) {
-        // Update existing entry
-        const updatedTrimp = existingEntry.trimp + trimpValue;
-        const updatedActivity = existingEntry.activity === 'Rest Day' 
-          ? activityName 
-          : `${existingEntry.activity}, ${activityName}`;
+      // Prepare the data for upsert
+      const updatedTrimp = existingEntry ? existingEntry.trimp + trimpValue : trimpValue;
+      const updatedActivity = existingEntry
+        ? existingEntry.activity === 'Rest Day'
+          ? activityName
+          : `${existingEntry.activity}, ${activityName}`
+        : activityName;
 
-        const { error: updateError } = await supabase
-          .from('garmin_data')
-          .update({
-            trimp: updatedTrimp,
-            activity: updatedActivity,
-            atl: parseFloat(newAtl.toFixed(2)),
-            ctl: parseFloat(newCtl.toFixed(2)),
-            tsb: parseFloat(newTsb.toFixed(2))
-          })
-          .eq('user_id', currentUserId)
-          .eq('date', formattedDate);
-
-        error = updateError;
-        console.log('Updated existing entry:', { updatedTrimp, updatedActivity });
-      } else {
-        // Create new entry
-        const { error: insertError } = await supabase
-          .from('garmin_data')
-          .insert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName,
-            atl: parseFloat(newAtl.toFixed(2)),
-            ctl: parseFloat(newCtl.toFixed(2)),
-            tsb: parseFloat(newTsb.toFixed(2))
-          });
-
-        error = insertError;
-      }
+      const { error } = await supabase
+        .from('garmin_data')
+        .upsert({
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: updatedTrimp,
+          activity: updatedActivity,
+          atl: parseFloat(newAtl.toFixed(2)),
+          ctl: parseFloat(newCtl.toFixed(2)),
+          tsb: parseFloat(newTsb.toFixed(2))
+        });
 
       if (error) throw error;
 
