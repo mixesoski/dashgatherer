@@ -183,20 +183,21 @@ class ChartUpdater:
                 previous_metrics = new_metrics
                 
                 try:
-                    print(f"Upserting data for {date_str}:")
+                    # Always insert new data since we're only processing new dates
+                    print(f"Inserting new entry for {date_str}:")
                     print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
                           f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
                     
-                    self.client.table('garmin_data').upsert({
+                    self.client.table('garmin_data').insert({
                         'date': date_iso,
                         'trimp': trimp_total,
                         'activity': activity_str,
                         'user_id': self.user_id,
                         **new_metrics
-                    }, on_conflict='user_id,date').execute()
+                    }).execute()
                     updated_count += 1
                 except Exception as e:
-                    print(f"Error upserting metrics for {date_iso}: {e}")
+                    print(f"Error inserting metrics for {date_iso}: {e}")
                     continue
             
             print(f"\n=== Update completed ===")
