@@ -214,16 +214,20 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         return;
       }
 
-      if (!userId) {
-        toast.error("User ID is required");
+      // Get current user ID from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
+
+      if (!currentUserId) {
+        toast.error("Please log in to add training data");
         return;
       }
 
-      // Get the last metrics to calculate new ones
+      // Use the currentUserId instead of passed userId prop
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
-        .eq('user_id', userId)
+        .eq('user_id', currentUserId)
         .order('date', { ascending: false })
         .limit(1)
         .single();
@@ -241,7 +245,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
       const { error } = await supabase
         .from('garmin_data')
         .upsert({
-          user_id: userId,
+          user_id: currentUserId,
           date: formattedDate,
           trimp: trimpValue,
           activity: activityName,
