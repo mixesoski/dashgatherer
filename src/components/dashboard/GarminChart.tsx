@@ -198,6 +198,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted with:', { date, trimp, activityName });
     
     try {
       const formattedDate = format(date, 'yyyy-MM-dd');
@@ -213,6 +214,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         return;
       }
 
+      if (!userId) {
+        toast.error("User ID is required");
+        return;
+      }
+
       // Get the last metrics to calculate new ones
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
@@ -222,11 +228,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
         .limit(1)
         .single();
 
+      console.log('Last metrics:', lastMetrics);
+
       // Calculate new metrics
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
       const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
       const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
       const newTsb = previousMetrics.ctl - previousMetrics.atl;
+
+      console.log('New metrics:', { newAtl, newCtl, newTsb });
 
       const { error } = await supabase
         .from('garmin_data')
@@ -249,7 +259,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating, userId }: Props
       setActivityName("");
       
       // Refresh chart data
-      onUpdate();
+      await onUpdate();
       
     } catch (error: any) {
       console.error('Error saving training data:', error);
