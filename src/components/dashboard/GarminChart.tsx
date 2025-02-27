@@ -1,4 +1,3 @@
-
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -223,17 +222,26 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
+      // Check if entry exists for this date
+      const { data: existingEntry } = await supabase
+        .from('garmin_data')
+        .select('trimp, activity')
+        .eq('user_id', currentUserId)
+        .eq('date', formattedDate)
+        .single();
+
       // Get the last metrics for calculation
-      const { data: lastMetrics, error: lastMetricsError } = await supabase
+      const { data: lastMetrics } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
         .eq('user_id', currentUserId)
         .lt('date', formattedDate)
         .order('date', { ascending: false })
         .limit(1)
-        .maybeSingle(); // Changed from single() to maybeSingle()
+        .single();
 
       console.log('Last metrics:', lastMetrics);
+      console.log('Existing entry:', existingEntry);
 
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
 
@@ -244,7 +252,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
-      // Use upsert to handle both new and existing entries
+      // Use upsert with onConflict option
       const { error } = await supabase
         .from('garmin_data')
         .upsert({
@@ -255,11 +263,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           atl: parseFloat(newAtl.toFixed(2)),
           ctl: parseFloat(newCtl.toFixed(2)),
           tsb: parseFloat(newTsb.toFixed(2))
+        }, {
+          onConflict: 'user_id,date'
         });
 
       if (error) throw error;
 
-      toast.success("Training data saved successfully!");
+      toast.success(existingEntry 
+        ? "Training data updated successfully!" 
+        : "Training data saved successfully!");
       
       // Reset form
       setTrimp("");
