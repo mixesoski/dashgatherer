@@ -263,23 +263,41 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
         toast.loading("Calculating new metrics...", { id: toastId });
 
+        // Check if there's an existing entry for this date
+        const existingEntry = affectedData?.find(entry => entry.date === formattedDate);
+        const combinedTrimp = existingEntry ? existingEntry.trimp + trimpValue : trimpValue;
+        const combinedActivity = existingEntry 
+          ? `${existingEntry.activity}, ${activityName}`
+          : activityName;
+
+        console.log('Combined values:', {
+          existingTrimp: existingEntry?.trimp || 0,
+          newTrimp: trimpValue,
+          totalTrimp: combinedTrimp,
+          activity: combinedActivity
+        });
+
         // First, handle the new/updated entry
+        const newAtl = previousMetrics.atl + (combinedTrimp - previousMetrics.atl) / 7;
+        const newCtl = previousMetrics.ctl + (combinedTrimp - previousMetrics.ctl) / 42;
+        const newTsb = newCtl - newAtl; // Fix: Use new ATL and CTL values for TSB
+
         const newMetrics = {
           user_id: currentUserId,
           date: formattedDate,
-          trimp: trimpValue,
-          activity: activityName,
-          atl: parseFloat((previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7).toFixed(2)),
-          ctl: parseFloat((previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42).toFixed(2)),
-          tsb: parseFloat((previousMetrics.ctl - previousMetrics.atl).toFixed(2))
+          trimp: combinedTrimp,
+          activity: combinedActivity,
+          atl: parseFloat(newAtl.toFixed(2)),
+          ctl: parseFloat(newCtl.toFixed(2)),
+          tsb: parseFloat(newTsb.toFixed(2))
         };
 
         console.log('New entry metrics:', newMetrics);
         updatedEntries.push(newMetrics);
         previousMetrics = {
-          atl: newMetrics.atl,
-          ctl: newMetrics.ctl,
-          tsb: newMetrics.tsb
+          atl: newAtl,
+          ctl: newCtl,
+          tsb: newTsb
         };
 
         // Then recalculate all subsequent days
@@ -291,7 +309,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             const currentTrimp = entry.trimp;
             const newAtl = previousMetrics.atl + (currentTrimp - previousMetrics.atl) / 7;
             const newCtl = previousMetrics.ctl + (currentTrimp - previousMetrics.ctl) / 42;
-            const newTsb = previousMetrics.ctl - previousMetrics.atl; // TSB uses previous values
+            const newTsb = newCtl - newAtl; // Fix: Use new ATL and CTL values for TSB
 
             const updatedEntry = {
               ...entry,
