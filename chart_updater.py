@@ -18,7 +18,7 @@ class ChartUpdater:
             response = self.client.table('garmin_credentials')\
                 .select('email, password')\
                 .eq('user_id', self.user_id)\
-                .single()\
+                .maybeSingle()\
                 .execute()
             return response.data
         except Exception as e:
@@ -42,7 +42,7 @@ class ChartUpdater:
                 .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
-                .single() \
+                .maybeSingle() \
                 .execute()
             
             if response.data:
@@ -130,12 +130,12 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', last_date.isoformat()) \
-                    .single() \
+                    .maybeSingle() \
                     .execute()
                 
                 current_data = response.data
                 
-                if trimp_total > 0:
+                if trimp_total > 0 and current_data:
                     # Add new TRIMP to existing TRIMP instead of replacing
                     new_trimp = current_data['trimp'] + trimp_total
                     # Combine activities, avoiding duplicates
@@ -163,7 +163,7 @@ class ChartUpdater:
                         .lt('date', last_date.isoformat()) \
                         .order('date', desc=True) \
                         .limit(1) \
-                        .single() \
+                        .maybeSingle() \
                         .execute()
                     
                     if previous_response.data:
@@ -241,7 +241,7 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', date_str) \
-                    .single() \
+                    .maybeSingle() \
                     .execute()
                 
                 existing_data = existing_response.data if existing_response.data else {'trimp': 0.0, 'activity': ''}
