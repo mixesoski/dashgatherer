@@ -18,9 +18,11 @@ class ChartUpdater:
             response = self.client.table('garmin_credentials')\
                 .select('email, password')\
                 .eq('user_id', self.user_id)\
-                .single()\
                 .execute()
-            return response.data
+            if response.data:
+                return response.data[0] if isinstance(response.data, list) else response.data
+            else:
+                return None
         except Exception as e:
             print(f"Error fetching Garmin credentials: {e}")
             return None
@@ -42,11 +44,10 @@ class ChartUpdater:
                 .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
-                .single() \
                 .execute()
             
             if response.data:
-                data = response.data
+                data = response.data[0] if isinstance(response.data, list) else response.data
                 try:
                     date = datetime.datetime.fromisoformat(data['date']).date()
                     last_metrics = {
@@ -130,7 +131,7 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', last_date.isoformat()) \
-                    .single() \
+                    .maybeSingle() \
                     .execute()
                 
                 current_data = response.data
@@ -163,7 +164,7 @@ class ChartUpdater:
                         .lt('date', last_date.isoformat()) \
                         .order('date', desc=True) \
                         .limit(1) \
-                        .single() \
+                        .maybeSingle() \
                         .execute()
                     
                     if previous_response.data:
@@ -241,7 +242,7 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', date_str) \
-                    .single() \
+                    .maybeSingle() \
                     .execute()
                 
                 existing_data = existing_response.data if existing_response.data else {'trimp': 0.0, 'activity': ''}
