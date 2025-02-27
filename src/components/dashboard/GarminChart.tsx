@@ -1,3 +1,4 @@
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -223,14 +224,14 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       }
 
       // Get the last metrics for calculation
-      const { data: lastMetrics } = await supabase
+      const { data: lastMetrics, error: lastMetricsError } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
         .eq('user_id', currentUserId)
         .lt('date', formattedDate)
         .order('date', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle(); // Changed from single() to maybeSingle()
 
       console.log('Last metrics:', lastMetrics);
 

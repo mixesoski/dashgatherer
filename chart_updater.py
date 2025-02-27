@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import os
 import datetime
@@ -18,7 +19,7 @@ class ChartUpdater:
             response = self.client.table('garmin_credentials')\
                 .select('email, password')\
                 .eq('user_id', self.user_id)\
-                .single()\
+                .maybeSingle()\
                 .execute()
             return response.data
         except Exception as e:
@@ -41,7 +42,7 @@ class ChartUpdater:
                 .eq('user_id', self.user_id) \
                 .order('date', desc=True) \
                 .limit(1) \
-                .single() \
+                .maybeSingle() \
                 .execute()
             
             if response.data:
@@ -129,12 +130,12 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', last_date.isoformat()) \
-                    .single() \
+                    .maybeSingle() \
                     .execute()
                 
                 current_data = response.data
                 
-                if trimp_total > 0 and trimp_total != current_data['trimp']:
+                if trimp_total > 0 and current_data and trimp_total != current_data['trimp']:
                     print(f"\n=== Updating last existing date: {last_date} ===")
                     print(f"Current TRIMP: {current_data['trimp']} -> New TRIMP: {trimp_total}")
                     print(f"Current activities: {current_data['activity']}")
@@ -153,7 +154,7 @@ class ChartUpdater:
                         .lt('date', last_date.isoformat()) \
                         .order('date', desc=True) \
                         .limit(1) \
-                        .single() \
+                        .maybeSingle() \
                         .execute()
                     
                     if previous_response.data:
