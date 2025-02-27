@@ -243,7 +243,11 @@ class ChartUpdater:
                     .eq('date', date_str) \
                     .execute()
                 
-                existing_data = existing_response.data[0] if isinstance(existing_response.data, list) else existing_response.data
+                if existing_response.data and ((isinstance(existing_response.data, list) and len(existing_response.data) > 0) or (not isinstance(existing_response.data, list))):
+                    existing_data = existing_response.data[0] if isinstance(existing_response.data, list) else existing_response.data
+                else:
+                    existing_data = {'trimp': 0.0, 'activity': ''}
+                
                 existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
                 
                 for activity in activities_for_date:
