@@ -222,15 +222,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // Check if entry exists for this date
-      const { data: existingEntry } = await supabase
+      // Get all data from this date onwards to recalculate
+      const { data: affectedData } = await supabase
         .from('garmin_data')
-        .select('trimp, activity')
+        .select('*')
         .eq('user_id', currentUserId)
-        .eq('date', formattedDate)
-        .single();
+        .gte('date', formattedDate)
+        .order('date', { ascending: true });
 
-      // Get the last metrics for calculation
+      // Get the last metrics before the new entry date
       const { data: lastMetrics } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
@@ -240,38 +240,67 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         .limit(1)
         .single();
 
-      console.log('Last metrics:', lastMetrics);
-      console.log('Existing entry:', existingEntry);
+      console.log('Last metrics before new entry:', lastMetrics);
 
-      const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
+      let previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
+      const updatedEntries = [];
 
-      // Calculate new metrics based on previous day's metrics
-      const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
-      const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
-      const newTsb = previousMetrics.ctl - previousMetrics.atl;  // TSB uses previous values
+      // First, handle the new/updated entry
+      const newMetrics = {
+        user_id: currentUserId,
+        date: formattedDate,
+        trimp: trimpValue,
+        activity: activityName,
+        atl: parseFloat((previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7).toFixed(2)),
+        ctl: parseFloat((previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42).toFixed(2)),
+        tsb: parseFloat((previousMetrics.ctl - previousMetrics.atl).toFixed(2))
+      };
 
-      console.log('New metrics:', { newAtl, newCtl, newTsb });
+      updatedEntries.push(newMetrics);
+      previousMetrics = {
+        atl: newMetrics.atl,
+        ctl: newMetrics.ctl,
+        tsb: newMetrics.tsb
+      };
 
-      // Use upsert with onConflict option
-      const { error } = await supabase
-        .from('garmin_data')
-        .upsert({
-          user_id: currentUserId,
-          date: formattedDate,
-          trimp: trimpValue,
-          activity: activityName,
-          atl: parseFloat(newAtl.toFixed(2)),
-          ctl: parseFloat(newCtl.toFixed(2)),
-          tsb: parseFloat(newTsb.toFixed(2))
-        }, {
-          onConflict: 'user_id,date'
-        });
+      // Then recalculate all subsequent days
+      if (affectedData) {
+        const subsequentDays = affectedData.filter(entry => entry.date > formattedDate);
+        
+        for (const entry of subsequentDays) {
+          const currentTrimp = entry.trimp;
+          const newAtl = previousMetrics.atl + (currentTrimp - previousMetrics.atl) / 7;
+          const newCtl = previousMetrics.ctl + (currentTrimp - previousMetrics.ctl) / 42;
+          const newTsb = previousMetrics.ctl - previousMetrics.atl; // TSB uses previous values
 
-      if (error) throw error;
+          const updatedEntry = {
+            ...entry,
+            atl: parseFloat(newAtl.toFixed(2)),
+            ctl: parseFloat(newCtl.toFixed(2)),
+            tsb: parseFloat(newTsb.toFixed(2))
+          };
 
-      toast.success(existingEntry 
-        ? "Training data updated successfully!" 
-        : "Training data saved successfully!");
+          updatedEntries.push(updatedEntry);
+          previousMetrics = {
+            atl: newAtl,
+            ctl: newCtl,
+            tsb: newTsb
+          };
+        }
+      }
+
+      // Update all entries in the database
+      for (const entry of updatedEntries) {
+        const { error: upsertError } = await supabase
+          .from('garmin_data')
+          .upsert(entry, {
+            onConflict: 'user_id,date'
+          });
+
+        if (upsertError) throw upsertError;
+      }
+
+      toast.success("Training data saved and metrics recalculated!");
       
       // Reset form
       setTrimp("");
