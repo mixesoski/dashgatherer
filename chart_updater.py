@@ -134,16 +134,25 @@ class ChartUpdater:
                 
                 current_data = response.data
                 
-                if trimp_total > 0 and trimp_total != current_data['trimp']:
+                if trimp_total > 0:
+                    # Add new TRIMP to existing TRIMP instead of replacing
+                    new_trimp = current_data['trimp'] + trimp_total
+                    # Combine activities, avoiding duplicates
+                    current_activities = set(current_data['activity'].split(', ')) if current_data['activity'] else set()
+                    new_activities = set(activity_names)
+                    all_activities = current_activities.union(new_activities)
+                    activity_str = ', '.join(sorted(all_activities))
+                    
                     print(f"\n=== Updating last existing date: {last_date} ===")
-                    print(f"Current TRIMP: {current_data['trimp']} -> New TRIMP: {trimp_total}")
+                    print(f"Current TRIMP: {current_data['trimp']} + New TRIMP: {trimp_total} = {new_trimp}")
                     print(f"Current activities: {current_data['activity']}")
                     print(f"New activities: {', '.join(activity_names)}")
+                    print(f"Combined activities: {activity_str}")
                     
-                    # Update the last date with new values
+                    # Update the last date with combined values
                     self.client.table('garmin_data').update({
-                        'trimp': trimp_total,
-                        'activity': ', '.join(activity_names)
+                        'trimp': new_trimp,
+                        'activity': activity_str
                     }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
                     
                     # Recalculate metrics for this day
@@ -226,6 +235,17 @@ class ChartUpdater:
                 trimp_total = 0.0
                 activities_for_date = activities_by_date.get(date_str, [])
                 
+                # Get existing data for this date if any
+                existing_response = self.client.table('garmin_data') \
+                    .select('trimp, activity') \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', date_str) \
+                    .single() \
+                    .execute()
+                
+                existing_data = existing_response.data if existing_response.data else {'trimp': 0.0, 'activity': ''}
+                existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
+                
                 for activity in activities_for_date:
                     activity_id = activity['activityId']
                     try:
@@ -244,17 +264,23 @@ class ChartUpdater:
                         print(f"Error processing activity {activity_id}: {e}")
                         continue
                 
-                if trimp_total == 0:
+                if trimp_total == 0 and existing_data['trimp'] == 0:
                     activity_str = "Rest Day"
                 else:
                     activity_names = [activity.get('activityName', 'Unknown Activity') 
                                     for activity in activities_for_date]
-                    activity_str = ', '.join(activity_names) or "Unknown Activity"
+                    all_activities = existing_activities.union(set(activity_names))
+                    activity_str = ', '.join(sorted(all_activities)) if all_activities else "Unknown Activity"
                 
-                new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                # Add new TRIMP to existing TRIMP
+                total_trimp = existing_data['trimp'] + trimp_total
+                
+                new_metrics = self.calculate_new_metrics(total_trimp, previous_metrics)
                 
                 print(f"\n=== Processing {date_str} ===")
-                print(f"TRIMP: {trimp_total}")
+                print(f"Existing TRIMP: {existing_data['trimp']}")
+                print(f"New TRIMP: {trimp_total}")
+                print(f"Total TRIMP: {total_trimp}")
                 print(f"Activity: {activity_str}")
                 print(f"Metrics update:")
                 print(f"ATL: {previous_metrics['atl']} -> {new_metrics['atl']}")
@@ -266,12 +292,12 @@ class ChartUpdater:
                 try:
                     # Use upsert to handle existing entries
                     print(f"Upserting data for {date_str}:")
-                    print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
+                    print(f"TRIMP: {total_trimp} | ATL: {new_metrics['atl']} | "
                           f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
                     
                     self.client.table('garmin_data').upsert({
                         'date': date_iso,
-                        'trimp': trimp_total,
+                        'trimp': total_trimp,
                         'activity': activity_str,
                         'user_id': self.user_id,
                         **new_metrics
