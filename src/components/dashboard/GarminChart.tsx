@@ -31,7 +31,6 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { addTrainingData } from "@/lib/training-data";
 
 ChartJS.register(
   CategoryScale,
@@ -198,20 +197,92 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Form submitted with:', { date, trimp, activityName });
     
-    const success = await addTrainingData({
-      date,
-      trimp,
-      activityName
-    });
+    try {
+      const formattedDate = format(date, 'yyyy-MM-dd');
+      const trimpValue = parseFloat(trimp);
 
-    if (success) {
+      if (isNaN(trimpValue)) {
+        toast.error("Please enter a valid TRIMP value");
+        return;
+      }
+
+      if (!activityName) {
+        toast.error("Please enter an activity name");
+        return;
+      }
+
+      // Get current user ID from auth
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
+
+      if (!currentUserId) {
+        toast.error("Please log in to add training data");
+        return;
+      }
+
+      // Check if entry exists for this date
+      const { data: existingEntry } = await supabase
+        .from('garmin_data')
+        .select('trimp, activity')
+        .eq('user_id', currentUserId)
+        .eq('date', formattedDate)
+        .single();
+
+      // Get the last metrics for calculation
+      const { data: lastMetrics } = await supabase
+        .from('garmin_data')
+        .select('atl, ctl, tsb')
+        .eq('user_id', currentUserId)
+        .lt('date', formattedDate)
+        .order('date', { ascending: false })
+        .limit(1)
+        .single();
+
+      console.log('Last metrics:', lastMetrics);
+      console.log('Existing entry:', existingEntry);
+
+      const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
+
+      // Calculate new metrics based on previous day's metrics
+      const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
+      const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
+      const newTsb = previousMetrics.ctl - previousMetrics.atl;  // TSB uses previous values
+
+      console.log('New metrics:', { newAtl, newCtl, newTsb });
+
+      // Use upsert with onConflict option
+      const { error } = await supabase
+        .from('garmin_data')
+        .upsert({
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity: activityName,
+          atl: parseFloat(newAtl.toFixed(2)),
+          ctl: parseFloat(newCtl.toFixed(2)),
+          tsb: parseFloat(newTsb.toFixed(2))
+        }, {
+          onConflict: 'user_id,date'
+        });
+
+      if (error) throw error;
+
+      toast.success(existingEntry 
+        ? "Training data updated successfully!" 
+        : "Training data saved successfully!");
+      
       // Reset form
       setTrimp("");
       setActivityName("");
       
       // Refresh chart data
       await onUpdate();
+      
+    } catch (error: any) {
+      console.error('Error saving training data:', error);
+      toast.error(error.message || "Failed to save training data");
     }
   };
 

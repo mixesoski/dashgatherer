@@ -18,11 +18,9 @@ class ChartUpdater:
             response = self.client.table('garmin_credentials')\
                 .select('email, password')\
                 .eq('user_id', self.user_id)\
+                .single()\
                 .execute()
-            
-            if response.data and len(response.data) > 0:
-                return response.data[0]
-            return None
+            return response.data
         except Exception as e:
             print(f"Error fetching Garmin credentials: {e}")
             return None
@@ -44,10 +42,11 @@ class ChartUpdater:
                 .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
+                .single() \
                 .execute()
             
-            if response.data and len(response.data) > 0:
-                data = response.data[0]
+            if response.data:
+                data = response.data
                 try:
                     date = datetime.datetime.fromisoformat(data['date']).date()
                     last_metrics = {
@@ -131,11 +130,12 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', last_date.isoformat()) \
+                    .single() \
                     .execute()
                 
-                current_data = response.data[0] if response.data and len(response.data) > 0 else None
+                current_data = response.data
                 
-                if trimp_total > 0 and current_data:
+                if trimp_total > 0:
                     # Add new TRIMP to existing TRIMP instead of replacing
                     new_trimp = current_data['trimp'] + trimp_total
                     # Combine activities, avoiding duplicates
@@ -163,13 +163,14 @@ class ChartUpdater:
                         .lt('date', last_date.isoformat()) \
                         .order('date', desc=True) \
                         .limit(1) \
+                        .single() \
                         .execute()
                     
-                    if previous_response.data and len(previous_response.data) > 0:
+                    if previous_response.data:
                         prev_metrics = {
-                            'atl': float(previous_response.data[0]['atl']),
-                            'ctl': float(previous_response.data[0]['ctl']),
-                            'tsb': float(previous_response.data[0]['tsb'])
+                            'atl': float(previous_response.data['atl']),
+                            'ctl': float(previous_response.data['ctl']),
+                            'tsb': float(previous_response.data['tsb'])
                         }
                     else:
                         prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
@@ -240,9 +241,10 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', date_str) \
+                    .single() \
                     .execute()
                 
-                existing_data = existing_response.data[0] if existing_response.data and len(existing_response.data) > 0 else None
+                existing_data = existing_response.data if existing_response.data else {'trimp': 0.0, 'activity': ''}
                 existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
                 
                 for activity in activities_for_date:
