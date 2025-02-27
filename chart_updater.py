@@ -131,10 +131,9 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', last_date.isoformat()) \
-                    .maybeSingle() \
                     .execute()
                 
-                current_data = response.data
+                current_data = response.data[0] if isinstance(response.data, list) else response.data
                 
                 if trimp_total > 0:
                     # Add new TRIMP to existing TRIMP instead of replacing
@@ -164,14 +163,14 @@ class ChartUpdater:
                         .lt('date', last_date.isoformat()) \
                         .order('date', desc=True) \
                         .limit(1) \
-                        .maybeSingle() \
                         .execute()
                     
                     if previous_response.data:
+                        data = previous_response.data[0] if isinstance(previous_response.data, list) else previous_response.data
                         prev_metrics = {
-                            'atl': float(previous_response.data['atl']),
-                            'ctl': float(previous_response.data['ctl']),
-                            'tsb': float(previous_response.data['tsb'])
+                            'atl': float(data['atl']),
+                            'ctl': float(data['ctl']),
+                            'tsb': float(data['tsb'])
                         }
                     else:
                         prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
@@ -242,10 +241,9 @@ class ChartUpdater:
                     .select('trimp, activity') \
                     .eq('user_id', self.user_id) \
                     .eq('date', date_str) \
-                    .maybeSingle() \
                     .execute()
                 
-                existing_data = existing_response.data if existing_response.data else {'trimp': 0.0, 'activity': ''}
+                existing_data = existing_response.data[0] if isinstance(existing_response.data, list) else existing_response.data
                 existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
                 
                 for activity in activities_for_date:
