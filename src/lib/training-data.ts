@@ -41,7 +41,7 @@ export const addTrainingData = async (data: TrainingDataInput): Promise<boolean>
       .select('trimp, activity')
       .eq('user_id', currentUserId)
       .eq('date', formattedDate)
-      .single();
+      .maybeSingle();
 
     // Get the last metrics for calculation
     const { data: lastMetrics } = await supabase
@@ -51,7 +51,7 @@ export const addTrainingData = async (data: TrainingDataInput): Promise<boolean>
       .lt('date', formattedDate)
       .order('date', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     console.log('Last metrics:', lastMetrics);
     console.log('Existing entry:', existingEntry);
