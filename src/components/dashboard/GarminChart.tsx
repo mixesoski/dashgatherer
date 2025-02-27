@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { addTrainingData } from "@/lib/training-data";
 
 ChartJS.register(
   CategoryScale,
@@ -197,178 +198,20 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submitted with:', { date, trimp, activityName });
     
-    try {
-      const formattedDate = format(date, 'yyyy-MM-dd');
-      const trimpValue = parseFloat(trimp);
+    const success = await addTrainingData({
+      date,
+      trimp,
+      activityName
+    });
 
-      if (isNaN(trimpValue)) {
-        toast.error("Please enter a valid TRIMP value");
-        return;
-      }
-
-      if (!activityName) {
-        toast.error("Please enter an activity name");
-        return;
-      }
-
-      // Show initial progress toast
-      const toastId = toast.loading("Adding new training data...");
-
-      try {
-        // Get current user ID from auth
-        const { data: { user } } = await supabase.auth.getUser();
-        const currentUserId = user?.id;
-
-        if (!currentUserId) {
-          toast.error("Please log in to add training data", { id: toastId });
-          return;
-        }
-
-        console.log('Fetching affected data from:', formattedDate);
-        // Get all data from this date onwards to recalculate
-        const { data: affectedData, error: fetchError } = await supabase
-          .from('garmin_data')
-          .select('*')
-          .eq('user_id', currentUserId)
-          .gte('date', formattedDate)
-          .order('date', { ascending: true });
-
-        if (fetchError) {
-          console.error('Error fetching affected data:', fetchError);
-          throw fetchError;
-        }
-
-        console.log('Fetching last metrics before:', formattedDate);
-        // Get the last metrics before the new entry date
-        const { data: lastMetrics, error: metricsError } = await supabase
-          .from('garmin_data')
-          .select('atl, ctl, tsb')
-          .eq('user_id', currentUserId)
-          .lt('date', formattedDate)
-          .order('date', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (metricsError && metricsError.code !== 'PGRST116') { // Ignore "no rows returned" error
-          console.error('Error fetching last metrics:', metricsError);
-          throw metricsError;
-        }
-
-        console.log('Last metrics before new entry:', lastMetrics);
-
-        let previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
-        const updatedEntries = [];
-
-        toast.loading("Calculating new metrics...", { id: toastId });
-
-        // Check if there's an existing entry for this date
-        const existingEntry = affectedData?.find(entry => entry.date === formattedDate);
-        const combinedTrimp = existingEntry ? existingEntry.trimp + trimpValue : trimpValue;
-        const combinedActivity = existingEntry 
-          ? `${existingEntry.activity}, ${activityName}`
-          : activityName;
-
-        console.log('Combined values:', {
-          existingTrimp: existingEntry?.trimp || 0,
-          newTrimp: trimpValue,
-          totalTrimp: combinedTrimp,
-          activity: combinedActivity
-        });
-
-        // First, handle the new/updated entry
-        const newAtl = previousMetrics.atl + (combinedTrimp - previousMetrics.atl) / 7;
-        const newCtl = previousMetrics.ctl + (combinedTrimp - previousMetrics.ctl) / 42;
-        const newTsb = newCtl - newAtl; // Fix: Use new ATL and CTL values for TSB
-
-        const newMetrics = {
-          user_id: currentUserId,
-          date: formattedDate,
-          trimp: combinedTrimp,
-          activity: combinedActivity,
-          atl: parseFloat(newAtl.toFixed(2)),
-          ctl: parseFloat(newCtl.toFixed(2)),
-          tsb: parseFloat(newTsb.toFixed(2))
-        };
-
-        console.log('New entry metrics:', newMetrics);
-        updatedEntries.push(newMetrics);
-        previousMetrics = {
-          atl: newAtl,
-          ctl: newCtl,
-          tsb: newTsb
-        };
-
-        // Then recalculate all subsequent days
-        if (affectedData) {
-          const subsequentDays = affectedData.filter(entry => entry.date > formattedDate);
-          console.log(`Recalculating metrics for ${subsequentDays.length} subsequent days`);
-          
-          for (const entry of subsequentDays) {
-            const currentTrimp = entry.trimp;
-            const newAtl = previousMetrics.atl + (currentTrimp - previousMetrics.atl) / 7;
-            const newCtl = previousMetrics.ctl + (currentTrimp - previousMetrics.ctl) / 42;
-            const newTsb = newCtl - newAtl; // Fix: Use new ATL and CTL values for TSB
-
-            const updatedEntry = {
-              ...entry,
-              atl: parseFloat(newAtl.toFixed(2)),
-              ctl: parseFloat(newCtl.toFixed(2)),
-              tsb: parseFloat(newTsb.toFixed(2))
-            };
-
-            console.log(`Updated metrics for ${entry.date}:`, {
-              trimp: currentTrimp,
-              atl: updatedEntry.atl,
-              ctl: updatedEntry.ctl,
-              tsb: updatedEntry.tsb
-            });
-
-            updatedEntries.push(updatedEntry);
-            previousMetrics = {
-              atl: newAtl,
-              ctl: newCtl,
-              tsb: newTsb
-            };
-          }
-        }
-
-        toast.loading("Saving updated metrics...", { id: toastId });
-
-        // Update all entries in the database
-        console.log(`Saving ${updatedEntries.length} entries to database`);
-        for (const entry of updatedEntries) {
-          const { error: upsertError } = await supabase
-            .from('garmin_data')
-            .upsert(entry, {
-              onConflict: 'user_id,date'
-            });
-
-          if (upsertError) {
-            console.error('Error upserting entry for date:', entry.date, upsertError);
-            throw upsertError;
-          }
-        }
-
-        toast.success("Training data saved and metrics recalculated!", { id: toastId });
-        
-        // Reset form
-        setTrimp("");
-        setActivityName("");
-        
-        // Refresh chart data
-        await onUpdate();
-        
-      } catch (error: any) {
-        console.error('Error in manual training submission:', error);
-        toast.error(error.message || "Failed to save training data", { id: toastId });
-        throw error;
-      }
+    if (success) {
+      // Reset form
+      setTrimp("");
+      setActivityName("");
       
-    } catch (error: any) {
-      console.error('Error saving training data:', error);
-      toast.error(error.message || "Failed to save training data");
+      // Refresh chart data
+      await onUpdate();
     }
   };
 
