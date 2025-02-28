@@ -271,54 +271,39 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
-      console.log("Attempting to save to manual_data table...");
-      
-      // Check if manual_data table exists
-      const { error: tableCheckError } = await supabase
-        .from('manual_data' as any)
-        .select('*')
-        .limit(1);
-        
-      if (tableCheckError) {
-        console.error('Error accessing manual_data table:', tableCheckError);
-        // Try creating the table if it doesn't exist (simplified version)
-        try {
-          console.log('Attempting to save to manual data with different approach');
-          const { error: rawQueryError } = await supabase
-            .rpc('insert_manual_training' as any, {
-              p_user_id: currentUserId,
-              p_date: formattedDate,
-              p_trimp: trimpValue,
-              p_activity: activityName
-            });
-            
-          if (rawQueryError) {
-            console.error('Error with RPC insert_manual_training:', rawQueryError);
-          } else {
-            console.log('Successfully added to manual data via RPC');
+      // Simple direct insert approach for manual_data
+      try {
+        console.log("Attempting to save to manual_data table with executeRaw...");
+        const { error: sqlError } = await supabase.rpc(
+          'execute_sql' as any,
+          { 
+            query: `INSERT INTO manual_data (user_id, date, trimp, activity) 
+                    VALUES ('${currentUserId}', '${formattedDate}', ${trimpValue}, '${activityName.replace(/'/g, "''")}')` 
           }
-        } catch (rpcError) {
-          console.error('RPC method failed:', rpcError);
-        }
-      } else {
-        // Table exists, proceed with insert
-        const { error: manualInsertError, data: insertResult } = await supabase
-          .from('manual_data' as any)
-          .insert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName
-          });
-
-        console.log('Insert result:', insertResult);
+        );
         
-        if (manualInsertError) {
-          console.error('Error inserting to manual_data:', manualInsertError);
-          toast.error("Failed to save to manual training log");
+        if (sqlError) {
+          console.error('Error inserting to manual_data with SQL:', sqlError);
         } else {
-          console.log('Successfully saved to manual_data table');
+          console.log('Successfully saved to manual_data table via SQL');
         }
+      } catch (sqlError) {
+        console.error('SQL execution failed:', sqlError);
+      }
+      
+      // Backup approach with standard method in case the table exists in schema
+      console.log("Attempting to save to manual_data table with standard approach as backup...");
+      const { error: manualInsertError } = await supabase
+        .from('manual_data' as any)
+        .insert({
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity: activityName
+        });
+        
+      if (manualInsertError) {
+        console.error('Error with standard insert to manual_data:', manualInsertError);
       }
 
       toast.success(existingEntry 
@@ -332,12 +317,65 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Refresh chart data
       await onUpdate();
       
-      // Trigger chart updater logic
-      await fetch('/api/update-chart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: currentUserId })
-      });
+      // Recalculate metrics for all dates after the edited date
+      console.log("Recalculating metrics for subsequent dates...");
+      
+      // Fetch all dates after the edited date
+      const { data: subsequentDates } = await supabase
+        .from('garmin_data')
+        .select('date, trimp, atl, ctl, tsb')
+        .eq('user_id', currentUserId)
+        .gt('date', formattedDate)
+        .order('date', { ascending: true });
+        
+      if (subsequentDates && subsequentDates.length > 0) {
+        console.log(`Found ${subsequentDates.length} subsequent dates to recalculate`);
+        
+        // Start with metrics from the edited date
+        let prevMetrics = {
+          atl: parseFloat(newAtl.toFixed(2)),
+          ctl: parseFloat(newCtl.toFixed(2)),
+          tsb: parseFloat(newTsb.toFixed(2))
+        };
+        
+        // Process each subsequent date
+        for (const dateItem of subsequentDates) {
+          const dateTRIMP = dateItem.trimp || 0;
+          
+          // Calculate new metrics based on previous metrics and current TRIMP
+          const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
+          const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
+          const dateTsb = prevMetrics.ctl - prevMetrics.atl; // TSB uses previous metrics
+          
+          const updatedMetrics = {
+            atl: parseFloat(dateAtl.toFixed(2)),
+            ctl: parseFloat(dateCtl.toFixed(2)),
+            tsb: parseFloat(dateTsb.toFixed(2))
+          };
+          
+          console.log(`Updating ${dateItem.date} - TRIMP: ${dateTRIMP}, New metrics:`, updatedMetrics);
+          
+          // Update the database with new metrics
+          const { error: updateError } = await supabase
+            .from('garmin_data')
+            .update(updatedMetrics)
+            .eq('user_id', currentUserId)
+            .eq('date', dateItem.date);
+            
+          if (updateError) {
+            console.error(`Error updating metrics for ${dateItem.date}:`, updateError);
+          }
+          
+          // Set current metrics as previous for next iteration
+          prevMetrics = updatedMetrics;
+        }
+        
+        console.log("Finished recalculating metrics for all subsequent dates");
+        // Refresh chart data again after all updates
+        await onUpdate();
+      } else {
+        console.log("No subsequent dates found that need recalculation");
+      }
       
     } catch (error: any) {
       console.error('Error saving training data:', error);
