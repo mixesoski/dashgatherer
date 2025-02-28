@@ -130,6 +130,7 @@ export type Database = {
           garmin_email: string | null
           garmin_password: string | null
           id: number
+          nickname: string | null
           role: Database["public"]["Enums"]["user_role"] | null
           user_id: string | null
         }
@@ -139,6 +140,7 @@ export type Database = {
           garmin_email?: string | null
           garmin_password?: string | null
           id?: number
+          nickname?: string | null
           role?: Database["public"]["Enums"]["user_role"] | null
           user_id?: string | null
         }
@@ -148,6 +150,7 @@ export type Database = {
           garmin_email?: string | null
           garmin_password?: string | null
           id?: number
+          nickname?: string | null
           role?: Database["public"]["Enums"]["user_role"] | null
           user_id?: string | null
         }

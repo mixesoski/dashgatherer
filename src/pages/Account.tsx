@@ -13,6 +13,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,6 +22,7 @@ import * as z from "zod";
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
+  nickname: z.string().optional().or(z.literal("")),
   garmin_email: z.string().email("Invalid Garmin email").optional().or(z.literal("")),
   garmin_password: z.string().min(1, "Password is required").optional().or(z.literal("")),
 });
@@ -29,11 +31,13 @@ const Account = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
+      nickname: "",
       garmin_email: "",
       garmin_password: "",
     },
@@ -48,6 +52,8 @@ const Account = () => {
           return;
         }
 
+        setUserId(user.id);
+
         const { data: profile, error } = await supabase
           .from("profiles")
           .select("*")
@@ -60,6 +66,7 @@ const Account = () => {
           setProfile(profile);
           form.reset({
             email: profile.email || "",
+            nickname: profile.nickname || "",
             garmin_email: profile.garmin_email || "",
             garmin_password: "", // Don't show the actual password
           });
@@ -82,6 +89,7 @@ const Account = () => {
       const updates = {
         user_id: user.id,
         email: values.email,
+        nickname: values.nickname,
         garmin_email: values.garmin_email,
         updated_at: new Date().toISOString(),
       };
@@ -123,6 +131,11 @@ const Account = () => {
           <CardDescription>
             Update your account information and Garmin Connect credentials
           </CardDescription>
+          {userId && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              <span className="font-semibold">User ID:</span> {userId}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -136,6 +149,23 @@ const Account = () => {
                     <FormControl>
                       <Input {...field} type="email" placeholder="Enter your email" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="nickname"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nickname</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Enter a nickname" />
+                    </FormControl>
+                    <FormDescription>
+                      Setting a nickname will make it easier for coaches to recognize you.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
