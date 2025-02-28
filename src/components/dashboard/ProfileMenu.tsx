@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -96,7 +97,12 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
         <Button variant="outline">Menu</Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56">
-        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+        <DropdownMenuLabel 
+          className="cursor-pointer"
+          onClick={() => navigate("/account")}
+        >
+          My Account
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleDeleteGarminCredentials}
