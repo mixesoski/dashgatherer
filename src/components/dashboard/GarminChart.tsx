@@ -1,3 +1,4 @@
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -12,7 +13,7 @@ import {
   InteractionMode
 } from 'chart.js';
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -64,6 +65,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [date, setDate] = useState<Date>(new Date());
   const [trimp, setTrimp] = useState("");
   const [activityName, setActivityName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   console.log('GarminChart data:', data);
   
@@ -200,6 +202,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     console.log('Form submitted with:', { date, trimp, activityName });
     
     try {
+      setIsSubmitting(true);
       const formattedDate = format(date, 'yyyy-MM-dd');
       const trimpValue = parseFloat(trimp);
 
@@ -283,11 +286,23 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     } catch (error: any) {
       console.error('Error saving training data:', error);
       toast.error(error.message || "Failed to save training data");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  // Loading overlay component
+  const LoadingOverlay = () => (
+    <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
+      <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+      <p className="text-lg font-medium text-gray-700">Loading training data...</p>
+    </div>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {(isUpdating || isSubmitting) && <LoadingOverlay />}
+      
       <div className="flex justify-between items-center">
         <div className="flex flex-col">
           <h2 className="text-2xl font-bold">{email}</h2>
@@ -297,7 +312,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           variant="outline" 
           size="sm" 
           onClick={onUpdate}
-          disabled={isUpdating}
+          disabled={isUpdating || isSubmitting}
           className="gap-2"
         >
           <RefreshCw className={`h-4 w-4 ${isUpdating ? 'animate-spin' : ''}`} />
@@ -338,7 +353,12 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         </div>
       </div>
 
-      <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm">
+      <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm relative">
+        {data.length === 0 && !isUpdating && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="text-gray-500 text-lg">No training data available</p>
+          </div>
+        )}
         <Line data={chartData} options={options} />
       </div>
 
@@ -400,8 +420,15 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit">
-              Add Training
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Training"
+              )}
             </Button>
           </div>
         </form>
@@ -409,35 +436,41 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       <div className="bg-white rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold mb-4">Recent Activities</h3>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Activity</TableHead>
-              <TableHead className="text-right">TRIMP</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleDays.map((day) => (
-              <TableRow key={day.date}>
-                <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
-                <TableCell>{day.activity}</TableCell>
-                <TableCell className="text-right">{day.trimp.toFixed(1)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        
-        {hasMoreActivities && (
-          <div className="mt-4 flex justify-center">
-            <Button 
-              variant="outline"
-              onClick={handleLoadMore}
-              className="w-full sm:w-auto"
-            >
-              Load More Activities
-            </Button>
-          </div>
+        {data.length === 0 ? (
+          <p className="text-gray-500 text-center py-4">No recent activities</p>
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Activity</TableHead>
+                  <TableHead className="text-right">TRIMP</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibleDays.map((day) => (
+                  <TableRow key={day.date}>
+                    <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
+                    <TableCell>{day.activity}</TableCell>
+                    <TableCell className="text-right">{day.trimp.toFixed(1)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            
+            {hasMoreActivities && (
+              <div className="mt-4 flex justify-center">
+                <Button 
+                  variant="outline"
+                  onClick={handleLoadMore}
+                  className="w-full sm:w-auto"
+                >
+                  Load More Activities
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

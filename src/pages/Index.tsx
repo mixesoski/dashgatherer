@@ -1,9 +1,10 @@
+
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +20,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
+import { ProgressToast } from "@/components/ui/ProgressToast";
 
 interface Athlete {
   user_id: string;
@@ -34,6 +36,7 @@ const Index = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Fetch user role
   const { data: roleData } = useQuery({
@@ -93,7 +96,7 @@ const Index = () => {
   const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
 
   // Update garminCredentials query to run only for athletes
-  const { data: garminCredentials, isLoading, refetch: refetchCredentials } = useQuery({
+  const { data: garminCredentials, isLoading: isCredentialsLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials', userId],
     queryFn: async () => {
       if (!userId) return null;
@@ -110,7 +113,7 @@ const Index = () => {
   });
 
   // Update garminData query to use relevantUserId
-  const { data: garminData, refetch: refetchGarminData } = useQuery({
+  const { data: garminData, isLoading: isDataLoading, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', relevantUserId],
     queryFn: async () => {
       if (!relevantUserId) return [];
@@ -127,9 +130,16 @@ const Index = () => {
 
   useEffect(() => {
     const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setUserId(user.id);
+        }
+      } finally {
+        // Wait for a short delay to show the loading animation
+        setTimeout(() => {
+          setIsInitialLoading(false);
+        }, 1000);
       }
     };
     getCurrentUser();
@@ -169,33 +179,76 @@ const Index = () => {
       toast.error('No user logged in or start date not selected');
       return;
     }
+
+    setIsUpdating(true);
+    
+    // Show toast with progress
+    toast.custom((t) => (
+      <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} 
+                       max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto 
+                       flex flex-col p-4`}>
+        <ProgressToast message="Syncing Garmin data..." />
+      </div>
+    ));
+    
     const success = await syncGarminData(relevantUserId, startDate);
 
     if (success) {
       setShowButtons(false);
       await refetchGarminData();
+      toast.success("Data synced successfully");
+    } else {
+      toast.error("Failed to sync data");
     }
+    
+    setIsUpdating(false);
   };
 
   const handleUpdate = async () => {
     if (!relevantUserId) return;
     try {
       setIsUpdating(true);
+      
+      // Show toast with progress
+      toast.custom((t) => (
+        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} 
+                         max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto 
+                         flex flex-col p-4`}>
+          <ProgressToast message="Updating Garmin data..." />
+        </div>
+      ));
+      
       const success = await updateGarminData(relevantUserId);
       if (success) {
         await refetchGarminData();
+        toast.success("Data updated successfully");
+      } else {
+        toast.error("Failed to update data");
       }
     } finally {
       setIsUpdating(false);
     }
   };
 
-  if (isLoading) {
-    return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  // Loading overlay for the entire app
+  if (isInitialLoading || isCredentialsLoading) {
+    return (
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
+        <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
+        <p className="text-xl font-medium text-gray-700">Loading your training data...</p>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
+    <div className="min-h-screen bg-gray-100 py-8 relative">
+      {isUpdating && (
+        <div className="fixed inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center z-50">
+          <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
+          <p className="text-xl font-medium text-gray-700">Processing your training data...</p>
+        </div>
+      )}
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-end mb-8 gap-2">
           <InviteCoachDialog />
@@ -229,7 +282,7 @@ const Index = () => {
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync}>
+                          <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync} disabled={isUpdating}>
                             <RefreshCw className="h-4 w-4" />
                             Sync Garmin
                           </Button>
@@ -255,6 +308,7 @@ const Index = () => {
                           strategy: "fixed"
                         }}
                         calendarClassName="translate-y-2"
+                        disabled={isUpdating}
                       />
                     </div>
                   </div>
