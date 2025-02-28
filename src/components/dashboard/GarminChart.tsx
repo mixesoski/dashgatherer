@@ -332,6 +332,13 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Refresh chart data
       await onUpdate();
       
+      // Trigger chart updater logic
+      await fetch('/api/update-chart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUserId })
+      });
+      
     } catch (error: any) {
       console.error('Error saving training data:', error);
       toast.error(error.message || "Failed to save training data");
