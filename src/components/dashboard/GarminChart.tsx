@@ -271,19 +271,54 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
-      // Insert data into manual_data table
-      const { error: manualInsertError } = await supabase
+      console.log("Attempting to save to manual_data table...");
+      
+      // Check if manual_data table exists
+      const { error: tableCheckError } = await supabase
         .from('manual_data' as any)
-        .insert({
-          user_id: currentUserId,
-          date: formattedDate,
-          trimp: trimpValue,
-          activity: activityName
-        });
+        .select('*')
+        .limit(1);
+        
+      if (tableCheckError) {
+        console.error('Error accessing manual_data table:', tableCheckError);
+        // Try creating the table if it doesn't exist (simplified version)
+        try {
+          console.log('Attempting to save to manual data with different approach');
+          const { error: rawQueryError } = await supabase
+            .rpc('insert_manual_training' as any, {
+              p_user_id: currentUserId,
+              p_date: formattedDate,
+              p_trimp: trimpValue,
+              p_activity: activityName
+            });
+            
+          if (rawQueryError) {
+            console.error('Error with RPC insert_manual_training:', rawQueryError);
+          } else {
+            console.log('Successfully added to manual data via RPC');
+          }
+        } catch (rpcError) {
+          console.error('RPC method failed:', rpcError);
+        }
+      } else {
+        // Table exists, proceed with insert
+        const { error: manualInsertError, data: insertResult } = await supabase
+          .from('manual_data' as any)
+          .insert({
+            user_id: currentUserId,
+            date: formattedDate,
+            trimp: trimpValue,
+            activity: activityName
+          });
 
-      if (manualInsertError) {
-        console.error('Error inserting to manual_data:', manualInsertError);
-        toast.error("Failed to save to manual training log");
+        console.log('Insert result:', insertResult);
+        
+        if (manualInsertError) {
+          console.error('Error inserting to manual_data:', manualInsertError);
+          toast.error("Failed to save to manual training log");
+        } else {
+          console.log('Successfully saved to manual_data table');
+        }
       }
 
       toast.success(existingEntry 
