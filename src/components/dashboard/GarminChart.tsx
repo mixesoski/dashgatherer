@@ -271,7 +271,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
-      // Save manual training entry in 'manual_data' table, casting to any to bypass type check
+      // Insert data into manual_data table
       const { error: manualInsertError } = await supabase
         .from('manual_data' as any)
         .insert({
@@ -280,9 +280,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           trimp: trimpValue,
           activity: activityName
         });
+
       if (manualInsertError) {
-        console.error('Error inserting manual training data:', manualInsertError);
-        toast.error('Failed to save manual training data');
+        console.error('Error inserting to manual_data:', manualInsertError);
+        toast.error("Failed to save to manual training log");
       }
 
       toast.success(existingEntry 
