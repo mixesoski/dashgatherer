@@ -296,16 +296,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Refresh chart data
       await onUpdate();
       
-      // Recalculate ATL, CTL, and TSB starting from the new training date to the latest date
-      await fetch('/api/recalculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: currentUserId,
-          start_date: formattedDate
-        })
-      });
-      
     } catch (error: any) {
       console.error('Error saving training data:', error);
       toast.error(error.message || "Failed to save training data");
