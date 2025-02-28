@@ -1,4 +1,3 @@
-
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -272,6 +271,20 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
+      // Save manual training entry in 'manual_data' table, casting to any to bypass type check
+      const { error: manualInsertError } = await supabase
+        .from('manual_data' as any)
+        .insert({
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity: activityName
+        });
+      if (manualInsertError) {
+        console.error('Error inserting manual training data:', manualInsertError);
+        toast.error('Failed to save manual training data');
+      }
+
       toast.success(existingEntry 
         ? "Training data updated successfully!" 
         : "Training data saved successfully!");
@@ -282,6 +295,16 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       
       // Refresh chart data
       await onUpdate();
+      
+      // Recalculate ATL, CTL, and TSB starting from the new training date to the latest date
+      await fetch('/api/recalculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          start_date: formattedDate
+        })
+      });
       
     } catch (error: any) {
       console.error('Error saving training data:', error);
