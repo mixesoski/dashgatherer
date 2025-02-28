@@ -119,6 +119,81 @@ const Account = () => {
     }
   };
 
+  const handleDeleteGarminCredentials = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error('You must be logged in to delete your credentials');
+        return;
+      }
+
+      // Update profiles table to clear Garmin credentials
+      const { error: profilesError } = await supabase
+        .from('profiles')
+        .update({
+          garmin_email: null,
+          garmin_password: null
+        })
+        .eq('user_id', user.id);
+
+      if (profilesError) {
+        console.error('Error updating profiles:', profilesError);
+        toast.error('Failed to delete Garmin credentials from profiles');
+        return;
+      }
+
+      // Delete from garmin_credentials table if it exists
+      const { error: garminError } = await supabase
+        .from('garmin_credentials')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (garminError && !garminError.message.includes('does not exist')) {
+        console.error('Error deleting from garmin_credentials:', garminError);
+        toast.error('Failed to delete Garmin credentials');
+        return;
+      }
+
+      toast.success('Garmin credentials deleted successfully');
+      
+      // Update the form and local state
+      form.setValue('garmin_email', '');
+      form.setValue('garmin_password', '');
+      setProfile({ ...profile, garmin_email: null, garmin_password: null });
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+    }
+  };
+
+  const handleDeleteAllData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error('You must be logged in to delete your data');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('garmin_data')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting data:', error);
+        toast.error('Failed to delete data');
+        return;
+      }
+
+      toast.success('All your data has been deleted');
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('An unexpected error occurred');
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
@@ -211,6 +286,27 @@ const Account = () => {
               </Button>
             </form>
           </Form>
+
+          <div className="mt-10 pt-6 border-t border-border">
+            <h3 className="text-lg font-medium mb-4">Danger Zone</h3>
+            <div className="space-y-4">
+              <Button 
+                variant="outline" 
+                className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={handleDeleteGarminCredentials}
+              >
+                Delete Garmin Credentials
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                onClick={handleDeleteAllData}
+              >
+                Delete All My Data
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
