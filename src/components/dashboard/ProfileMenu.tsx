@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 
 interface ProfileMenuProps {
@@ -97,12 +97,11 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
         <Button variant="outline">Menu</Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56">
-        <DropdownMenuLabel 
-          className="cursor-pointer"
-          onClick={() => navigate("/account")}
-        >
-          My Account
-        </DropdownMenuLabel>
+        <Link to="/account" className="block w-full">
+          <DropdownMenuLabel className="cursor-pointer hover:bg-accent hover:text-accent-foreground">
+            My Account
+          </DropdownMenuLabel>
+        </Link>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleDeleteGarminCredentials}
