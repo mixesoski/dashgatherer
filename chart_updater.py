@@ -136,54 +136,51 @@ class ChartUpdater:
                 current_data = response.data[0] if isinstance(response.data, list) else response.data
                 
                 if trimp_total > 0:
-                    # Add new TRIMP to existing TRIMP instead of replacing
-                    new_trimp = current_data['trimp'] + trimp_total
-                    # Combine activities, avoiding duplicates
                     current_activities = set(current_data['activity'].split(', ')) if current_data['activity'] else set()
                     new_activities = set(activity_names)
-                    all_activities = current_activities.union(new_activities)
-                    activity_str = ', '.join(sorted(all_activities))
-                    
-                    print(f"\n=== Updating last existing date: {last_date} ===")
-                    print(f"Current TRIMP: {current_data['trimp']} + New TRIMP: {trimp_total} = {new_trimp}")
-                    print(f"Current activities: {current_data['activity']}")
-                    print(f"New activities: {', '.join(activity_names)}")
-                    print(f"Combined activities: {activity_str}")
-                    
-                    # Update the last date with combined values
-                    self.client.table('garmin_data').update({
-                        'trimp': new_trimp,
-                        'activity': activity_str
-                    }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
-                    
-                    # Recalculate metrics for this day
-                    previous_response = self.client.table('garmin_data') \
-                        .select('atl, ctl, tsb') \
-                        .eq('user_id', self.user_id) \
-                        .lt('date', last_date.isoformat()) \
-                        .order('date', desc=True) \
-                        .limit(1) \
-                        .execute()
-                    
-                    if previous_response.data:
-                        data = previous_response.data[0] if isinstance(previous_response.data, list) else previous_response.data
-                        prev_metrics = {
-                            'atl': float(data['atl']),
-                            'ctl': float(data['ctl']),
-                            'tsb': float(data['tsb'])
-                        }
+                    if current_activities.issuperset(new_activities):
+                        print(f"Duplicate activity detected for last date {last_date}; skipping TRIMP update.")
                     else:
-                        prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
-                    
-                    new_metrics = self.calculate_new_metrics(trimp_total, prev_metrics)
-                    
-                    # Update metrics for the last date
-                    self.client.table('garmin_data').update({
-                        **new_metrics
-                    }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
-                    
-                    # Update previous_metrics for next calculations
-                    previous_metrics = new_metrics
+                        new_trimp = current_data['trimp'] + trimp_total
+                        all_activities = current_activities.union(new_activities)
+                        activity_str = ', '.join(sorted(all_activities))
+
+                        print(f"\n=== Updating last existing date: {last_date} ===")
+                        print(f"Current TRIMP: {current_data['trimp']} + New TRIMP: {trimp_total} = {new_trimp}")
+                        print(f"Current activities: {current_data['activity']}")
+                        print(f"New activities: {', '.join(activity_names)}")
+                        print(f"Combined activities: {activity_str}")
+
+                        self.client.table('garmin_data').update({
+                            'trimp': new_trimp,
+                            'activity': activity_str
+                        }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
+
+                        previous_response = self.client.table('garmin_data') \
+                            .select('atl, ctl, tsb') \
+                            .eq('user_id', self.user_id) \
+                            .lt('date', last_date.isoformat()) \
+                            .order('date', desc=True) \
+                            .limit(1) \
+                            .execute()
+
+                        if previous_response.data:
+                            data = previous_response.data[0] if isinstance(previous_response.data, list) else previous_response.data
+                            prev_metrics = {
+                                'atl': float(data['atl']),
+                                'ctl': float(data['ctl']),
+                                'tsb': float(data['tsb'])
+                            }
+                        else:
+                            prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
+
+                        new_metrics = self.calculate_new_metrics(trimp_total, prev_metrics)
+
+                        self.client.table('garmin_data').update({
+                            **new_metrics
+                        }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
+
+                        previous_metrics = new_metrics
                 
                 # Start from the day after the last existing date
                 start_date = last_date + datetime.timedelta(days=1)
