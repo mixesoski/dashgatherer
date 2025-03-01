@@ -368,41 +368,25 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Approach 4: Direct REST API call with full debugging
       try {
         console.log("5. Trying direct REST API call...");
-        // Get the Supabase URL and key from environment variables
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-        
-        console.log("Using Supabase URL:", supabaseUrl);
-        
-        // Make a direct API call
-        const response = await fetch(`${supabaseUrl}/rest/v1/manual_data`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify({
+        // Używamy bezpośrednio klienta Supabase zamiast process.env
+        const { data: insertData3, error: manualError3 } = await supabase
+          .from('manual_data')
+          .insert({
             user_id: currentUserId,
             date: formattedDate,
             trimp: trimpValue,
-            activity: activityName
-          })
-        });
-        
-        const responseText = await response.text();
-        console.log("Direct API response:", {
-          status: response.status,
-          ok: response.ok,
-          statusText: response.statusText,
-          body: responseText
+            activity_name: activityName // Używamy poprawnej nazwy kolumny
+          });
+          
+        console.log("Direct insert result:", { 
+          data: insertData3, 
+          error: manualError3 ? manualError3.message : null 
         });
       } catch (e) {
-        logError("Error with direct API call", e, {
-          endpoint: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/manual_data`,
-          method: 'POST',
-          userId: currentUserId
+        logError("Error with direct insert", e, {
+          table: 'manual_data',
+          userId: currentUserId,
+          date: formattedDate
         });
       }
 
@@ -420,65 +404,80 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Recalculate metrics for all dates after the edited date
       console.log("Recalculating metrics for subsequent dates...");
       
-      // Fetch all dates after the edited date
-      const { data: subsequentDates } = await supabase
-        .from('garmin_data')
-        .select('date, trimp, atl, ctl, tsb')
-        .eq('user_id', currentUserId)
-        .gt('date', formattedDate)
-        .order('date', { ascending: true });
-        
-      if (subsequentDates && subsequentDates.length > 0) {
-        console.log(`Found ${subsequentDates.length} subsequent dates to recalculate`);
-        
-        // Start with metrics from the edited date
-        let prevMetrics = {
-          atl: parseFloat(newAtl.toFixed(2)),
-          ctl: parseFloat(newCtl.toFixed(2)),
-          tsb: parseFloat(newTsb.toFixed(2))
-        };
-        
-        // Process each subsequent date
-        for (const dateItem of subsequentDates) {
-          const dateTRIMP = dateItem.trimp || 0;
+      try {
+        // Fetch all dates after the edited date
+        const { data: subsequentDates, error: fetchError } = await supabase
+          .from('garmin_data')
+          .select('date, trimp, atl, ctl, tsb')
+          .eq('user_id', currentUserId)
+          .gt('date', formattedDate)
+          .order('date', { ascending: true });
           
-          // Calculate new metrics based on previous metrics and current TRIMP
-          const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
-          const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
-          const dateTsb = prevMetrics.ctl - prevMetrics.atl; // TSB uses previous metrics
+        if (fetchError) {
+          throw fetchError;
+        }
           
-          const updatedMetrics = {
-            atl: parseFloat(dateAtl.toFixed(2)),
-            ctl: parseFloat(dateCtl.toFixed(2)),
-            tsb: parseFloat(dateTsb.toFixed(2))
+        if (subsequentDates && subsequentDates.length > 0) {
+          console.log(`Found ${subsequentDates.length} subsequent dates to recalculate`);
+          
+          // Start with metrics from the edited date
+          let prevMetrics = {
+            atl: parseFloat(newAtl.toFixed(2)),
+            ctl: parseFloat(newCtl.toFixed(2)),
+            tsb: parseFloat(newTsb.toFixed(2))
           };
           
-          console.log(`Updating ${dateItem.date} - TRIMP: ${dateTRIMP}, New metrics:`, updatedMetrics);
+          console.log("Starting recalculation with metrics:", prevMetrics);
           
-          // Update the database with new metrics
-          const { error: updateError } = await supabase
-            .from('garmin_data')
-            .update(updatedMetrics)
-            .eq('user_id', currentUserId)
-            .eq('date', dateItem.date);
+          // Process each subsequent date
+          for (const dateItem of subsequentDates) {
+            const dateTRIMP = dateItem.trimp || 0;
             
-          if (updateError) {
-            logError(`Error updating metrics for ${dateItem.date}`, updateError, {
-              userId: currentUserId,
-              date: dateItem.date,
-              metrics: updatedMetrics
-            });
+            // Calculate new metrics based on previous metrics and current TRIMP
+            const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
+            const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
+            const dateTsb = prevMetrics.ctl - prevMetrics.atl; // TSB uses previous metrics
+            
+            const updatedMetrics = {
+              atl: parseFloat(dateAtl.toFixed(2)),
+              ctl: parseFloat(dateCtl.toFixed(2)),
+              tsb: parseFloat(dateTsb.toFixed(2))
+            };
+            
+            console.log(`Updating ${dateItem.date} - TRIMP: ${dateTRIMP}, New metrics:`, updatedMetrics);
+            
+            // Update the database with new metrics
+            const { error: updateError } = await supabase
+              .from('garmin_data')
+              .update(updatedMetrics)
+              .eq('user_id', currentUserId)
+              .eq('date', dateItem.date);
+              
+            if (updateError) {
+              logError(`Error updating metrics for ${dateItem.date}`, updateError, {
+                userId: currentUserId,
+                date: dateItem.date,
+                metrics: updatedMetrics
+              });
+              throw updateError; // Przerwij proces, jeśli wystąpi błąd
+            }
+            
+            // Set current metrics as previous for next iteration
+            prevMetrics = updatedMetrics;
           }
           
-          // Set current metrics as previous for next iteration
-          prevMetrics = updatedMetrics;
+          console.log("Finished recalculating metrics for all subsequent dates");
+          // Refresh chart data again after all updates
+          await onUpdate();
+        } else {
+          console.log("No subsequent dates found that need recalculation");
         }
-        
-        console.log("Finished recalculating metrics for all subsequent dates");
-        // Refresh chart data again after all updates
-        await onUpdate();
-      } else {
-        console.log("No subsequent dates found that need recalculation");
+      } catch (recalcError) {
+        logError("Error during metrics recalculation", recalcError, {
+          userId: currentUserId,
+          startDate: formattedDate
+        });
+        toast.error("Error recalculating metrics. Please try again.");
       }
       
     } catch (error: any) {
