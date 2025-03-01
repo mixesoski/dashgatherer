@@ -32,6 +32,34 @@ import { CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// Funkcja do szczegółowego logowania błędów
+const logError = (message: string, error: any, additionalInfo?: any) => {
+  console.error("\n" + "=".repeat(50));
+  console.error(`ERROR: ${message}`);
+  console.error(`TIMESTAMP: ${new Date().toISOString()}`);
+  
+  if (error) {
+    console.error(`ERROR TYPE: ${error.name || typeof error}`);
+    console.error(`ERROR MESSAGE: ${error.message || String(error)}`);
+    
+    if (error.stack) {
+      console.error("\nSTACK TRACE:");
+      console.error(error.stack);
+    }
+    
+    if (error.cause) {
+      console.error(`\nCAUSE: ${error.cause}`);
+    }
+  }
+  
+  if (additionalInfo) {
+    console.error("\nADDITIONAL INFO:");
+    console.error(additionalInfo);
+  }
+  
+  console.error("=".repeat(50) + "\n");
+};
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -282,7 +310,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           
         console.log("Table check response:", { count, error: countError ? countError.message : null });
       } catch (e) {
-        console.error("Error checking manual_data table:", e);
+        logError("Error checking manual_data table", e);
       }
 
       // Approach 2: Try all possible column name combinations
@@ -313,7 +341,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           console.log("Insert result (activity_name):", { data: insertData2, error: manualError2 ? manualError2.message : null });
         }
       } catch (e) {
-        console.error("Error during insert attempts:", e);
+        logError("Error during insert attempts", e, { userId: currentUserId, date: formattedDate });
       }
 
       // Approach 3: Raw SQL insert using rpc function
@@ -331,7 +359,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         
         console.log("RPC result:", { data: rpcData, error: rpcError ? rpcError.message : null });
       } catch (e) {
-        console.error("Error with RPC call:", e);
+        logError("Error with RPC call", e, { 
+          function: 'execute_sql_insert_manual',
+          params: { userId: currentUserId, date: formattedDate }
+        });
       }
 
       // Approach 4: Direct REST API call with full debugging
@@ -368,7 +399,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           body: responseText
         });
       } catch (e) {
-        console.error("Error with direct API call:", e);
+        logError("Error with direct API call", e, {
+          endpoint: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/manual_data`,
+          method: 'POST',
+          userId: currentUserId
+        });
       }
 
       toast.success(existingEntry 
@@ -428,7 +463,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             .eq('date', dateItem.date);
             
           if (updateError) {
-            console.error(`Error updating metrics for ${dateItem.date}:`, updateError);
+            logError(`Error updating metrics for ${dateItem.date}`, updateError, {
+              userId: currentUserId,
+              date: dateItem.date,
+              metrics: updatedMetrics
+            });
           }
           
           // Set current metrics as previous for next iteration
@@ -443,7 +482,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       }
       
     } catch (error: any) {
-      console.error('Error saving training data:', error);
+      logError('Error saving training data', error, {
+        date: format(date, 'yyyy-MM-dd'),
+        trimp: trimp,
+        activityName: activityName
+      });
       toast.error(error.message || "Failed to save training data");
     } finally {
       setIsSubmitting(false);
