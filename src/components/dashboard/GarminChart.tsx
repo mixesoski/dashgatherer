@@ -1,3 +1,4 @@
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -22,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
@@ -92,6 +93,17 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [trimp, setTrimp] = useState("");
   const [activityName, setActivityName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Use effect to set initial loading state to false after component mounts
+  useEffect(() => {
+    // Short timeout to ensure we show loading state briefly for better UX
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   console.log('GarminChart data:', data);
   
@@ -493,7 +505,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
   return (
     <div className="space-y-4 relative">
-      {(isUpdating || isSubmitting) && <LoadingOverlay />}
+      {(isInitialLoading) && <LoadingOverlay />}
       
       <div className="flex justify-between items-center">
         <div className="flex flex-col">
@@ -546,7 +558,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       </div>
 
       <div className="w-full h-[600px] bg-white rounded-lg p-6 shadow-sm relative">
-        {data.length === 0 && !isUpdating && (
+        {data.length === 0 && !isInitialLoading && !isUpdating && (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="text-gray-500 text-lg">No training data available</p>
           </div>

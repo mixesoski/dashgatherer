@@ -37,7 +37,6 @@ const Index = () => {
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
-  // Fetch user role
   const { data: roleData } = useQuery({
     queryKey: ['userRole', userId],
     queryFn: async () => {
@@ -54,7 +53,6 @@ const Index = () => {
     enabled: !!userId
   });
 
-  // Fetch athletes if user is a coach
   const { data: athletes } = useQuery<Athlete[]>({
     queryKey: ['athletes', userId],
     queryFn: async () => {
@@ -62,7 +60,6 @@ const Index = () => {
       
       console.log('Fetching athletes for coach:', userId);
       
-      // Get basic coach_athletes data
       const { data: coachData, error: coachError } = await supabase
         .from('coach_athletes')
         .select('*')
@@ -80,7 +77,6 @@ const Index = () => {
         return [];
       }
 
-      // Map to required format
       return coachData.map(row => ({
         user_id: row.athlete_id,
         user: { 
@@ -91,10 +87,8 @@ const Index = () => {
     enabled: !!userId && roleData === 'coach'
   });
 
-  // Before garminData query, define relevantUserId
   const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
 
-  // Update garminCredentials query to run only for athletes
   const { data: garminCredentials, isLoading: isCredentialsLoading, refetch: refetchCredentials } = useQuery({
     queryKey: ['garminCredentials', userId],
     queryFn: async () => {
@@ -111,7 +105,6 @@ const Index = () => {
     enabled: !!userId && userRole !== 'coach'
   });
 
-  // Update garminData query to use relevantUserId
   const { data: garminData, isLoading: isDataLoading, refetch: refetchGarminData } = useQuery({
     queryKey: ['garminData', relevantUserId],
     queryFn: async () => {
@@ -135,7 +128,6 @@ const Index = () => {
           setUserId(user.id);
         }
       } finally {
-        // Wait for a short delay to show the loading animation
         setTimeout(() => {
           setIsInitialLoading(false);
         }, 1000);
@@ -181,7 +173,6 @@ const Index = () => {
 
     setIsUpdating(true);
     
-    // Show toast with progress
     toast.custom(() => (
       <ProgressToast message="Syncing Garmin data..." />
     ));
@@ -204,7 +195,6 @@ const Index = () => {
     try {
       setIsUpdating(true);
       
-      // Show toast with progress
       toast.custom(() => (
         <ProgressToast message="Updating Garmin data..." />
       ));
@@ -221,7 +211,6 @@ const Index = () => {
     }
   };
 
-  // Loading overlay for the entire app - only during initial loading
   if (isInitialLoading) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
@@ -233,13 +222,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 relative">
-      {isUpdating && (
-        <div className="fixed inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center z-50">
-          <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
-          <p className="text-xl font-medium text-gray-700">Processing your training data...</p>
-        </div>
-      )}
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-end mb-8 gap-2">
           <InviteCoachDialog />
