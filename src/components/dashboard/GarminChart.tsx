@@ -235,33 +235,51 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (isNaN(trimpValue)) {
         toast.error("Please enter a valid TRIMP value");
+        logError("Invalid TRIMP value", { value: trimp }, { formattedDate });
         return;
       }
 
       if (!activityName) {
         toast.error("Please enter an activity name");
+        logError("Missing activity name", null, { formattedDate, trimpValue });
         return;
       }
 
       // Get current user ID from auth
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        logError("Failed to get current user", userError);
+        toast.error("Authentication error. Please log in again.");
+        return;
+      }
+      
       const currentUserId = user?.id;
 
       if (!currentUserId) {
+        logError("No user ID available", null, { auth: "User not authenticated" });
         toast.error("Please log in to add training data");
         return;
       }
 
       // Check if entry exists for this date
-      const { data: existingEntry } = await supabase
+      const { data: existingEntry, error: existingEntryError } = await supabase
         .from('garmin_data')
         .select('trimp, activity')
         .eq('user_id', currentUserId)
         .eq('date', formattedDate)
         .single();
 
+      if (existingEntryError && existingEntryError.code !== 'PGRST116') {
+        // PGRST116 is "Results contain 0 rows" which is expected when no entry exists
+        logError("Error checking for existing entry", existingEntryError, { 
+          userId: currentUserId, 
+          date: formattedDate 
+        });
+      }
+
       // Get the last metrics for calculation
-      const { data: lastMetrics } = await supabase
+      const { data: lastMetrics, error: lastMetricsError } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
         .eq('user_id', currentUserId)
@@ -269,6 +287,13 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         .order('date', { ascending: false })
         .limit(1)
         .single();
+
+      if (lastMetricsError && lastMetricsError.code !== 'PGRST116') {
+        logError("Error fetching last metrics", lastMetricsError, { 
+          userId: currentUserId, 
+          date: formattedDate 
+        });
+      }
 
       console.log('Last metrics:', lastMetrics);
       console.log('Existing entry:', existingEntry);
@@ -283,7 +308,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
       // Use upsert with onConflict option for garmin_data
-      const { error } = await supabase
+      const { error: upsertError } = await supabase
         .from('garmin_data')
         .upsert({
           user_id: currentUserId,
@@ -297,7 +322,20 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           onConflict: 'user_id,date'
         });
 
-      if (error) throw error;
+      if (upsertError) {
+        logError("Error upserting training data", upsertError, {
+          userId: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity: activityName,
+          metrics: {
+            atl: parseFloat(newAtl.toFixed(2)),
+            ctl: parseFloat(newCtl.toFixed(2)),
+            tsb: parseFloat(newTsb.toFixed(2))
+          }
+        });
+        throw upsertError;
+      }
 
       console.log("Debugging manual_data table issues:");
 
@@ -309,67 +347,18 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .select('*', { count: 'exact', head: true });
           
         console.log("Table check response:", { count, error: countError ? countError.message : null });
+        
+        if (countError) {
+          logError("Error checking manual_data table", countError);
+        }
       } catch (e) {
         logError("Error checking manual_data table", e);
       }
 
-      // Approach 2: Try all possible column name combinations
+      // Approach 2: Try with correct column name
       try {
-        console.log("2. Trying with 'activity' column...");
-        const { data: insertData1, error: manualError1 } = await supabase
-          .from('manual_data')
-          .insert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName // Try with 'activity'
-          });
-          
-        console.log("Insert result (activity):", { data: insertData1, error: manualError1 ? manualError1.message : null });
-        
-        if (manualError1) {
-          console.log("3. Trying with 'activity_name' column...");
-          const { data: insertData2, error: manualError2 } = await supabase
-            .from('manual_data')
-            .insert({
-              user_id: currentUserId,
-              date: formattedDate,
-              trimp: trimpValue,
-              activity_name: activityName // Try with 'activity_name'
-            });
-            
-          console.log("Insert result (activity_name):", { data: insertData2, error: manualError2 ? manualError2.message : null });
-        }
-      } catch (e) {
-        logError("Error during insert attempts", e, { userId: currentUserId, date: formattedDate });
-      }
-
-      // Approach 3: Raw SQL insert using rpc function
-      try {
-        console.log("4. Trying with raw SQL...");
-        const { data: rpcData, error: rpcError } = await supabase.rpc(
-          'execute_sql_insert_manual' as any,
-          { 
-            p_user_id: currentUserId,
-            p_date: formattedDate,
-            p_trimp: trimpValue,
-            p_activity: activityName
-          }
-        );
-        
-        console.log("RPC result:", { data: rpcData, error: rpcError ? rpcError.message : null });
-      } catch (e) {
-        logError("Error with RPC call", e, { 
-          function: 'execute_sql_insert_manual',
-          params: { userId: currentUserId, date: formattedDate }
-        });
-      }
-
-      // Approach 4: Direct REST API call with full debugging
-      try {
-        console.log("5. Trying direct REST API call...");
-        // Używamy bezpośrednio klienta Supabase zamiast process.env
-        const { data: insertData3, error: manualError3 } = await supabase
+        console.log("2. Inserting into manual_data table...");
+        const { data: insertData, error: manualError } = await supabase
           .from('manual_data')
           .insert({
             user_id: currentUserId,
@@ -378,15 +367,23 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             activity_name: activityName // Używamy poprawnej nazwy kolumny
           });
           
-        console.log("Direct insert result:", { 
-          data: insertData3, 
-          error: manualError3 ? manualError3.message : null 
+        console.log("Insert result:", { 
+          data: insertData, 
+          error: manualError ? manualError.message : null 
         });
+        
+        if (manualError) {
+          logError("Error inserting into manual_data table", manualError, {
+            userId: currentUserId,
+            date: formattedDate,
+            trimp: trimpValue,
+            activity_name: activityName
+          });
+        }
       } catch (e) {
-        logError("Error with direct insert", e, {
-          table: 'manual_data',
-          userId: currentUserId,
-          date: formattedDate
+        logError("Exception during manual_data insert", e, { 
+          userId: currentUserId, 
+          date: formattedDate 
         });
       }
 
@@ -399,7 +396,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       setActivityName("");
       
       // Refresh chart data
-      await onUpdate();
+      try {
+        await onUpdate();
+      } catch (updateError) {
+        logError("Error refreshing chart data", updateError);
+      }
       
       // Recalculate metrics for all dates after the edited date
       console.log("Recalculating metrics for subsequent dates...");
@@ -414,6 +415,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .order('date', { ascending: true });
           
         if (fetchError) {
+          logError("Error fetching subsequent dates", fetchError, {
+            userId: currentUserId,
+            startDate: formattedDate
+          });
           throw fetchError;
         }
           
@@ -468,7 +473,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           
           console.log("Finished recalculating metrics for all subsequent dates");
           // Refresh chart data again after all updates
-          await onUpdate();
+          try {
+            await onUpdate();
+          } catch (finalUpdateError) {
+            logError("Error refreshing chart after recalculation", finalUpdateError);
+          }
         } else {
           console.log("No subsequent dates found that need recalculation");
         }
