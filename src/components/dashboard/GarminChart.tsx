@@ -1,4 +1,4 @@
-
+<lov-code>
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,7 +13,7 @@ import {
   InteractionMode
 } from 'chart.js';
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, Edit, Trash, List, Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -32,6 +32,21 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const logError = (message: string, error: any, additionalInfo?: any) => {
   console.error("\n" + "=".repeat(50));
@@ -80,6 +95,15 @@ interface GarminData {
   tsb: number | null;
 }
 
+interface ManualData {
+  id: number;
+  user_id: string;
+  date: string;
+  trimp: number;
+  activity_name: string;
+  created_at: string;
+}
+
 interface Props {
   data: GarminData[];
   email: string;
@@ -94,6 +118,14 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [activityName, setActivityName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [manualData, setManualData] = useState<ManualData[]>([]);
+  const [isLoadingManual, setIsLoadingManual] = useState(false);
+  const [editData, setEditData] = useState<ManualData | null>(null);
+  const [editDate, setEditDate] = useState<Date | undefined>(undefined);
+  const [editTrimp, setEditTrimp] = useState("");
+  const [editActivityName, setEditActivityName] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState("recent");
 
   // Use effect to set initial loading state to false after component mounts
   useEffect(() => {
@@ -104,6 +136,44 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     
     return () => clearTimeout(timer);
   }, []);
+
+  // Load manual data when the component mounts or activeTab changes
+  useEffect(() => {
+    if (activeTab === "manual") {
+      fetchManualData();
+    }
+  }, [activeTab]);
+
+  const fetchManualData = async () => {
+    try {
+      setIsLoadingManual(true);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("You need to be logged in to view your manual activities");
+        return;
+      }
+      
+      const { data: manualEntries, error } = await supabase
+        .from('manual_data')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+        
+      if (error) {
+        console.error("Error fetching manual data:", error);
+        toast.error("Failed to load manual activities");
+        return;
+      }
+      
+      setManualData(manualEntries || []);
+    } catch (err) {
+      console.error("Error in fetchManualData:", err);
+      toast.error("An error occurred while loading manual activities");
+    } finally {
+      setIsLoadingManual(false);
+    }
+  };
 
   console.log('GarminChart data:', data);
   
@@ -386,11 +456,14 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       setTrimp("");
       setActivityName("");
       
-      // Refresh chart data
+      // Refresh chart data and manual data
       try {
         await onUpdate();
+        if (activeTab === "manual") {
+          await fetchManualData();
+        }
       } catch (updateError) {
-        logError("Error refreshing chart data", updateError);
+        logError("Error refreshing data", updateError);
       }
       
       // Recalculate metrics for all dates after the edited date
@@ -493,6 +566,139 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       toast.error(error.message || "Failed to save training data");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEditEntry = (entry: ManualData) => {
+    setEditData(entry);
+    setEditDate(new Date(entry.date));
+    setEditTrimp(entry.trimp.toString());
+    setEditActivityName(entry.activity_name);
+    setIsEditing(true);
+  };
+
+  const handleUpdateEntry = async () => {
+    if (!editData || !editDate) return;
+
+    try {
+      setIsEditing(true);
+      const formattedDate = format(editDate, 'yyyy-MM-dd');
+      const trimpValue = parseFloat(editTrimp);
+
+      if (isNaN(trimpValue)) {
+        toast.error("Please enter a valid TRIMP value");
+        return;
+      }
+
+      if (!editActivityName) {
+        toast.error("Please enter an activity name");
+        return;
+      }
+
+      // Update manual_data entry
+      const { error: updateError } = await supabase
+        .from('manual_data')
+        .update({
+          date: formattedDate,
+          trimp: trimpValue,
+          activity_name: editActivityName
+        })
+        .eq('id', editData.id);
+
+      if (updateError) {
+        console.error("Error updating manual data:", updateError);
+        toast.error("Failed to update activity");
+        return;
+      }
+
+      // We also need to update the corresponding garmin_data entry
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      if (userId) {
+        // Find the corresponding garmin_data entry
+        const { data: garminEntry, error: garminFetchError } = await supabase
+          .from('garmin_data')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', formattedDate)
+          .maybeSingle();
+
+        if (!garminFetchError && garminEntry) {
+          // Update the garmin_data entry with new values
+          const { error: garminUpdateError } = await supabase
+            .from('garmin_data')
+            .update({
+              trimp: trimpValue,
+              activity: editActivityName
+            })
+            .eq('id', garminEntry.id);
+
+          if (garminUpdateError) {
+            console.error("Error updating garmin_data:", garminUpdateError);
+          }
+        }
+      }
+
+      toast.success("Activity updated successfully");
+      await fetchManualData();
+      await onUpdate();
+      setIsEditing(false);
+      setEditData(null);
+    } catch (error) {
+      console.error("Error in handleUpdateEntry:", error);
+      toast.error("An error occurred while updating the activity");
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entryId: number, entryDate: string) => {
+    try {
+      // Delete the manual_data entry
+      const { error: deleteError } = await supabase
+        .from('manual_data')
+        .delete()
+        .eq('id', entryId);
+
+      if (deleteError) {
+        console.error("Error deleting manual data:", deleteError);
+        toast.error("Failed to delete activity");
+        return;
+      }
+
+      // We should also delete or update the corresponding garmin_data entry
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      if (userId) {
+        // Find the corresponding garmin_data entry
+        const { data: garminEntry, error: garminFetchError } = await supabase
+          .from('garmin_data')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('date', entryDate)
+          .maybeSingle();
+
+        if (!garminFetchError && garminEntry) {
+          // Option 1: Delete the garmin_data entry
+          const { error: garminDeleteError } = await supabase
+            .from('garmin_data')
+            .delete()
+            .eq('id', garminEntry.id);
+
+          if (garminDeleteError) {
+            console.error("Error deleting garmin_data:", garminDeleteError);
+          }
+        }
+      }
+
+      toast.success("Activity deleted successfully");
+      await fetchManualData();
+      await onUpdate();
+    } catch (error) {
+      console.error("Error in handleDeleteEntry:", error);
+      toast.error("An error occurred while deleting the activity");
     }
   };
 
@@ -639,44 +845,78 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Recent Activities</h3>
-        {data.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No recent activities</p>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Activity</TableHead>
-                  <TableHead className="text-right">TRIMP</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleDays.map((day) => (
-                  <TableRow key={day.date}>
-                    <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell>{day.activity}</TableCell>
-                    <TableCell className="text-right">{day.trimp.toFixed(1)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            
-            {hasMoreActivities && (
-              <div className="mt-4 flex justify-center">
-                <Button 
-                  variant="outline"
-                  onClick={handleLoadMore}
-                  className="w-full sm:w-auto"
-                >
-                  Load More Activities
-                </Button>
-              </div>
+        <Tabs defaultValue="recent" value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">Activities</h3>
+            <TabsList>
+              <TabsTrigger value="recent" className="flex items-center gap-1">
+                <List className="h-4 w-4" />
+                <span>Recent Activities</span>
+              </TabsTrigger>
+              <TabsTrigger value="manual" className="flex items-center gap-1">
+                <Plus className="h-4 w-4" />
+                <span>Manual Activities</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          
+          <TabsContent value="recent">
+            {data.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No recent activities</p>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Activity</TableHead>
+                      <TableHead className="text-right">TRIMP</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleDays.map((day) => (
+                      <TableRow key={day.date}>
+                        <TableCell>{format(new Date(day.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell>{day.activity}</TableCell>
+                        <TableCell className="text-right">{day.trimp.toFixed(1)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {hasMoreActivities && (
+                  <div className="mt-4 flex justify-center">
+                    <Button 
+                      variant="outline"
+                      onClick={handleLoadMore}
+                      className="w-full sm:w-auto"
+                    >
+                      Load More Activities
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
+          </TabsContent>
+          
+          <TabsContent value="manual">
+            {isLoadingManual ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+            ) : manualData.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No manual activities found</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Activity</TableHead>
+                    <TableHead className="text-right">TRIMP</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {manualData.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>{format(new Date(entry.
