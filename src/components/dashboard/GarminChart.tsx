@@ -271,21 +271,104 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
-      // Insert into manual_data table
-      const { error: manualError } = await supabase
-        .from('manual_data')
-        .insert({
-          user_id: currentUserId,
-          date: formattedDate,
-          trimp: trimpValue,
-          activity_name: activityName
-        });
+      console.log("Debugging manual_data table issues:");
 
-      if (manualError) {
-        console.error('Error saving to manual_data:', manualError);
-        toast.error("Data saved to training metrics but failed to record in training log");
-      } else {
-        console.log('Successfully saved to manual_data table');
+      // Approach 1: First verify table exists with detailed error handling
+      try {
+        console.log("1. Checking if manual_data table exists...");
+        const { count, error: countError } = await supabase
+          .from('manual_data')
+          .select('*', { count: 'exact', head: true });
+          
+        console.log("Table check response:", { count, error: countError ? countError.message : null });
+      } catch (e) {
+        console.error("Error checking manual_data table:", e);
+      }
+
+      // Approach 2: Try all possible column name combinations
+      try {
+        console.log("2. Trying with 'activity' column...");
+        const { data: insertData1, error: manualError1 } = await supabase
+          .from('manual_data')
+          .insert({
+            user_id: currentUserId,
+            date: formattedDate,
+            trimp: trimpValue,
+            activity: activityName // Try with 'activity'
+          });
+          
+        console.log("Insert result (activity):", { data: insertData1, error: manualError1 ? manualError1.message : null });
+        
+        if (manualError1) {
+          console.log("3. Trying with 'activity_name' column...");
+          const { data: insertData2, error: manualError2 } = await supabase
+            .from('manual_data')
+            .insert({
+              user_id: currentUserId,
+              date: formattedDate,
+              trimp: trimpValue,
+              activity_name: activityName // Try with 'activity_name'
+            });
+            
+          console.log("Insert result (activity_name):", { data: insertData2, error: manualError2 ? manualError2.message : null });
+        }
+      } catch (e) {
+        console.error("Error during insert attempts:", e);
+      }
+
+      // Approach 3: Raw SQL insert using rpc function
+      try {
+        console.log("4. Trying with raw SQL...");
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          'execute_sql_insert_manual' as any,
+          { 
+            p_user_id: currentUserId,
+            p_date: formattedDate,
+            p_trimp: trimpValue,
+            p_activity: activityName
+          }
+        );
+        
+        console.log("RPC result:", { data: rpcData, error: rpcError ? rpcError.message : null });
+      } catch (e) {
+        console.error("Error with RPC call:", e);
+      }
+
+      // Approach 4: Direct REST API call with full debugging
+      try {
+        console.log("5. Trying direct REST API call...");
+        // Get the Supabase URL and key from environment variables
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        
+        console.log("Using Supabase URL:", supabaseUrl);
+        
+        // Make a direct API call
+        const response = await fetch(`${supabaseUrl}/rest/v1/manual_data`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({
+            user_id: currentUserId,
+            date: formattedDate,
+            trimp: trimpValue,
+            activity: activityName
+          })
+        });
+        
+        const responseText = await response.text();
+        console.log("Direct API response:", {
+          status: response.status,
+          ok: response.ok,
+          statusText: response.statusText,
+          body: responseText
+        });
+      } catch (e) {
+        console.error("Error with direct API call:", e);
       }
 
       toast.success(existingEntry 
