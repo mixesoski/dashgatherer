@@ -226,6 +226,8 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('\n' + '='.repeat(50));
+    console.log('📝 MANUAL TRAINING SUBMISSION STARTED');
     console.log('Form submitted with:', { date, trimp, activityName });
     
     try {
@@ -245,6 +247,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
+      console.log('🔍 Getting current user...');
       // Get current user ID from auth
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
@@ -255,6 +258,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       }
       
       const currentUserId = user?.id;
+      console.log('👤 Current user ID:', currentUserId);
 
       if (!currentUserId) {
         logError("No user ID available", null, { auth: "User not authenticated" });
@@ -358,6 +362,13 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       // Approach 2: Try with correct column name
       try {
         console.log("2. Inserting into manual_data table...");
+        console.log("Data to insert:", {
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity_name: activityName
+        });
+        
         const { data: insertData, error: manualError } = await supabase
           .from('manual_data')
           .insert({
@@ -367,19 +378,46 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             activity_name: activityName // Używamy poprawnej nazwy kolumny
           });
           
-        console.log("Insert result:", { 
-          data: insertData, 
-          error: manualError ? manualError.message : null 
-        });
-        
         if (manualError) {
+          console.error("❌ Error inserting into manual_data table:", manualError.message);
           logError("Error inserting into manual_data table", manualError, {
             userId: currentUserId,
             date: formattedDate,
             trimp: trimpValue,
             activity_name: activityName
           });
+        } else {
+          console.log("✅ Successfully inserted data into manual_data table");
+          
+          // Verify the data was actually inserted by querying it back
+          try {
+            const { data: verifyData, error: verifyError } = await supabase
+              .from('manual_data')
+              .select('*')
+              .eq('user_id', currentUserId)
+              .eq('date', formattedDate)
+              .single();
+              
+            if (verifyError) {
+              console.error("❌ Could not verify data insertion:", verifyError.message);
+            } else if (verifyData) {
+              console.log("✅ Verified data in manual_data table:", verifyData);
+            } else {
+              console.error("❌ Data verification failed: No data found after insertion");
+            }
+          } catch (verifyException) {
+            logError("Exception during data verification", verifyException, {
+              table: 'manual_data',
+              userId: currentUserId,
+              date: formattedDate
+            });
+          }
         }
+        
+        console.log("Insert result:", { 
+          data: insertData, 
+          error: manualError ? manualError.message : null 
+        });
       } catch (e) {
         logError("Exception during manual_data insert", e, { 
           userId: currentUserId, 
@@ -489,7 +527,11 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         toast.error("Error recalculating metrics. Please try again.");
       }
       
+      console.log('✅ MANUAL TRAINING SUBMISSION COMPLETED SUCCESSFULLY');
+      console.log('='.repeat(50) + '\n');
     } catch (error: any) {
+      console.log('❌ MANUAL TRAINING SUBMISSION FAILED');
+      console.log('='.repeat(50) + '\n');
       logError('Error saving training data', error, {
         date: format(date, 'yyyy-MM-dd'),
         trimp: trimp,
