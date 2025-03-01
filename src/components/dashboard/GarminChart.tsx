@@ -32,7 +32,6 @@ import { CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-// Funkcja do szczegółowego logowania błędów
 const logError = (message: string, error: any, additionalInfo?: any) => {
   console.error("\n" + "=".repeat(50));
   console.error(`ERROR: ${message}`);
@@ -341,88 +340,30 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         throw upsertError;
       }
 
-      console.log("Debugging manual_data table issues:");
-
-      // Approach 1: First verify table exists with detailed error handling
-      try {
-        console.log("1. Checking if manual_data table exists...");
-        const { count, error: countError } = await supabase
-          .from('manual_data')
-          .select('*', { count: 'exact', head: true });
-          
-        console.log("Table check response:", { count, error: countError ? countError.message : null });
-        
-        if (countError) {
-          logError("Error checking manual_data table", countError);
-        }
-      } catch (e) {
-        logError("Error checking manual_data table", e);
-      }
-
-      // Approach 2: Try with correct column name
-      try {
-        console.log("2. Inserting into manual_data table...");
-        console.log("Data to insert:", {
+      console.log("Inserting data into manual_data table...");
+      
+      // Insert into manual_data table - make sure this runs successfully
+      const { error: manualDataError } = await supabase
+        .from('manual_data')
+        .insert({
           user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity_name: activityName // Using the correct column name
+        });
+      
+      if (manualDataError) {
+        console.error("❌ Error inserting into manual_data table:", manualDataError.message);
+        logError("Error inserting into manual_data table", manualDataError, {
+          userId: currentUserId,
           date: formattedDate,
           trimp: trimpValue,
           activity_name: activityName
         });
-        
-        const { data: insertData, error: manualError } = await supabase
-          .from('manual_data')
-          .insert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity_name: activityName // Używamy poprawnej nazwy kolumny
-          });
-          
-        if (manualError) {
-          console.error("❌ Error inserting into manual_data table:", manualError.message);
-          logError("Error inserting into manual_data table", manualError, {
-            userId: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity_name: activityName
-          });
-        } else {
-          console.log("✅ Successfully inserted data into manual_data table");
-          
-          // Verify the data was actually inserted by querying it back
-          try {
-            const { data: verifyData, error: verifyError } = await supabase
-              .from('manual_data')
-              .select('*')
-              .eq('user_id', currentUserId)
-              .eq('date', formattedDate)
-              .single();
-              
-            if (verifyError) {
-              console.error("❌ Could not verify data insertion:", verifyError.message);
-            } else if (verifyData) {
-              console.log("✅ Verified data in manual_data table:", verifyData);
-            } else {
-              console.error("❌ Data verification failed: No data found after insertion");
-            }
-          } catch (verifyException) {
-            logError("Exception during data verification", verifyException, {
-              table: 'manual_data',
-              userId: currentUserId,
-              date: formattedDate
-            });
-          }
-        }
-        
-        console.log("Insert result:", { 
-          data: insertData, 
-          error: manualError ? manualError.message : null 
-        });
-      } catch (e) {
-        logError("Exception during manual_data insert", e, { 
-          userId: currentUserId, 
-          date: formattedDate 
-        });
+        // Still continue as garmin_data was successfully updated
+        toast.warning("Training data saved but couldn't be added to history");
+      } else {
+        console.log("✅ Successfully inserted data into manual_data table");
       }
 
       toast.success(existingEntry 
@@ -543,7 +484,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     }
   };
 
-  // Loading overlay component
   const LoadingOverlay = () => (
     <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
       <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
