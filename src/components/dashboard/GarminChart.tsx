@@ -254,7 +254,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
-      // Use upsert with onConflict option
+      // Use upsert with onConflict option for garmin_data
       const { error } = await supabase
         .from('garmin_data')
         .upsert({
@@ -271,80 +271,21 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       if (error) throw error;
 
-      // Try multiple approaches to ensure manual_data gets inserted
-      console.log("Attempting to save to manual_data table with direct fetch...");
-      
-      try {
-        // Method 1: Use direct fetch to Supabase REST API
-        const supabaseUrl = process.env.SUPABASE_URL || '';
-        const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
-        
-        const response = await fetch(`${supabaseUrl}/rest/v1/manual_data`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName
-          })
+      // Insert into manual_data table
+      const { error: manualError } = await supabase
+        .from('manual_data')
+        .insert({
+          user_id: currentUserId,
+          date: formattedDate,
+          trimp: trimpValue,
+          activity_name: activityName
         });
-        
-        if (!response.ok) {
-          console.error('Error with direct REST API:', await response.text());
-        } else {
-          console.log('Successfully saved to manual_data table via direct REST API');
-        }
-      } catch (fetchError) {
-        console.error('Direct fetch method failed:', fetchError);
-      }
-      
-      // Method 2: Try standard insert as backup
-      try {
-        console.log("Fallback: Using standard Supabase insert...");
-        const { error: manualInsertError } = await supabase
-          .from('manual_data' as any)
-          .insert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName
-          });
-          
-        if (manualInsertError) {
-          console.error('Error with standard insert to manual_data:', manualInsertError);
-        } else {
-          console.log('Successfully saved to manual_data via standard insert');
-        }
-      } catch (insertError) {
-        console.error('Standard insert method failed:', insertError);
-      }
-      
-      // Method 3: Try a different approach with upsert
-      try {
-        console.log("Fallback: Using upsert method...");
-        const { error: upsertError } = await supabase
-          .from('manual_data' as any)
-          .upsert({
-            user_id: currentUserId,
-            date: formattedDate,
-            trimp: trimpValue,
-            activity: activityName,
-            id: `${currentUserId}_${formattedDate}` // Create a composite primary key
-          });
-          
-        if (upsertError) {
-          console.error('Error with upsert to manual_data:', upsertError);
-        } else {
-          console.log('Successfully saved to manual_data via upsert');
-        }
-      } catch (upsertError) {
-        console.error('Upsert method failed:', upsertError);
+
+      if (manualError) {
+        console.error('Error saving to manual_data:', manualError);
+        toast.error("Data saved to training metrics but failed to record in training log");
+      } else {
+        console.log('Successfully saved to manual_data table');
       }
 
       toast.success(existingEntry 
