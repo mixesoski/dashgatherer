@@ -123,6 +123,33 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_data: {
+        Row: {
+          activity_name: string | null
+          created_at: string
+          date: string | null
+          id: number
+          trimp: number | null
+          user_id: string | null
+        }
+        Insert: {
+          activity_name?: string | null
+          created_at?: string
+          date?: string | null
+          id?: number
+          trimp?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          activity_name?: string | null
+          created_at?: string
+          date?: string | null
+          id?: number
+          trimp?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

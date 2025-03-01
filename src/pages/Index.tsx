@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
@@ -183,12 +182,8 @@ const Index = () => {
     setIsUpdating(true);
     
     // Show toast with progress
-    toast.custom((t) => (
-      <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} 
-                       max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto 
-                       flex flex-col p-4`}>
-        <ProgressToast message="Syncing Garmin data..." />
-      </div>
+    toast.custom(() => (
+      <ProgressToast message="Syncing Garmin data..." />
     ));
     
     const success = await syncGarminData(relevantUserId, startDate);
@@ -210,12 +205,8 @@ const Index = () => {
       setIsUpdating(true);
       
       // Show toast with progress
-      toast.custom((t) => (
-        <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} 
-                         max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto 
-                         flex flex-col p-4`}>
-          <ProgressToast message="Updating Garmin data..." />
-        </div>
+      toast.custom(() => (
+        <ProgressToast message="Updating Garmin data..." />
       ));
       
       const success = await updateGarminData(relevantUserId);
@@ -230,8 +221,8 @@ const Index = () => {
     }
   };
 
-  // Loading overlay for the entire app
-  if (isInitialLoading || isCredentialsLoading) {
+  // Loading overlay for the entire app - only during initial loading
+  if (isInitialLoading) {
     return (
       <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
         <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
