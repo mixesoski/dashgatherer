@@ -1,3 +1,4 @@
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -901,4 +902,266 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             </div>
 
             <div className="space-y-2">
-              <Label
+              <Label htmlFor="trimp">TRIMP</Label>
+              <Input
+                id="trimp"
+                type="number"
+                min="0"
+                step="1"
+                value={trimp}
+                onChange={(e) => setTrimp(e.target.value)}
+                placeholder="e.g. 50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="activity">Activity Name</Label>
+              <Input
+                id="activity"
+                value={activityName}
+                onChange={(e) => setActivityName(e.target.value)}
+                placeholder="e.g. Running"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  Add Training
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="bg-white rounded-lg shadow-sm p-6">
+        <TabsList className="mb-4">
+          <TabsTrigger value="recent">
+            Recent Activities
+          </TabsTrigger>
+          <TabsTrigger value="manual">
+            Manual Activities
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="recent" className="space-y-4">
+          <div className="bg-muted/30 rounded-md p-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Activity</TableHead>
+                  <TableHead className="text-right">TRIMP</TableHead>
+                  <TableHead className="text-right">ATL</TableHead>
+                  <TableHead className="text-right">CTL</TableHead>
+                  <TableHead className="text-right">TSB</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visibleDays.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">
+                      {format(new Date(item.date), "dd MMM yyyy")}
+                    </TableCell>
+                    <TableCell>
+                      {item.activity}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.trimp}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.atl?.toFixed(1)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.ctl?.toFixed(1)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.tsb?.toFixed(1)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            
+            {hasMoreActivities && (
+              <div className="flex justify-center mt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={handleLoadMore}
+                  className="gap-2"
+                >
+                  <List className="h-4 w-4" />
+                  Load More
+                </Button>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="manual" className="space-y-4">
+          {isLoadingManual ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            </div>
+          ) : (
+            <>
+              {manualData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-muted-foreground">No manual activities found</p>
+                  <p className="text-sm text-muted-foreground mt-1">Add some training using the form above</p>
+                </div>
+              ) : (
+                <div className="bg-muted/30 rounded-md p-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Activity</TableHead>
+                        <TableHead className="text-right">TRIMP</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {manualData.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="font-medium">
+                            {format(new Date(entry.date), "dd MMM yyyy")}
+                          </TableCell>
+                          <TableCell>
+                            {entry.activity_name}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {entry.trimp}
+                          </TableCell>
+                          <TableCell className="text-right space-x-2">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleEditEntry(entry)}
+                              title="Edit entry"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => handleDeleteEntry(entry.id, entry.date)}
+                              title="Delete entry"
+                              className="text-destructive hover:text-destructive/90"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
+          )}
+          
+          <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Training Entry</DialogTitle>
+                <DialogDescription>
+                  Update the details of your manual training entry.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-date">Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="edit-date"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !editDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {editDate ? format(editDate, "PPP") : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="z-[60] bg-white p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={editDate}
+                        onSelect={(newDate) => newDate && setEditDate(newDate)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-trimp">TRIMP</Label>
+                  <Input
+                    id="edit-trimp"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editTrimp}
+                    onChange={(e) => setEditTrimp(e.target.value)}
+                    placeholder="e.g. 50"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-activity">Activity Name</Label>
+                  <Input
+                    id="edit-activity"
+                    value={editActivityName}
+                    onChange={(e) => setEditActivityName(e.target.value)}
+                    placeholder="e.g. Running"
+                  />
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleUpdateEntry}
+                  disabled={isEditing && !editDate}
+                  className="gap-2"
+                >
+                  {isEditing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
