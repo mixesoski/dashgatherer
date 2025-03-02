@@ -377,8 +377,19 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
 
-      const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
-      const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
+      let combinedTrimp = trimpValue;
+      let combinedActivities = [activityName];
+      
+      if (existingEntry) {
+        combinedTrimp = existingEntry.trimp + trimpValue;
+        let existingActivities = existingEntry.activity.split(', ').filter(a => a !== "Rest Day");
+        combinedActivities = [...new Set([...existingActivities, activityName])];
+      }
+      
+      console.log(`Combined TRIMP: ${combinedTrimp}, Combined Activities: ${combinedActivities.join(', ')}`);
+
+      const newAtl = previousMetrics.atl + (combinedTrimp - previousMetrics.atl) / 7;
+      const newCtl = previousMetrics.ctl + (combinedTrimp - previousMetrics.ctl) / 42;
       const newTsb = previousMetrics.ctl - previousMetrics.atl;
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
@@ -388,8 +399,8 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         .upsert({
           user_id: currentUserId,
           date: formattedDate,
-          trimp: trimpValue,
-          activity: activityName,
+          trimp: combinedTrimp,
+          activity: combinedActivities.join(', '),
           atl: parseFloat(newAtl.toFixed(2)),
           ctl: parseFloat(newCtl.toFixed(2)),
           tsb: parseFloat(newTsb.toFixed(2))
@@ -401,8 +412,8 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         logError("Error upserting training data", upsertError, {
           userId: currentUserId,
           date: formattedDate,
-          trimp: trimpValue,
-          activity: activityName,
+          trimp: combinedTrimp,
+          activity: combinedActivities.join(', '),
           metrics: {
             atl: parseFloat(newAtl.toFixed(2)),
             ctl: parseFloat(newCtl.toFixed(2)),
@@ -437,7 +448,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       }
 
       toast.success(existingEntry 
-        ? "Training data updated successfully!" 
+        ? "Training data added to existing activities!" 
         : "Training data saved successfully!");
       
       setTrimp("");
@@ -451,8 +462,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       } catch (updateError) {
         logError("Error refreshing data", updateError);
       }
-      
-      console.log("Recalculating metrics for subsequent dates...");
       
       const { data: subsequentDates, error: fetchError } = await supabase
         .from('garmin_data')
@@ -539,14 +548,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     }
   };
 
-  const handleEditEntry = (entry: ManualData) => {
-    setEditData(entry);
-    setEditDate(new Date(entry.date));
-    setEditTrimp(entry.trimp.toString());
-    setEditActivityName(entry.activity_name);
-    setIsEditing(true);
-  };
-
   const handleUpdateEntry = async () => {
     if (!editData || !editDate) return;
 
@@ -584,24 +585,47 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       const userId = user?.id;
 
       if (userId) {
-        const { data: garminEntry, error: garminFetchError } = await supabase
-          .from('garmin_data')
-          .select('*')
+        const { data: manualEntries, error: manualFetchError } = await supabase
+          .from('manual_data')
+          .select('trimp, activity_name')
           .eq('user_id', userId)
-          .eq('date', formattedDate)
-          .maybeSingle();
-
-        if (!garminFetchError && garminEntry) {
-          const { error: garminUpdateError } = await supabase
+          .eq('date', formattedDate);
+          
+        if (manualFetchError) {
+          console.error("Error fetching manual data:", manualFetchError);
+          toast.warning("Activity updated but training data may be incorrect");
+          return;
+        }
+        
+        const totalTrimp = manualEntries?.reduce((sum, entry) => sum + (entry.trimp || 0), 0) || 0;
+        const allActivities = manualEntries?.map(entry => entry.activity_name).filter(Boolean) || [];
+        
+        if (userId) {
+          const { data: garminEntry, error: garminFetchError } = await supabase
             .from('garmin_data')
-            .update({
-              trimp: trimpValue,
-              activity: editActivityName
-            })
-            .eq('id', garminEntry.id);
+            .select('*')
+            .eq('user_id', userId)
+            .eq('date', formattedDate)
+            .maybeSingle();
 
-          if (garminUpdateError) {
-            console.error("Error updating garmin_data:", garminUpdateError);
+          if (!garminFetchError) {
+            const activityList = [...new Set(allActivities)].join(', ');
+            const activityData = {
+              trimp: totalTrimp,
+              activity: totalTrimp > 0 ? activityList : "Rest Day"
+            };
+            
+            if (garminEntry) {
+              const { error: garminUpdateError } = await supabase
+                .from('garmin_data')
+                .update(activityData)
+                .eq('id', garminEntry.id);
+
+              if (garminUpdateError) {
+                console.error("Error updating garmin_data:", garminUpdateError);
+                toast.warning("Manual activity updated but training data could not be fully updated");
+              }
+            }
           }
         }
       }
@@ -651,6 +675,19 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       const userId = user?.id;
 
       if (userId) {
+        const { data: remainingManual, error: remainingError } = await supabase
+          .from('manual_data')
+          .select('trimp, activity_name')
+          .eq('user_id', userId)
+          .eq('date', entryDate);
+          
+        if (remainingError) {
+          console.error("Error fetching remaining manual data:", remainingError);
+        }
+        
+        const totalManualTrimp = remainingManual?.reduce((sum, entry) => sum + (entry.trimp || 0), 0) || 0;
+        const manualActivities = remainingManual?.map(entry => entry.activity_name).filter(Boolean) || [];
+
         const { data: garminEntry, error: garminFetchError } = await supabase
           .from('garmin_data')
           .select('*')
@@ -659,18 +696,13 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .maybeSingle();
 
         if (!garminFetchError && garminEntry) {
-          const newTrimp = Math.max(0, garminEntry.trimp - trimpToRemove);
+          const activityList = [...new Set(manualActivities)].join(', ');
+          const newActivity = totalManualTrimp > 0 ? activityList : "Rest Day";
           
-          let activities = garminEntry.activity.split(', ').filter(a => a !== "Rest Day");
-          
-          activities = activities.filter(a => a !== activityNameToRemove);
-          
-          const newActivity = activities.length > 0 ? activities.join(', ') : "Rest Day";
-
           const { error: garminUpdateError } = await supabase
             .from('garmin_data')
             .update({
-              trimp: newTrimp,
+              trimp: totalManualTrimp,
               activity: newActivity
             })
             .eq('user_id', userId)
@@ -697,8 +729,8 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             
             const previousMetrics = lastMetricsData || { atl: 0, ctl: 0, tsb: 0 };
             
-            const newAtl = previousMetrics.atl + (newTrimp - previousMetrics.atl) / 7;
-            const newCtl = previousMetrics.ctl + (newTrimp - previousMetrics.ctl) / 42;
+            const newAtl = previousMetrics.atl + (totalManualTrimp - previousMetrics.atl) / 7;
+            const newCtl = previousMetrics.ctl + (totalManualTrimp - previousMetrics.ctl) / 42;
             const newTsb = previousMetrics.ctl - previousMetrics.atl;
             
             await supabase
