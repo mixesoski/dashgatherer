@@ -1,4 +1,4 @@
-<lov-code>
+
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -919,4 +919,118 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
                 <TableBody>
                   {manualData.map((entry) => (
                     <TableRow key={entry.id}>
-                      <TableCell>{format(new Date(entry.
+                      <TableCell>{format(new Date(entry.date), 'dd/MM/yyyy')}</TableCell>
+                      <TableCell>{entry.activity_name}</TableCell>
+                      <TableCell className="text-right">{entry.trimp.toFixed(1)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditEntry(entry)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteEntry(entry.id, entry.date)}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+        </Tabs>
+        
+        {/* Edit Manual Entry Dialog */}
+        <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Activity</DialogTitle>
+              <DialogDescription>
+                Update the details of your manual training activity.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-date">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="edit-date"
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !editDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {editDate ? format(editDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="z-[60] bg-white p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={editDate}
+                      onSelect={(newDate) => newDate && setEditDate(newDate)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-trimp">TRIMP Value</Label>
+                <Input
+                  id="edit-trimp"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={editTrimp}
+                  onChange={(e) => setEditTrimp(e.target.value)}
+                  placeholder="Enter TRIMP value"
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-activity">Activity Name</Label>
+                <Input
+                  id="edit-activity"
+                  type="text"
+                  value={editActivityName}
+                  onChange={(e) => setEditActivityName(e.target.value)}
+                  placeholder="Enter activity name"
+                  required
+                />
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditing(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateEntry} disabled={!editDate || !editTrimp || !editActivityName}>
+                {isEditing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Activity"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+};
