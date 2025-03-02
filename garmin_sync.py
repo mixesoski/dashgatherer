@@ -1,3 +1,4 @@
+
 from garminconnect import Garmin
 import pandas as pd
 from datetime import datetime, timedelta
@@ -86,6 +87,7 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                         daily_data[date_str]['activities'] = []
                     
                     daily_data[date_str]['trimp'] += trimp
+                    # Add each activity individually, without deduplication
                     daily_data[date_str]['activities'].append(activity_name)
                     print(f"Saved activity data for {date_str}")
 
@@ -104,6 +106,26 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                 }
 
                 try:
+                    # Get existing data for this date if any
+                    existing = supabase.table('garmin_data')\
+                        .select('*')\
+                        .eq('user_id', user_id)\
+                        .eq('date', data['date'].isoformat())\
+                        .execute()
+                    
+                    if existing.data and len(existing.data) > 0:
+                        existing_data = existing.data[0]
+                        existing_activities = existing_data.get('activity', '')
+                        
+                        # If existing data has activities and it's not just "Rest day"
+                        if existing_activities and existing_activities != 'Rest day' and data['activities'] != ['Rest day']:
+                            # Combine existing activities with new ones
+                            existing_list = existing_activities.split(', ')
+                            combined_activities = existing_list + data['activities']
+                            # Don't remove duplicates - preserve all entries
+                            activity_data['activity'] = ', '.join(combined_activities)
+                            activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                    
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
                         .execute()
