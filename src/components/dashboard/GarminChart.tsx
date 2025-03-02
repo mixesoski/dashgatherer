@@ -1,4 +1,3 @@
-
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -127,9 +126,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState("recent");
 
-  // Use effect to set initial loading state to false after component mounts
   useEffect(() => {
-    // Short timeout to ensure we show loading state briefly for better UX
     const timer = setTimeout(() => {
       setIsInitialLoading(false);
     }, 500);
@@ -137,7 +134,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load manual data when the component mounts or activeTab changes
   useEffect(() => {
     if (activeTab === "manual") {
       fetchManualData();
@@ -329,7 +325,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       }
 
       console.log('🔍 Getting current user...');
-      // Get current user ID from auth
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError) {
@@ -347,7 +342,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // Check if entry exists for this date
       const { data: existingEntry, error: existingEntryError } = await supabase
         .from('garmin_data')
         .select('trimp, activity')
@@ -356,14 +350,12 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         .single();
 
       if (existingEntryError && existingEntryError.code !== 'PGRST116') {
-        // PGRST116 is "Results contain 0 rows" which is expected when no entry exists
         logError("Error checking for existing entry", existingEntryError, { 
           userId: currentUserId, 
           date: formattedDate 
         });
       }
 
-      // Get the last metrics for calculation
       const { data: lastMetrics, error: lastMetricsError } = await supabase
         .from('garmin_data')
         .select('atl, ctl, tsb')
@@ -385,14 +377,12 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       const previousMetrics = lastMetrics || { atl: 0, ctl: 0, tsb: 0 };
 
-      // Calculate new metrics based on previous day's metrics
       const newAtl = previousMetrics.atl + (trimpValue - previousMetrics.atl) / 7;
       const newCtl = previousMetrics.ctl + (trimpValue - previousMetrics.ctl) / 42;
-      const newTsb = previousMetrics.ctl - previousMetrics.atl;  // TSB uses previous values
+      const newTsb = previousMetrics.ctl - previousMetrics.atl;
 
       console.log('New metrics:', { newAtl, newCtl, newTsb });
 
-      // Use upsert with onConflict option for garmin_data
       const { error: upsertError } = await supabase
         .from('garmin_data')
         .upsert({
@@ -424,14 +414,13 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
       console.log("Inserting data into manual_data table...");
       
-      // Insert into manual_data table - make sure this runs successfully
       const { error: manualDataError } = await supabase
         .from('manual_data')
         .insert({
           user_id: currentUserId,
           date: formattedDate,
           trimp: trimpValue,
-          activity_name: activityName // Using the correct column name
+          activity_name: activityName
         });
       
       if (manualDataError) {
@@ -442,7 +431,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           trimp: trimpValue,
           activity_name: activityName
         });
-        // Still continue as garmin_data was successfully updated
         toast.warning("Training data saved but couldn't be added to history");
       } else {
         console.log("✅ Successfully inserted data into manual_data table");
@@ -452,11 +440,9 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         ? "Training data updated successfully!" 
         : "Training data saved successfully!");
       
-      // Reset form
       setTrimp("");
       setActivityName("");
       
-      // Refresh chart data and manual data
       try {
         await onUpdate();
         if (activeTab === "manual") {
@@ -466,91 +452,75 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         logError("Error refreshing data", updateError);
       }
       
-      // Recalculate metrics for all dates after the edited date
       console.log("Recalculating metrics for subsequent dates...");
       
-      try {
-        // Fetch all dates after the edited date
-        const { data: subsequentDates, error: fetchError } = await supabase
-          .from('garmin_data')
-          .select('date, trimp, atl, ctl, tsb')
-          .eq('user_id', currentUserId)
-          .gt('date', formattedDate)
-          .order('date', { ascending: true });
+      const { data: subsequentDates, error: fetchError } = await supabase
+        .from('garmin_data')
+        .select('date, trimp, atl, ctl, tsb')
+        .eq('user_id', currentUserId)
+        .gt('date', formattedDate)
+        .order('date', { ascending: true });
           
-        if (fetchError) {
-          logError("Error fetching subsequent dates", fetchError, {
-            userId: currentUserId,
-            startDate: formattedDate
-          });
-          throw fetchError;
-        }
-          
-        if (subsequentDates && subsequentDates.length > 0) {
-          console.log(`Found ${subsequentDates.length} subsequent dates to recalculate`);
-          
-          // Start with metrics from the edited date
-          let prevMetrics = {
-            atl: parseFloat(newAtl.toFixed(2)),
-            ctl: parseFloat(newCtl.toFixed(2)),
-            tsb: parseFloat(newTsb.toFixed(2))
-          };
-          
-          console.log("Starting recalculation with metrics:", prevMetrics);
-          
-          // Process each subsequent date
-          for (const dateItem of subsequentDates) {
-            const dateTRIMP = dateItem.trimp || 0;
-            
-            // Calculate new metrics based on previous metrics and current TRIMP
-            const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
-            const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
-            const dateTsb = prevMetrics.ctl - prevMetrics.atl; // TSB uses previous metrics
-            
-            const updatedMetrics = {
-              atl: parseFloat(dateAtl.toFixed(2)),
-              ctl: parseFloat(dateCtl.toFixed(2)),
-              tsb: parseFloat(dateTsb.toFixed(2))
-            };
-            
-            console.log(`Updating ${dateItem.date} - TRIMP: ${dateTRIMP}, New metrics:`, updatedMetrics);
-            
-            // Update the database with new metrics
-            const { error: updateError } = await supabase
-              .from('garmin_data')
-              .update(updatedMetrics)
-              .eq('user_id', currentUserId)
-              .eq('date', dateItem.date);
-              
-            if (updateError) {
-              logError(`Error updating metrics for ${dateItem.date}`, updateError, {
-                userId: currentUserId,
-                date: dateItem.date,
-                metrics: updatedMetrics
-              });
-              throw updateError; // Przerwij proces, jeśli wystąpi błąd
-            }
-            
-            // Set current metrics as previous for next iteration
-            prevMetrics = updatedMetrics;
-          }
-          
-          console.log("Finished recalculating metrics for all subsequent dates");
-          // Refresh chart data again after all updates
-          try {
-            await onUpdate();
-          } catch (finalUpdateError) {
-            logError("Error refreshing chart after recalculation", finalUpdateError);
-          }
-        } else {
-          console.log("No subsequent dates found that need recalculation");
-        }
-      } catch (recalcError) {
-        logError("Error during metrics recalculation", recalcError, {
+      if (fetchError) {
+        logError("Error fetching subsequent dates", fetchError, {
           userId: currentUserId,
           startDate: formattedDate
         });
-        toast.error("Error recalculating metrics. Please try again.");
+        throw fetchError;
+      }
+          
+      if (subsequentDates && subsequentDates.length > 0) {
+        console.log(`Found ${subsequentDates.length} subsequent dates to recalculate`);
+        
+        let prevMetrics = {
+          atl: parseFloat(newAtl.toFixed(2)),
+          ctl: parseFloat(newCtl.toFixed(2)),
+          tsb: parseFloat(newTsb.toFixed(2))
+        };
+        
+        console.log("Starting recalculation with metrics:", prevMetrics);
+        
+        for (const dateItem of subsequentDates) {
+          const dateTRIMP = dateItem.trimp || 0;
+          
+          const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
+          const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
+          const dateTsb = prevMetrics.ctl - prevMetrics.atl;
+          
+          const updatedMetrics = {
+            atl: parseFloat(dateAtl.toFixed(2)),
+            ctl: parseFloat(dateCtl.toFixed(2)),
+            tsb: parseFloat(dateTsb.toFixed(2))
+          };
+          
+          console.log(`Updating ${dateItem.date} - TRIMP: ${dateTRIMP}, New metrics:`, updatedMetrics);
+          
+          const { error: updateError } = await supabase
+            .from('garmin_data')
+            .update(updatedMetrics)
+            .eq('user_id', currentUserId)
+            .eq('date', dateItem.date);
+          
+          if (updateError) {
+            logError(`Error updating metrics for ${dateItem.date}`, updateError, {
+              userId: currentUserId,
+              date: dateItem.date,
+              metrics: updatedMetrics
+            });
+            throw updateError;
+          }
+          
+          prevMetrics = updatedMetrics;
+        }
+        
+        console.log("Finished recalculating metrics for all subsequent dates");
+        try {
+          await onUpdate();
+        } catch (finalUpdateError) {
+          logError("Error refreshing chart after recalculation", finalUpdateError);
+        }
+      } else {
+        console.log("No subsequent dates found that need recalculation");
       }
       
       console.log('✅ MANUAL TRAINING SUBMISSION COMPLETED SUCCESSFULLY');
@@ -595,7 +565,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // Update manual_data entry
       const { error: updateError } = await supabase
         .from('manual_data')
         .update({
@@ -611,12 +580,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // We also need to update the corresponding garmin_data entry
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
       if (userId) {
-        // Find the corresponding garmin_data entry
         const { data: garminEntry, error: garminFetchError } = await supabase
           .from('garmin_data')
           .select('*')
@@ -625,7 +592,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .maybeSingle();
 
         if (!garminFetchError && garminEntry) {
-          // Update the garmin_data entry with new values
           const { error: garminUpdateError } = await supabase
             .from('garmin_data')
             .update({
@@ -655,7 +621,21 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
 
   const handleDeleteEntry = async (entryId: number, entryDate: string) => {
     try {
-      // Delete the manual_data entry
+      const { data: manualEntry, error: fetchError } = await supabase
+        .from('manual_data')
+        .select('*')
+        .eq('id', entryId)
+        .single();
+
+      if (fetchError) {
+        console.error("Error fetching manual data before deletion:", fetchError);
+        toast.error("Failed to retrieve activity details");
+        return;
+      }
+
+      const trimpToRemove = manualEntry.trimp || 0;
+      const activityNameToRemove = manualEntry.activity_name || "";
+
       const { error: deleteError } = await supabase
         .from('manual_data')
         .delete()
@@ -667,12 +647,10 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
         return;
       }
 
-      // We should also delete or update the corresponding garmin_data entry
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
       if (userId) {
-        // Find the corresponding garmin_data entry
         const { data: garminEntry, error: garminFetchError } = await supabase
           .from('garmin_data')
           .select('*')
@@ -681,14 +659,94 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .maybeSingle();
 
         if (!garminFetchError && garminEntry) {
-          // Option 1: Delete the garmin_data entry
-          const { error: garminDeleteError } = await supabase
-            .from('garmin_data')
-            .delete()
-            .eq('id', garminEntry.id);
+          const newTrimp = Math.max(0, garminEntry.trimp - trimpToRemove);
+          
+          let activities = garminEntry.activity.split(', ').filter(a => a !== "Rest Day");
+          
+          activities = activities.filter(a => a !== activityNameToRemove);
+          
+          const newActivity = activities.length > 0 ? activities.join(', ') : "Rest Day";
 
-          if (garminDeleteError) {
-            console.error("Error deleting garmin_data:", garminDeleteError);
+          const { error: garminUpdateError } = await supabase
+            .from('garmin_data')
+            .update({
+              trimp: newTrimp,
+              activity: newActivity
+            })
+            .eq('user_id', userId)
+            .eq('date', entryDate);
+
+          if (garminUpdateError) {
+            console.error("Error updating garmin_data:", garminUpdateError);
+            toast.warning("Activity deleted but training data could not be updated");
+          } else {
+            const { data: lastMetricsData, error: lastMetricsError } = await supabase
+              .from('garmin_data')
+              .select('atl, ctl, tsb')
+              .eq('user_id', userId)
+              .lt('date', entryDate)
+              .order('date', { ascending: false })
+              .limit(1)
+              .single();
+              
+            if (lastMetricsError && lastMetricsError.code !== 'PGRST116') {
+              console.error("Error fetching last metrics:", lastMetricsError);
+              toast.warning("Activity deleted but metrics may be incorrect");
+              return;
+            }
+            
+            const previousMetrics = lastMetricsData || { atl: 0, ctl: 0, tsb: 0 };
+            
+            const newAtl = previousMetrics.atl + (newTrimp - previousMetrics.atl) / 7;
+            const newCtl = previousMetrics.ctl + (newTrimp - previousMetrics.ctl) / 42;
+            const newTsb = previousMetrics.ctl - previousMetrics.atl;
+            
+            await supabase
+              .from('garmin_data')
+              .update({
+                atl: parseFloat(newAtl.toFixed(2)),
+                ctl: parseFloat(newCtl.toFixed(2)),
+                tsb: parseFloat(newTsb.toFixed(2))
+              })
+              .eq('user_id', userId)
+              .eq('date', entryDate);
+            
+            const { data: subsequentDates, error: fetchDatesError } = await supabase
+              .from('garmin_data')
+              .select('date, trimp')
+              .eq('user_id', userId)
+              .gt('date', entryDate)
+              .order('date', { ascending: true });
+              
+            if (!fetchDatesError && subsequentDates && subsequentDates.length > 0) {
+              let prevMetrics = {
+                atl: parseFloat(newAtl.toFixed(2)),
+                ctl: parseFloat(newCtl.toFixed(2)),
+                tsb: parseFloat(newTsb.toFixed(2))
+              };
+              
+              for (const dateItem of subsequentDates) {
+                const dateTRIMP = dateItem.trimp || 0;
+                
+                const dateAtl = prevMetrics.atl + (dateTRIMP - prevMetrics.atl) / 7;
+                const dateCtl = prevMetrics.ctl + (dateTRIMP - prevMetrics.ctl) / 42;
+                const dateTsb = prevMetrics.ctl - prevMetrics.atl;
+                
+                const updatedMetrics = {
+                  atl: parseFloat(dateAtl.toFixed(2)),
+                  ctl: parseFloat(dateCtl.toFixed(2)),
+                  tsb: parseFloat(dateTsb.toFixed(2))
+                };
+                
+                await supabase
+                  .from('garmin_data')
+                  .update(updatedMetrics)
+                  .eq('user_id', userId)
+                  .eq('date', dateItem.date);
+                
+                prevMetrics = updatedMetrics;
+              }
+            }
           }
         }
       }
@@ -948,7 +1006,6 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           </TabsContent>
         </Tabs>
         
-        {/* Edit Manual Entry Dialog */}
         <Dialog open={isEditing} onOpenChange={(open) => !open && setIsEditing(false)}>
           <DialogContent>
             <DialogHeader>
