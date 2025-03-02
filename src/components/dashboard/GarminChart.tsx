@@ -1,4 +1,3 @@
-
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -391,8 +390,9 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
       
       if (existingEntry) {
         combinedTrimp = existingEntry.trimp + trimpValue;
+        
         let existingActivities = existingEntry.activity.split(', ').filter(a => a !== "Rest Day");
-        combinedActivities = [...new Set([...existingActivities, activityName])];
+        combinedActivities = [...existingActivities, activityName];
       }
       
       console.log(`Combined TRIMP: ${combinedTrimp}, Combined Activities: ${combinedActivities.join(', ')}`);
@@ -618,7 +618,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
             .maybeSingle();
 
           if (!garminFetchError) {
-            const activityList = [...new Set(allActivities)].join(', ');
+            const activityList = allActivities.join(', ');
             const activityData = {
               trimp: totalTrimp,
               activity: totalTrimp > 0 ? activityList : "Rest Day"
@@ -705,7 +705,7 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
           .maybeSingle();
 
         if (!garminFetchError && garminEntry) {
-          const activityList = [...new Set(manualActivities)].join(', ');
+          const activityList = manualActivities.join(', ');
           const newActivity = totalManualTrimp > 0 ? activityList : "Rest Day";
           
           const { error: garminUpdateError } = await supabase
@@ -1164,4 +1164,3 @@ export const GarminChart = ({ data, email, onUpdate, isUpdating }: Props) => {
     </div>
   );
 };
-
