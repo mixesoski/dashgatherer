@@ -15,12 +15,14 @@ import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
 import { ProgressToast } from "@/components/ui/ProgressToast";
+
 interface Athlete {
   user_id: string;
   user: {
     email: string;
   };
 }
+
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -29,6 +31,7 @@ const Index = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   const {
     data: roleData
   } = useQuery({
@@ -44,6 +47,7 @@ const Index = () => {
     },
     enabled: !!userId
   });
+
   const {
     data: athletes
   } = useQuery<Athlete[]>({
@@ -51,29 +55,39 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       console.log('Fetching athletes for coach:', userId);
+      
       const {
         data: coachData,
         error: coachError
-      } = await supabase.from('coach_athletes').select('*').eq('coach_id', userId);
+      } = await supabase
+        .from('coach_athletes')
+        .select('athlete_id, athlete_email')
+        .eq('coach_id', userId);
+      
       console.log('Raw coach data:', coachData);
+      
       if (coachError) {
         console.error('Coach data fetch error:', coachError);
         return [];
       }
+      
       if (!coachData || !Array.isArray(coachData)) {
         console.log('No coach data or not an array');
         return [];
       }
+      
       return coachData.map(row => ({
         user_id: row.athlete_id,
         user: {
-          email: row.athlete_id // temporarily use ID as email
+          email: row.athlete_email || row.athlete_id
         }
       }));
     },
     enabled: !!userId && roleData === 'coach'
   });
+
   const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
+
   const {
     data: garminCredentials,
     isLoading: isCredentialsLoading,
@@ -91,6 +105,7 @@ const Index = () => {
     },
     enabled: !!userId && userRole !== 'coach'
   });
+
   const {
     data: garminData,
     isLoading: isDataLoading,
@@ -110,6 +125,7 @@ const Index = () => {
     },
     enabled: !!relevantUserId
   });
+
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
@@ -129,16 +145,19 @@ const Index = () => {
     };
     getCurrentUser();
   }, []);
+
   useEffect(() => {
     if (garminData && garminData.length > 0) {
       setShowButtons(false);
     }
   }, [garminData]);
+
   useEffect(() => {
     if (roleData) {
       setUserRole(roleData);
     }
   }, [roleData]);
+
   const handleDeleteCredentials = async () => {
     if (!userId) return;
     const {
@@ -151,6 +170,7 @@ const Index = () => {
     toast.success("Garmin credentials deleted successfully");
     await refetchCredentials();
   };
+
   const handleSync = async () => {
     if (!relevantUserId || !startDate) {
       toast.error('No user logged in or start date not selected');
@@ -168,6 +188,7 @@ const Index = () => {
     }
     setIsUpdating(false);
   };
+
   const handleUpdate = async () => {
     if (!relevantUserId) return;
     try {
@@ -184,12 +205,14 @@ const Index = () => {
       setIsUpdating(false);
     }
   };
+
   if (isInitialLoading) {
     return <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
         <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
         <p className="text-xl font-medium text-gray-700">Loading your training data...</p>
       </div>;
   }
+
   return <div className="min-h-screen bg-gray-100 py-8 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-end mb-8 gap-2">
@@ -239,4 +262,5 @@ const Index = () => {
       </div>
     </div>;
 };
+
 export default Index;

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   Select,
@@ -26,6 +27,7 @@ const CoachDashboard = ({
   onAthleteSelect 
 }: CoachDashboardProps) => {
   const selectedAthlete = athletes.find(a => a.user_id === selectedAthleteId);
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-4">
@@ -44,7 +46,7 @@ const CoachDashboard = ({
             <SelectContent>
               {athletes.map((athlete) => (
                 <SelectItem key={athlete.user_id} value={athlete.user_id}>
-                  {athlete.user.email}
+                  {athlete.user.email || "No email available"}
                 </SelectItem>
               ))}
             </SelectContent>
