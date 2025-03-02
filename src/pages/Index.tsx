@@ -15,6 +15,7 @@ import { syncGarminData, updateGarminData } from "@/utils/garminSync";
 import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
 import { ProgressToast } from "@/components/ui/ProgressToast";
+import { Logo } from "@/components/Logo";
 
 interface Athlete {
   user_id: string;
@@ -215,9 +216,12 @@ const Index = () => {
 
   return <div className="min-h-screen bg-gray-100 py-8 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-end mb-8 gap-2">
-          <InviteCoachDialog />
-          <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
+        <div className="flex justify-between mb-8">
+          <Logo variant="dark" />
+          <div className="flex gap-2">
+            <InviteCoachDialog />
+            <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
+          </div>
         </div>
 
         {userRole === 'coach' ? <>

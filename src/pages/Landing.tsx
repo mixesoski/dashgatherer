@@ -1,6 +1,8 @@
+
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import "@/styles/squares-background.css";
+import { Logo } from "@/components/Logo";
 
 const Landing = () => {
   return (
@@ -8,7 +10,7 @@ const Landing = () => {
       <div className="relative z-10">
         {/* Navigation */}
         <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-          <h1 className="text-2xl text-white-bold">Trimpbara</h1>
+          <Logo variant="light" />
           <div className="space-x-4">
             <Link to="/login">
               <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">

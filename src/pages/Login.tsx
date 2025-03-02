@@ -1,3 +1,4 @@
+
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +17,7 @@ import { Database } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { Logo } from "@/components/Logo";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 
@@ -109,9 +111,12 @@ const Login = () => {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
       <div className="w-1/2 p-12 bg-white text-black">
-        <Link to="/" className="text-black hover:text-gray-700 inline-flex items-center mb-8">
-          <span className="mr-2">←</span> Go back home
-        </Link>
+        <div className="flex items-center mb-8">
+          <Logo variant="dark" className="mr-4" />
+          <Link to="/" className="text-black hover:text-gray-700 inline-flex items-center">
+            <span className="mr-2">←</span> Go back home
+          </Link>
+        </div>
         
         <div className="max-w-md">
           <h1 className="text-4xl font-bold text-black mb-2">
