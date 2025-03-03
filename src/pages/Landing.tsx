@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import "@/styles/squares-background.css";
 import { Logo } from "@/components/Logo";
+import { PricingTier } from "@/components/PricingTier";
 
 const Landing = () => {
   return (
@@ -65,6 +66,70 @@ const Landing = () => {
                 Share your training data with your coach and get personalized feedback.
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section className="container mx-auto px-4 py-20">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
+            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+              Choose the plan that fits your needs and start optimizing your training today.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <PricingTier
+              title="Coach"
+              price="Free"
+              description="For coaches who want to monitor their athletes"
+              priceDescription="Always free"
+              features={[
+                "View connected athletes' data",
+                "Basic analytics",
+                "Email support",
+                "Limited dashboard access"
+              ]}
+              buttonText="Sign Up Free"
+              buttonVariant="outline"
+              buttonHref="/login"
+            />
+            
+            <PricingTier
+              title="Athlete"
+              price="$6.99"
+              priceDescription="per month"
+              description="For serious athletes looking to optimize performance"
+              features={[
+                "Garmin integration",
+                "Advanced TRIMP analytics",
+                "Training load tracking",
+                "Coach sharing capabilities",
+                "Email support",
+                "Full dashboard access"
+              ]}
+              buttonText="Get Started"
+              highlighted={true}
+              buttonHref="/login"
+            />
+            
+            <PricingTier
+              title="Organization"
+              price={<>Contact Us</>}
+              description="For teams, clubs and organizations"
+              priceDescription="Custom pricing"
+              features={[
+                "Everything in Athlete plan",
+                "Bulk athlete management",
+                "Advanced team analytics",
+                "Custom features",
+                "Premium support",
+                "Dedicated account manager"
+              ]}
+              buttonText="Contact Sales"
+              buttonVariant="outline"
+              buttonHref="/login"
+            />
           </div>
         </section>
 
