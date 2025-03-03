@@ -22,6 +22,7 @@ interface PricingTierProps {
   highlighted?: boolean;
   buttonHref: string;
   priceDescription?: string;
+  customCardStyle?: string;
 }
 
 export const PricingTier = ({
@@ -34,9 +35,10 @@ export const PricingTier = ({
   highlighted = false,
   buttonHref,
   priceDescription,
+  customCardStyle,
 }: PricingTierProps) => {
   return (
-    <Card className={`flex flex-col ${highlighted ? 'border-purple-500 shadow-lg relative overflow-hidden' : 'bg-white/5 backdrop-blur-xl border border-white/10'}`}>
+    <Card className={`flex flex-col ${highlighted ? 'border-purple-500 shadow-lg relative overflow-hidden' : customCardStyle || 'bg-white/5 backdrop-blur-xl border border-white/10'}`}>
       {highlighted && (
         <div className="absolute top-0 right-0 -mt-2 -mr-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold rounded-bl-lg px-3 py-1 transform rotate-12">
           Popular

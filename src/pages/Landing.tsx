@@ -78,7 +78,24 @@ const Landing = () => {
             </p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+            <PricingTier
+              title="Trial"
+              price="Free"
+              description="Try before you commit"
+              priceDescription="14 days"
+              features={[
+                "Limited Garmin integration",
+                "Basic TRIMP analytics",
+                "7-day data history",
+                "Email support"
+              ]}
+              buttonText="Start Trial"
+              buttonVariant="outline"
+              buttonHref="/login"
+              customCardStyle="bg-gradient-to-br from-blue-500/10 to-blue-600/10 backdrop-blur-xl border border-blue-500/20"
+            />
+            
             <PricingTier
               title="Coach"
               price="Free"
@@ -93,6 +110,7 @@ const Landing = () => {
               buttonText="Sign Up Free"
               buttonVariant="outline"
               buttonHref="/login"
+              customCardStyle="bg-gradient-to-br from-green-500/10 to-green-600/10 backdrop-blur-xl border border-green-500/20"
             />
             
             <PricingTier
@@ -129,6 +147,7 @@ const Landing = () => {
               buttonText="Contact Sales"
               buttonVariant="outline"
               buttonHref="/login"
+              customCardStyle="bg-gradient-to-br from-purple-500/10 to-purple-600/10 backdrop-blur-xl border border-purple-500/20"
             />
           </div>
         </section>
