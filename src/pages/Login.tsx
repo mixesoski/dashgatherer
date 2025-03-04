@@ -1,26 +1,17 @@
-
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Database } from "@/integrations/supabase/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
-
 type UserRole = Database["public"]["Enums"]["user_role"];
-
 const Login = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +19,16 @@ const Login = () => {
   const [role, setRole] = useState<UserRole>("athlete");
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
+    password: ''
   });
-
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const {
+        data: {
+          session
+        },
+        error: sessionError
+      } = await supabase.auth.getSession();
       if (sessionError) {
         console.error("Session check error:", sessionError);
         setError("Nieprawidłowe dane logowania");
@@ -43,10 +38,12 @@ const Login = () => {
         navigate("/dashboard");
       }
     };
-
     checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: {
+        subscription
+      }
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
         navigate("/dashboard");
       }
@@ -57,21 +54,27 @@ const Login = () => {
         console.log('Token odświeżony pomyślnie');
       }
     });
-
     return () => {
       subscription.unsubscribe();
     };
   }, [navigate]);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const {
+      name,
+      value
+    } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
   };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (view === "sign_up") {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const {
+        data,
+        error: signUpError
+      } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
@@ -80,42 +83,38 @@ const Login = () => {
           }
         }
       });
-
       if (signUpError) {
         console.error('Error signing up:', signUpError);
         setError(signUpError.message);
       } else {
         toast({
           title: "Success!",
-          description: "Please check your email to confirm your account.",
+          description: "Please check your email to confirm your account."
         });
       }
     } else {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const {
+        error: signInError
+      } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password
       });
-
       if (signInError) {
         console.error('Error logging in:', signInError);
         setError(signInError.message);
       } else {
         toast({
           title: "Welcome back!",
-          description: "Successfully logged in.",
+          description: "Successfully logged in."
         });
       }
     }
   };
-
-  return (
-    <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
+  return <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
       <div className="w-1/2 p-12 bg-white text-black">
         <div className="flex items-center mb-8">
           <Logo variant="dark" className="mr-4" />
-          <Link to="/" className="text-black hover:text-gray-700 inline-flex items-center">
-            <span className="mr-2">←</span> Go back home
-          </Link>
+          
         </div>
         
         <div className="max-w-md">
@@ -126,37 +125,20 @@ const Login = () => {
             {view === "sign_in" ? "Welcome back, you've been missed" : "Create your account"}
           </p>
 
-          {error && (
-            <Alert variant="destructive" className="mb-4">
+          {error && <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+            </Alert>}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Input
-                type="email"
-                name="email"
-                placeholder="Email address"
-                value={formData.email}
-                onChange={handleInputChange}
-                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300"
-              />
+              <Input type="email" name="email" placeholder="Email address" value={formData.email} onChange={handleInputChange} className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" />
             </div>
 
             <div>
-              <Input
-                type="password"
-                name="password"
-                placeholder="Password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300"
-              />
+              <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleInputChange} className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" />
             </div>
 
-            {view === "sign_up" && (
-              <div>
+            {view === "sign_up" && <div>
                 <Label htmlFor="role" className="text-black">I am:</Label>
                 <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
                   <SelectTrigger className="w-full bg-white text-black border-gray-300">
@@ -167,37 +149,24 @@ const Login = () => {
                     <SelectItem value="coach">Coach</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            )}
+              </div>}
 
             <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900">
               {view === "sign_in" ? "Login" : "Sign up"}
             </Button>
 
             <div className="text-black text-sm">
-              {view === "sign_in" ? (
-                <p>
+              {view === "sign_in" ? <p>
                   Don't have an account yet?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setView("sign_up")}
-                    className="text-black underline hover:text-gray-700"
-                  >
+                  <button type="button" onClick={() => setView("sign_up")} className="text-black underline hover:text-gray-700">
                     Sign up
                   </button>
-                </p>
-              ) : (
-                <p>
+                </p> : <p>
                   Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setView("sign_in")}
-                    className="text-black underline hover:text-gray-700"
-                  >
+                  <button type="button" onClick={() => setView("sign_in")} className="text-black underline hover:text-gray-700">
                     Login
                   </button>
-                </p>
-              )}
+                </p>}
             </div>
           </form>
         </div>
@@ -205,8 +174,6 @@ const Login = () => {
       <div className="w-1/2 flex items-center justify-center">
         <h1 className="text-6xl font-bold text-white">Trimpbara</h1>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Login;
