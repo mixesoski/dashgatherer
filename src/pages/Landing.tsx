@@ -13,6 +13,11 @@ const Landing = () => {
         <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
           <Logo variant="light" />
           <div className="space-x-4">
+            <Link to="/pricing">
+              <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
+                Pricing
+              </Button>
+            </Link>
             <Link to="/login">
               <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
                 Sign in
@@ -76,6 +81,13 @@ const Landing = () => {
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
               Choose the plan that fits your needs and start optimizing your training today.
             </p>
+            <div className="mt-6">
+              <Link to="/pricing">
+                <Button variant="outline" className="border-purple-500 text-purple-500 hover:bg-purple-500/10">
+                  View Detailed Pricing & Features
+                </Button>
+              </Link>
+            </div>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
@@ -174,6 +186,7 @@ const Landing = () => {
           <div className="flex justify-between items-center">
             <p className="text-gray-400">© 2024 Trimpbara. All rights reserved.</p>
             <div className="space-x-4">
+              <Link to="/pricing" className="text-gray-400 hover:text-white">Pricing</Link>
               <a href="#" className="text-gray-400 hover:text-white">Privacy Policy</a>
               <a href="#" className="text-gray-400 hover:text-white">Terms of Service</a>
             </div>

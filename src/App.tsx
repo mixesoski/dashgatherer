@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import Landing from "./pages/Landing";
+import Pricing from "./pages/Pricing";
 import RespondInvitation from "./pages/RespondInvitation";
 import Account from "./pages/Account";
 
@@ -43,6 +44,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route
             path="/dashboard"
             element={
