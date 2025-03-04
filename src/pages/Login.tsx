@@ -1,8 +1,9 @@
+
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -11,16 +12,76 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
+import { createCheckoutSession } from "@/services/stripe";
+
 type UserRole = Database["public"]["Enums"]["user_role"];
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const planId = searchParams.get('plan') as 'athlete' | 'coach' | 'organization' | null;
+  
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign_in" | "sign_up">("sign_in");
-  const [role, setRole] = useState<UserRole>("athlete");
+  const [role, setRole] = useState<UserRole>(planId === 'coach' ? 'coach' : 'athlete');
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
+  const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
+
+  // Handle redirect to checkout after successful signup/login if plan is specified
+  const handleSubscriptionRedirect = async (userId: string) => {
+    if (!planId || isRedirectingToCheckout) return;
+    
+    try {
+      setIsRedirectingToCheckout(true);
+      
+      // Coach plan doesn't need checkout
+      if (planId === 'coach') {
+        navigate('/dashboard');
+        return;
+      }
+      
+      // Organization plan shows contact sales message
+      if (planId === 'organization') {
+        toast({
+          title: "Contact Sales",
+          description: "Please contact our sales team for organization pricing."
+        });
+        navigate('/dashboard');
+        return;
+      }
+      
+      // For athlete plan, create checkout session
+      const baseUrl = window.location.origin;
+      const successUrl = `${baseUrl}/dashboard?subscription=success&plan=${planId}`;
+      const cancelUrl = `${baseUrl}/pricing?subscription=canceled`;
+      
+      const result = await createCheckoutSession(planId, successUrl, cancelUrl);
+      
+      if (result.contactSales) {
+        toast({
+          title: "Contact Sales",
+          description: result.message || "Please contact our sales team for more information."
+        });
+        navigate('/dashboard');
+      } else if (result.url) {
+        // Redirect to Stripe checkout
+        window.location.href = result.url;
+      }
+    } catch (error) {
+      console.error("Error redirecting to subscription:", error);
+      toast({
+        title: "Subscription Error",
+        description: "There was an error setting up your subscription. Please try again from the pricing page.",
+        variant: "destructive"
+      });
+      navigate('/dashboard');
+    } finally {
+      setIsRedirectingToCheckout(false);
+    }
+  };
+
   useEffect(() => {
     const checkSession = async () => {
       const {
@@ -35,7 +96,12 @@ const Login = () => {
         return;
       }
       if (session) {
-        navigate("/dashboard");
+        // If we have a plan parameter, handle subscription redirect
+        if (planId) {
+          await handleSubscriptionRedirect(session.user.id);
+        } else {
+          navigate("/dashboard");
+        }
       }
     };
     checkSession();
@@ -45,7 +111,12 @@ const Login = () => {
       }
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        navigate("/dashboard");
+        // If we have a plan parameter, handle subscription redirect
+        if (planId) {
+          await handleSubscriptionRedirect(session.user.id);
+        } else {
+          navigate("/dashboard");
+        }
       }
       if (event === 'SIGNED_OUT') {
         setError(null);
@@ -57,7 +128,15 @@ const Login = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [navigate, planId]);
+
+  // Update role if plan changes
+  useEffect(() => {
+    if (planId === 'coach') {
+      setRole('coach');
+    }
+  }, [planId]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const {
       name,
@@ -129,6 +208,12 @@ const Login = () => {
               <AlertDescription>{error}</AlertDescription>
             </Alert>}
 
+          {isRedirectingToCheckout && (
+            <Alert className="mb-4 bg-blue-50 border-blue-200">
+              <AlertDescription>Setting up your subscription. Please wait...</AlertDescription>
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Input type="email" name="email" placeholder="Email address" value={formData.email} onChange={handleInputChange} className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" />
@@ -151,8 +236,8 @@ const Login = () => {
                 </Select>
               </div>}
 
-            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900">
-              {view === "sign_in" ? "Login" : "Sign up"}
+            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900" disabled={isRedirectingToCheckout}>
+              {isRedirectingToCheckout ? "Please wait..." : view === "sign_in" ? "Login" : "Sign up"}
             </Button>
 
             <div className="text-black text-sm">
