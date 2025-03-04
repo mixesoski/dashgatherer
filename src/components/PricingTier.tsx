@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SubscriptionButton } from "./SubscriptionButton";
 
 interface PricingTierProps {
   title: string;
@@ -20,9 +21,10 @@ interface PricingTierProps {
   buttonText: string;
   buttonVariant?: "default" | "outline" | "ghost";
   highlighted?: boolean;
-  buttonHref: string;
+  buttonHref?: string;
   priceDescription?: string;
   customCardStyle?: string;
+  planId?: 'coach' | 'athlete' | 'organization';
 }
 
 export const PricingTier = ({
@@ -36,6 +38,7 @@ export const PricingTier = ({
   buttonHref,
   priceDescription,
   customCardStyle,
+  planId,
 }: PricingTierProps) => {
   return (
     <Card className={`flex flex-col ${highlighted ? 'border-purple-500 shadow-lg relative overflow-hidden' : customCardStyle || 'bg-white/5 backdrop-blur-xl border border-white/10'}`}>
@@ -65,18 +68,33 @@ export const PricingTier = ({
         </ul>
       </CardContent>
       <CardFooter className="pt-4">
-        <Link to={buttonHref} className="w-full">
-          <Button
+        {planId ? (
+          <SubscriptionButton 
+            planId={planId}
             variant={buttonVariant}
             className={`w-full ${
               highlighted
                 ? "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
                 : ""
             }`}
+            redirectToLogin={true}
           >
             {buttonText}
-          </Button>
-        </Link>
+          </SubscriptionButton>
+        ) : (
+          <Link to={buttonHref || "#"} className="w-full">
+            <Button
+              variant={buttonVariant}
+              className={`w-full ${
+                highlighted
+                  ? "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                  : ""
+              }`}
+            >
+              {buttonText}
+            </Button>
+          </Link>
+        )}
       </CardFooter>
     </Card>
   );

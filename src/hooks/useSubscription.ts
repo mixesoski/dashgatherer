@@ -1,71 +1,60 @@
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { createCheckoutSession, getSubscriptionStatus, SubscriptionPlan } from '@/services/stripe';
-import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from "@tanstack/react-query";
+import { getSubscriptionStatus } from "@/services/stripe";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
-export const useSubscription = () => {
-  const [loading, setLoading] = useState(false);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
-  const navigate = useNavigate();
+export type SubscriptionStatus = {
+  active: boolean;
+  plan: string | null;
+  role: string;
+  status?: string;
+  trialEnd: string | null;
+  cancelAt: string | null;
+  renewsAt: string | null;
+};
 
+export function useSubscription() {
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Check if user is logged in
   useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      try {
-        const session = await supabase.auth.getSession();
-        if (session.data.session?.user) {
-          const status = await getSubscriptionStatus(session.data.session.user.id);
-          setSubscriptionStatus(status);
-        }
-      } catch (error) {
-        console.error('Error fetching subscription status:', error);
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setUserId(session?.user?.id || null);
       }
-    };
+    );
 
-    fetchSubscriptionStatus();
+    // Initial check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id || null);
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
-  const subscribeToPlan = async (planId: SubscriptionPlan) => {
-    setLoading(true);
-    try {
-      const session = await supabase.auth.getSession();
-      if (!session.data.session?.user) {
-        toast.error('You must be logged in to subscribe');
-        navigate('/login');
-        return;
-      }
-
-      const userId = session.data.session.user.id;
-      
-      // Define the URLs that Stripe will redirect to after checkout
-      const successUrl = `${window.location.origin}/dashboard?subscription=success`;
-      const cancelUrl = `${window.location.origin}/dashboard?subscription=cancelled`;
-      
-      const { url } = await createCheckoutSession({
-        planId,
-        userId,
-        successUrl,
-        cancelUrl
-      });
-      
-      // Redirect to Stripe Checkout
-      if (url) {
-        window.location.href = url;
-      } else {
-        toast.error('Failed to create checkout session');
-      }
-    } catch (error) {
-      console.error('Error subscribing to plan:', error);
-      toast.error('Failed to process subscription');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fetch subscription status
+  const {
+    data: subscription,
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["subscription", userId],
+    queryFn: getSubscriptionStatus,
+    enabled: !!userId, // Only run query if userId exists
+    retry: 1,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
 
   return {
-    loading,
-    subscriptionStatus,
-    subscribeToPlan
+    subscription: subscription as SubscriptionStatus,
+    isLoading,
+    error,
+    refetch,
   };
-};
+}
+
+export default useSubscription;

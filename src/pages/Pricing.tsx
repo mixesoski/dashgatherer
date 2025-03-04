@@ -144,7 +144,7 @@ const PricingPage = () => {
             ]}
             buttonText="Start Trial"
             buttonVariant="outline"
-            buttonHref="/login"
+            planId="athlete" // Using athlete plan with trial settings
             customCardStyle="bg-gradient-to-br from-blue-500/10 to-blue-600/10 backdrop-blur-xl border border-blue-500/20"
           />
           
@@ -161,7 +161,7 @@ const PricingPage = () => {
             ]}
             buttonText="Sign Up Free"
             buttonVariant="outline"
-            buttonHref="/login"
+            planId="coach"
             customCardStyle="bg-gradient-to-br from-green-500/10 to-green-600/10 backdrop-blur-xl border border-green-500/20"
           />
           
@@ -180,7 +180,7 @@ const PricingPage = () => {
             ]}
             buttonText="Get Started"
             highlighted={true}
-            buttonHref="/login"
+            planId="athlete"
           />
           
           <PricingTier
@@ -198,7 +198,7 @@ const PricingPage = () => {
             ]}
             buttonText="Contact Sales"
             buttonVariant="outline"
-            buttonHref="/login"
+            planId="organization"
             customCardStyle="bg-gradient-to-br from-purple-500/10 to-purple-600/10 backdrop-blur-xl border border-purple-500/20"
           />
         </div>
