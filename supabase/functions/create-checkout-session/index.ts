@@ -17,6 +17,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Update the price IDs here
 const planPriceIds = {
   coach: 'free', // Coach is free
   athlete: Deno.env.get('STRIPE_ATHLETE_PRICE_ID') || '',
