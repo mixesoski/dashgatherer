@@ -11,6 +11,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
+import { CreditCard, User, LogOut } from "lucide-react";
 
 interface ProfileMenuProps {
   onDeleteGarminCredentials: () => void;
@@ -35,12 +36,22 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56">
         <Link to="/account" className="block w-full">
-          <DropdownMenuLabel className="cursor-pointer hover:bg-accent hover:text-accent-foreground">
+          <DropdownMenuLabel className="cursor-pointer hover:bg-accent hover:text-accent-foreground flex items-center gap-2">
+            <User className="h-4 w-4" />
             My Account
           </DropdownMenuLabel>
         </Link>
+        
+        <Link to="/subscription" className="block w-full">
+          <DropdownMenuLabel className="cursor-pointer hover:bg-accent hover:text-accent-foreground flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
+            Manage Subscription
+          </DropdownMenuLabel>
+        </Link>
+        
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+        <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer flex items-center gap-2">
+          <LogOut className="h-4 w-4" />
           Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
