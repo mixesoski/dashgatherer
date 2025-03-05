@@ -44,15 +44,32 @@ const ManageSubscription = () => {
     }
 
     try {
-      // First update user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
+      // Check if user already has a profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      
+      if (profileError && profileError.code !== 'PGRST116') {
+        // Error other than "not found"
+        throw profileError;
+      }
+      
+      // Update or insert profile with role set to athlete
+      const { error: updateProfileError } = await supabase
+        .from('profiles')
         .upsert({ 
           user_id: userId, 
-          role: 'athlete'
+          role: 'athlete',
+          updated_at: new Date().toISOString(),
+          // Only set these fields if creating a new profile
+          ...(profile ? {} : {
+            created_at: new Date().toISOString(),
+          })
         });
       
-      if (roleError) throw roleError;
+      if (updateProfileError) throw updateProfileError;
 
       // Get the Supabase URL and anonymous key
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -68,24 +85,63 @@ const ManageSubscription = () => {
         throw new Error("No valid session found");
       }
       
-      // Create subscription using REST API directly
-      const response = await fetch(`${supabaseUrl}/rest/v1/subscriptions`, {
-        method: 'POST',
+      // Check if the subscriptions table exists and if user already has a subscription
+      const { data: existingSubscription, error: subCheckError } = await fetch(`${supabaseUrl}/rest/v1/subscriptions?user_id=eq.${userId}`, {
         headers: {
           'Content-Type': 'application/json',
           'apikey': supabaseAnonKey,
           'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          stripe_subscription_id: `test_${Date.now()}`,
-          stripe_customer_id: `cus_test_${Date.now()}`,
-          plan_id: 'athlete',
-          status: 'active',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-      });
+        }
+      }).then(res => {
+        if (res.ok) return res.json();
+        return { error: `HTTP error ${res.status}` };
+      }).catch(err => ({ error: err.message }));
+      
+      if (subCheckError) {
+        console.log("Error checking for existing subscription:", subCheckError);
+        // Table might not exist, continue with creation
+      }
+      
+      // Define the new subscription data
+      const subscriptionData = {
+        user_id: userId,
+        stripe_subscription_id: `test_${Date.now()}`,
+        stripe_customer_id: `cus_test_${Date.now()}`,
+        plan_id: 'athlete',
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      let response;
+      
+      // If subscription already exists, update it
+      if (existingSubscription && existingSubscription.length > 0) {
+        console.log("Updating existing subscription");
+        response = await fetch(`${supabaseUrl}/rest/v1/subscriptions?user_id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${session.access_token}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(subscriptionData)
+        });
+      } else {
+        // Create new subscription
+        console.log("Creating new subscription");
+        response = await fetch(`${supabaseUrl}/rest/v1/subscriptions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseAnonKey,
+            'Authorization': `Bearer ${session.access_token}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(subscriptionData)
+        });
+      }
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
