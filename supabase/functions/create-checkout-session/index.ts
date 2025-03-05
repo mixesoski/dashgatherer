@@ -34,6 +34,9 @@ serve(async (req) => {
     // Parse request body
     const { planId, userId, successUrl, cancelUrl } = await req.json();
 
+    console.log(`Creating checkout session for plan: ${planId}, user: ${userId}`);
+    console.log(`Using price ID for athlete plan: ${planPriceIds.athlete}`);
+
     // Free coach subscription - no need for Stripe
     if (planId === 'coach') {
       // Update user role to coach in the database
@@ -60,6 +63,19 @@ serve(async (req) => {
       );
     }
 
+    // Verify we have a valid price ID for athlete plan
+    if (!planPriceIds.athlete || planPriceIds.athlete === '') {
+      console.error('Missing athlete price ID in environment variables');
+      throw new Error('Athlete price ID not configured');
+    }
+
+    // Get user email from Supabase
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+    if (userError || !userData.user?.email) {
+      console.error('Error fetching user email:', userError);
+      throw new Error('Unable to fetch user email');
+    }
+
     // Create Stripe checkout session for athlete
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -73,12 +89,14 @@ serve(async (req) => {
       success_url: successUrl,
       cancel_url: cancelUrl,
       client_reference_id: userId,
-      customer_email: (await supabase.auth.admin.getUserById(userId)).data.user?.email,
+      customer_email: userData.user.email,
       metadata: {
         userId,
         planId,
       },
     });
+
+    console.log(`Checkout session created: ${session.id}, URL: ${session.url}`);
 
     return new Response(
       JSON.stringify({ url: session.url }),
