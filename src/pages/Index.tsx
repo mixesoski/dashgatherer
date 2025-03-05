@@ -16,6 +16,9 @@ import { InviteCoachDialog } from "@/components/dashboard/InviteCoachDialog";
 import CoachDashboard from "@/components/dashboard/CoachDashboard";
 import { ProgressToast } from "@/components/ui/ProgressToast";
 import { Logo } from "@/components/Logo";
+import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
+import { PremiumFeatureGuard } from "@/components/PremiumFeatureGuard";
+import { usePremiumFeatures } from "@/hooks/usePremiumFeatures";
 
 interface Athlete {
   user_id: string;
@@ -223,6 +226,8 @@ const Index = () => {
             <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
           </div>
         </div>
+
+        <SubscriptionBanner />
 
         {userRole === 'coach' ? <>
             <CoachDashboard athletes={athletes} selectedAthleteId={selectedAthleteId} onAthleteSelect={setSelectedAthleteId} />

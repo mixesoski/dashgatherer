@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { PremiumUpdateButton } from "./PremiumUpdateButton";
 const logError = (message: string, error: any, additionalInfo?: any) => {
   console.error("\n" + "=".repeat(50));
   console.error(`ERROR: ${message}`);
@@ -689,10 +690,11 @@ export const GarminChart = ({
           
           
         </div>
-        <Button variant="outline" size="sm" onClick={onUpdate} disabled={isUpdating || isSubmitting} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${isUpdating ? 'animate-spin' : ''}`} />
-          Update Chart
-        </Button>
+        <PremiumUpdateButton 
+          onUpdate={onUpdate} 
+          isUpdating={isUpdating} 
+          isSubmitting={isSubmitting} 
+        />
       </div>
       
       <div className="bg-white/90 backdrop-blur-sm rounded-lg p-3 border shadow-sm w-72 ml-auto">
