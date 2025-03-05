@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,13 +5,14 @@ import { getSubscriptionStatus } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Bug } from "lucide-react";
 import { toast } from "sonner";
 
 const ManageSubscription = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkSubscription = async () => {
@@ -23,6 +23,7 @@ const ManageSubscription = () => {
           return;
         }
 
+        setUserId(user.id);
         const subscriptionData = await getSubscriptionStatus();
         setSubscription(subscriptionData);
       } catch (error: any) {
@@ -34,6 +35,73 @@ const ManageSubscription = () => {
 
     checkSubscription();
   }, [navigate]);
+
+  // DEBUG ONLY: Function to manually create a subscription entry for testing
+  const createTestSubscription = async () => {
+    if (!userId) {
+      toast.error("User ID not available");
+      return;
+    }
+
+    try {
+      // First update user role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .upsert({ 
+          user_id: userId, 
+          role: 'athlete'
+        });
+      
+      if (roleError) throw roleError;
+
+      // Get the Supabase URL and anonymous key
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error("Supabase environment variables not configured");
+      }
+      
+      // Get auth token from supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("No valid session found");
+      }
+      
+      // Create subscription using REST API directly
+      const response = await fetch(`${supabaseUrl}/rest/v1/subscriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          stripe_subscription_id: `test_${Date.now()}`,
+          stripe_customer_id: `cus_test_${Date.now()}`,
+          plan_id: 'athlete',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} ${JSON.stringify(errorData)}`);
+      }
+
+      toast.success("Test subscription created! Refreshing...");
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error: any) {
+      console.error("Error creating test subscription:", error);
+      toast.error(`Failed to create test subscription: ${error.message}`);
+    }
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
@@ -83,12 +151,21 @@ const ManageSubscription = () => {
               <p className="text-muted-foreground mt-2">
                 You don't currently have an active subscription.
               </p>
-              <Button 
-                className="mt-6"
-                onClick={() => navigate("/pricing")}
-              >
-                View Pricing Plans
-              </Button>
+              <div className="flex flex-col sm:flex-row justify-center gap-3 mt-6">
+                <Button onClick={() => navigate("/pricing")}>
+                  View Pricing Plans
+                </Button>
+                
+                {/* DEBUG Button for testing - remove in production */}
+                <Button 
+                  variant="outline" 
+                  onClick={createTestSubscription}
+                  className="flex items-center gap-2 border-amber-500 text-amber-700"
+                >
+                  <Bug className="h-4 w-4" />
+                  Create Test Subscription
+                </Button>
+              </div>
             </div>
           ) : (
             <>
