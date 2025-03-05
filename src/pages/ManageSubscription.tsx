@@ -71,39 +71,12 @@ const ManageSubscription = () => {
       
       if (updateProfileError) throw updateProfileError;
 
-      // Get the Supabase URL and anonymous key
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // Add a message to inform the user what to do next
+      toast.success("Profile updated successfully! You'll need to manually add an entry to the subscriptions table.");
       
-      if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error("Supabase environment variables not configured");
-      }
-      
-      // Get auth token from supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("No valid session found");
-      }
-      
-      // Check if the subscriptions table exists and if user already has a subscription
-      const { data: existingSubscription, error: subCheckError } = await fetch(`${supabaseUrl}/rest/v1/subscriptions?user_id=eq.${userId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      }).then(res => {
-        if (res.ok) return res.json();
-        return { error: `HTTP error ${res.status}` };
-      }).catch(err => ({ error: err.message }));
-      
-      if (subCheckError) {
-        console.log("Error checking for existing subscription:", subCheckError);
-        // Table might not exist, continue with creation
-      }
-      
-      // Define the new subscription data
-      const subscriptionData = {
+      // Display subscription details that should be added
+      console.log("Please add the following subscription entry manually:");
+      console.log({
         user_id: userId,
         stripe_subscription_id: `test_${Date.now()}`,
         stripe_customer_id: `cus_test_${Date.now()}`,
@@ -111,51 +84,10 @@ const ManageSubscription = () => {
         status: 'active',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      };
-
-      let response;
-      
-      // If subscription already exists, update it
-      if (existingSubscription && existingSubscription.length > 0) {
-        console.log("Updating existing subscription");
-        response = await fetch(`${supabaseUrl}/rest/v1/subscriptions?user_id=eq.${userId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${session.access_token}`,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify(subscriptionData)
-        });
-      } else {
-        // Create new subscription
-        console.log("Creating new subscription");
-        response = await fetch(`${supabaseUrl}/rest/v1/subscriptions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': supabaseAnonKey,
-            'Authorization': `Bearer ${session.access_token}`,
-            'Prefer': 'return=minimal'
-          },
-          body: JSON.stringify(subscriptionData)
-        });
-      }
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`API request failed: ${response.status} ${JSON.stringify(errorData)}`);
-      }
-
-      toast.success("Test subscription created! Refreshing...");
-      // Refresh the page after a short delay
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      });
     } catch (error: any) {
-      console.error("Error creating test subscription:", error);
-      toast.error(`Failed to create test subscription: ${error.message}`);
+      console.error("Error updating profile:", error);
+      toast.error(`Failed to update profile: ${error.message}`);
     }
   };
 
@@ -219,7 +151,7 @@ const ManageSubscription = () => {
                   className="flex items-center gap-2 border-amber-500 text-amber-700"
                 >
                   <Bug className="h-4 w-4" />
-                  Create Test Subscription
+                  Update Profile to Athlete
                 </Button>
               </div>
             </div>
