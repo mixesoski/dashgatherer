@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { createCheckoutSession } from "@/services/stripe";
+import { Loader2 } from "lucide-react";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 const Login = () => {
@@ -28,6 +29,7 @@ const Login = () => {
     password: ''
   });
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Handle redirect to checkout after successful signup/login if plan is specified
   const handleSubscriptionRedirect = async (userId: string) => {
@@ -35,6 +37,7 @@ const Login = () => {
     
     try {
       setIsRedirectingToCheckout(true);
+      setIsLoading(true);
       
       // Coach plan doesn't need checkout
       if (planId === 'coach') {
@@ -57,6 +60,7 @@ const Login = () => {
       const successUrl = `${baseUrl}/dashboard?subscription=success&plan=${planId}`;
       const cancelUrl = `${baseUrl}/pricing?subscription=canceled`;
       
+      console.log("Creating checkout session for:", planId, userId);
       const result = await createCheckoutSession(planId, successUrl, cancelUrl);
       
       if (result.contactSales) {
@@ -66,8 +70,17 @@ const Login = () => {
         });
         navigate('/dashboard');
       } else if (result.url) {
+        console.log("Redirecting to checkout URL:", result.url);
         // Redirect to Stripe checkout
         window.location.href = result.url;
+      } else {
+        console.error("No URL returned from checkout session");
+        toast({
+          title: "Checkout Error",
+          description: "There was an error setting up the checkout. Please try again.",
+          variant: "destructive"
+        });
+        navigate('/pricing');
       }
     } catch (error) {
       console.error("Error redirecting to subscription:", error);
@@ -79,23 +92,25 @@ const Login = () => {
       navigate('/dashboard');
     } finally {
       setIsRedirectingToCheckout(false);
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     const checkSession = async () => {
       const {
-        data: {
-          session
-        },
+        data: { session },
         error: sessionError
       } = await supabase.auth.getSession();
+      
       if (sessionError) {
         console.error("Session check error:", sessionError);
         setError("Nieprawidłowe dane logowania");
         return;
       }
+      
       if (session) {
+        console.log("User is logged in, checking for plan parameter:", planId);
         // If we have a plan parameter, handle subscription redirect
         if (planId) {
           await handleSubscriptionRedirect(session.user.id);
@@ -104,13 +119,14 @@ const Login = () => {
         }
       }
     };
+    
     checkSession();
-    const {
-      data: {
-        subscription
-      }
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event);
+      
       if (event === 'SIGNED_IN' && session) {
+        console.log("User signed in, checking for plan parameter:", planId);
         // If we have a plan parameter, handle subscription redirect
         if (planId) {
           await handleSubscriptionRedirect(session.user.id);
@@ -118,13 +134,16 @@ const Login = () => {
           navigate("/dashboard");
         }
       }
+      
       if (event === 'SIGNED_OUT') {
         setError(null);
       }
+      
       if (event === 'TOKEN_REFRESHED') {
         console.log('Token odświeżony pomyślnie');
       }
     });
+    
     return () => {
       subscription.unsubscribe();
     };
@@ -147,53 +166,78 @@ const Login = () => {
       [name]: value
     });
   };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (view === "sign_up") {
-      const {
-        data,
-        error: signUpError
-      } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            role: role
+    setIsLoading(true);
+    
+    try {
+      if (view === "sign_up") {
+        const {
+          data,
+          error: signUpError
+        } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              role: role
+            }
+          }
+        });
+        
+        if (signUpError) {
+          console.error('Error signing up:', signUpError);
+          setError(signUpError.message);
+        } else {
+          toast({
+            title: "Success!",
+            description: "Please check your email to confirm your account."
+          });
+          
+          // If email confirmation is disabled, the user is already signed in
+          if (data.session) {
+            console.log("User signed up and session created without email confirmation");
+            if (planId) {
+              await handleSubscriptionRedirect(data.user.id);
+            }
           }
         }
-      });
-      if (signUpError) {
-        console.error('Error signing up:', signUpError);
-        setError(signUpError.message);
       } else {
-        toast({
-          title: "Success!",
-          description: "Please check your email to confirm your account."
+        const {
+          data,
+          error: signInError
+        } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password
         });
+        
+        if (signInError) {
+          console.error('Error logging in:', signInError);
+          setError(signInError.message);
+        } else {
+          toast({
+            title: "Welcome back!",
+            description: "Successfully logged in."
+          });
+          
+          if (planId && data.session) {
+            await handleSubscriptionRedirect(data.user.id);
+          }
+        }
       }
-    } else {
-      const {
-        error: signInError
-      } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password
-      });
-      if (signInError) {
-        console.error('Error logging in:', signInError);
-        setError(signInError.message);
-      } else {
-        toast({
-          title: "Welcome back!",
-          description: "Successfully logged in."
-        });
-      }
+    } catch (error) {
+      console.error("Authentication error:", error);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
+  
   return <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
       <div className="w-1/2 p-12 bg-white text-black">
         <div className="flex items-center mb-8">
           <Logo variant="dark" className="mr-4" />
-          
         </div>
         
         <div className="max-w-md">
@@ -236,8 +280,9 @@ const Login = () => {
                 </Select>
               </div>}
 
-            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900" disabled={isRedirectingToCheckout}>
-              {isRedirectingToCheckout ? "Please wait..." : view === "sign_in" ? "Login" : "Sign up"}
+            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900" disabled={isLoading || isRedirectingToCheckout}>
+              {isLoading || isRedirectingToCheckout ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isLoading || isRedirectingToCheckout ? "Please wait..." : view === "sign_in" ? "Login" : "Sign up"}
             </Button>
 
             <div className="text-black text-sm">
