@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -63,8 +64,8 @@ serve(async (req) => {
         .from('profiles')
         .upsert({ 
           user_id: userId, 
-          role: 'coach',
-          updated_at: new Date().toISOString()
+          role: 'coach'
+          // updated_at will be set automatically by the trigger
         });
 
       if (error) {
@@ -144,4 +145,4 @@ serve(async (req) => {
       }
     );
   }
-}); 
+});

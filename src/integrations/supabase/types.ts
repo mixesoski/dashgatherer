@@ -159,6 +159,7 @@ export type Database = {
           id: number
           nickname: string | null
           role: Database["public"]["Enums"]["user_role"] | null
+          updated_at: string | null
           user_id: string | null
         }
         Insert: {
@@ -169,6 +170,7 @@ export type Database = {
           id?: number
           nickname?: string | null
           role?: Database["public"]["Enums"]["user_role"] | null
+          updated_at?: string | null
           user_id?: string | null
         }
         Update: {
@@ -179,42 +181,40 @@ export type Database = {
           id?: number
           nickname?: string | null
           role?: Database["public"]["Enums"]["user_role"] | null
+          updated_at?: string | null
           user_id?: string | null
         }
         Relationships: []
       }
-      sync_locks: {
-        Row: {
-          timestamp: string | null
-          user_id: string
-        }
-        Insert: {
-          timestamp?: string | null
-          user_id: string
-        }
-        Update: {
-          timestamp?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      user_roles: {
+      subscriptions: {
         Row: {
           created_at: string
           id: string
-          role: Database["public"]["Enums"]["user_role"]
+          plan_id: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          plan_id: string
+          status: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          role?: Database["public"]["Enums"]["user_role"]
+          plan_id?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
