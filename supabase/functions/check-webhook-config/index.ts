@@ -12,20 +12,47 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Get environment variables
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
   const athletePriceId = Deno.env.get('STRIPE_ATHLETE_PRICE_ID') || '';
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   
+  // Validate environment variables
+  const webhookConfigured = webhookSecret.length > 0;
+  const stripeKeyConfigured = stripeKey.length > 0;
+  const athletePriceConfigured = athletePriceId.length > 0;
+  const supabaseDatabaseConfigured = supabaseUrl.length > 0 && supabaseKey.length > 0;
+  
+  // Create configuration status object
   const config = {
-    webhookConfigured: webhookSecret.length > 0,
-    stripeKeyConfigured: stripeKey.length > 0,
-    athletePriceConfigured: athletePriceId.length > 0,
-    supabaseDatabaseConfigured: supabaseUrl.length > 0 && supabaseKey.length > 0,
+    webhookConfigured,
+    stripeKeyConfigured,
+    athletePriceConfigured,
+    supabaseDatabaseConfigured,
+    status: webhookConfigured && stripeKeyConfigured && athletePriceConfigured && supabaseDatabaseConfigured 
+      ? 'ready' 
+      : 'missing_configuration',
     timestamp: new Date().toISOString(),
-    message: "If webhook is configured but subscriptions aren't being saved, check Stripe Dashboard for webhook delivery status",
-    webhookSetupInstructions: "Make sure Stripe is sending the stripe-signature header and that the webhook secret matches",
+    message: "Configuration check completed",
+    
+    // Detailed information about the configuration
+    webhookInfo: webhookConfigured 
+      ? "Webhook secret is configured. Make sure it matches the webhook signing secret in your Stripe dashboard."
+      : "Webhook secret is missing. Copy it from your Stripe Dashboard > Developers > Webhooks > Signing Secret.",
+    
+    stripeInfo: stripeKeyConfigured
+      ? "Stripe API key is configured"
+      : "Stripe API key is missing. Get it from your Stripe Dashboard > Developers > API keys.",
+    
+    setupInstructions: {
+      webhook: "Ensure Stripe webhook is configured to send events to your Supabase Edge Function URL with these events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted",
+      headers: "The webhook should send the stripe-signature header with each request",
+      secret: "The webhook secret must match between Stripe Dashboard and your environment variables",
+      testing: "Use Stripe CLI to test webhook delivery: stripe listen --forward-to your-webhook-url",
+    },
+    
     environmentVariables: {
       STRIPE_WEBHOOK_SECRET: webhookSecret ? "✓ Configured" : "✗ Missing",
       STRIPE_SECRET_KEY: stripeKey ? "✓ Configured" : "✗ Missing",
@@ -35,6 +62,10 @@ serve(async (req) => {
     }
   };
 
+  // Log the configuration status
+  console.log("Stripe configuration check:", config.status);
+  
+  // Return the configuration status
   return new Response(
     JSON.stringify(config),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

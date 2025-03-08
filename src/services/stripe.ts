@@ -1,5 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 /**
  * Creates a checkout session for subscribing to a plan
@@ -18,12 +19,29 @@ export const createCheckoutSession = async (
 
     console.log(`Creating checkout session for user: ${session.user.id}, plan: ${planId}`);
 
+    // First check that webhook configuration is correct
+    try {
+      const { data: webhookConfig } = await supabase.functions.invoke("check-webhook-config");
+      console.log("Webhook configuration:", webhookConfig);
+      
+      if (!webhookConfig.webhookConfigured || !webhookConfig.stripeKeyConfigured) {
+        console.warn("Stripe not fully configured:", webhookConfig);
+      }
+    } catch (configError) {
+      console.warn("Could not check webhook configuration:", configError);
+      // Continue anyway - don't block checkout process due to config check
+    }
+
     const { data, error } = await supabase.functions.invoke("create-checkout-session", {
       body: {
         planId,
         userId: session.user.id,
         successUrl,
-        cancelUrl
+        cancelUrl,
+        metadata: {
+          userId: session.user.id,
+          planId: planId
+        }
       }
     });
 
@@ -31,6 +49,8 @@ export const createCheckoutSession = async (
       console.error("Error creating checkout session:", error);
       throw new Error(error.message || "Failed to create checkout session");
     }
+
+    console.log("Checkout session created:", data);
 
     // For organization plan, we return a special response to handle contact sales
     if (data.contactSales) {
@@ -60,7 +80,8 @@ export const getSubscriptionStatus = async () => {
 
     // First check if we can connect to the subscription status edge function
     try {
-      await supabase.functions.invoke("check-webhook-config");
+      const { data: webhookConfig } = await supabase.functions.invoke("check-webhook-config");
+      console.log("Webhook configuration status:", webhookConfig.status);
     } catch (configError) {
       console.log("Webhook config check failed, continuing with subscription check:", configError);
       // We'll continue with the subscription check even if the config check fails
@@ -103,6 +124,19 @@ export const getSubscriptionStatus = async () => {
       console.error("Fallback profile check also failed:", fallbackError);
     }
     
+    throw error;
+  }
+};
+
+/**
+ * Debug function to manually verify Stripe webhook configuration
+ */
+export const verifyStripeWebhookConfig = async () => {
+  try {
+    const response = await supabase.functions.invoke("check-webhook-config");
+    return response.data;
+  } catch (error) {
+    console.error("Error verifying Stripe webhook configuration:", error);
     throw error;
   }
 };
