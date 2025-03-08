@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link } from "react-router-dom";
 import { usePremiumFeatures } from "@/hooks/usePremiumFeatures";
@@ -14,7 +15,7 @@ export const PremiumFeatureGuard: React.FC<PremiumFeatureGuardProps> = ({
   children, 
   featureName = "This feature" 
 }) => {
-  const { hasAccess, isLoading } = usePremiumFeatures();
+  const { hasAccess, isLoading, subscriptionData } = usePremiumFeatures();
 
   if (isLoading) {
     return (
@@ -23,6 +24,9 @@ export const PremiumFeatureGuard: React.FC<PremiumFeatureGuardProps> = ({
       </div>
     );
   }
+
+  // Debug information - will be visible in console but not to users
+  console.log('PremiumFeatureGuard status:', { hasAccess, subscriptionData });
 
   if (hasAccess) {
     return <>{children}</>;
@@ -52,4 +56,4 @@ export const PremiumFeatureGuard: React.FC<PremiumFeatureGuardProps> = ({
   );
 };
 
-export default PremiumFeatureGuard; 
+export default PremiumFeatureGuard;
