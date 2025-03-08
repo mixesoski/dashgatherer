@@ -16,6 +16,8 @@ export const createCheckoutSession = async (
       throw new Error("User must be logged in to subscribe");
     }
 
+    console.log(`Creating checkout session for user: ${session.user.id}, plan: ${planId}`);
+
     const { data, error } = await supabase.functions.invoke("create-checkout-session", {
       body: {
         planId,
@@ -53,6 +55,8 @@ export const getSubscriptionStatus = async () => {
     if (!session?.user) {
       throw new Error("User must be logged in to check subscription");
     }
+
+    console.log(`Checking subscription status for user: ${session.user.id}`);
 
     const { data, error } = await supabase.functions.invoke("get-subscription-status", {
       body: {

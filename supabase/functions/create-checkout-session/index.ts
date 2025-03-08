@@ -39,10 +39,16 @@ serve(async (req) => {
 
     // Free coach subscription - no need for Stripe
     if (planId === 'coach') {
-      // Update user role to coach in the database
-      await supabase
-        .from('user_roles')
-        .upsert({ user_id: userId, role: 'coach' });
+      // Update user profile to coach
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ role: 'coach' })
+        .eq('user_id', userId);
+
+      if (profileError) {
+        console.error('Error updating profile to coach:', profileError);
+        throw new Error('Failed to update user role');
+      }
 
       // Return success without Stripe checkout
       return new Response(
@@ -81,22 +87,24 @@ serve(async (req) => {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: planPriceIds[planId as keyof typeof planPriceIds],
+          price: planPriceIds.athlete,
           quantity: 1,
         },
       ],
       mode: 'subscription',
       success_url: successUrl,
       cancel_url: cancelUrl,
-      client_reference_id: userId,
+      client_reference_id: userId, // This is critical to identify the user
       customer_email: userData.user.email,
       metadata: {
-        userId,
-        planId,
+        userId: userId, // Store user ID in metadata for double safety
+        planId: planId, // Store plan ID in metadata
       },
     });
 
     console.log(`Checkout session created: ${session.id}, URL: ${session.url}`);
+    console.log(`Session metadata: ${JSON.stringify(session.metadata)}`);
+    console.log(`Client reference ID: ${session.client_reference_id}`);
 
     return new Response(
       JSON.stringify({ url: session.url }),
