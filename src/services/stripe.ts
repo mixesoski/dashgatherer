@@ -58,6 +58,14 @@ export const getSubscriptionStatus = async () => {
 
     console.log(`Checking subscription status for user: ${session.user.id}`);
 
+    // First check if we can connect to the subscription status edge function
+    try {
+      await supabase.functions.invoke("check-webhook-config");
+    } catch (configError) {
+      console.log("Webhook config check failed, continuing with subscription check:", configError);
+      // We'll continue with the subscription check even if the config check fails
+    }
+
     const { data, error } = await supabase.functions.invoke("get-subscription-status", {
       body: {
         userId: session.user.id
@@ -72,6 +80,29 @@ export const getSubscriptionStatus = async () => {
     return data;
   } catch (error) {
     console.error("Error in getSubscriptionStatus:", error);
+    
+    // If the edge function fails, try to get the basic role information from profiles
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return null;
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .single();
+        
+      if (data) {
+        return {
+          role: data.role,
+          active: data.role !== 'athlete', // Assuming non-athlete roles are active
+          plan: data.role
+        };
+      }
+    } catch (fallbackError) {
+      console.error("Fallback profile check also failed:", fallbackError);
+    }
+    
     throw error;
   }
 };

@@ -3,6 +3,11 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+};
+
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
   httpClient: Stripe.createFetchHttpClient(),
   apiVersion: '2023-10-16',
@@ -14,14 +19,52 @@ const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 serve(async (req) => {
-  const signature = req.headers.get('stripe-signature');
-  if (!signature) {
-    return new Response('Missing stripe signature', { status: 400 });
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('Webhook request received');
+    
+    const signature = req.headers.get('stripe-signature');
+    
+    // Log the headers for debugging
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+    
+    if (!signature) {
+      console.error('Missing stripe-signature header');
+      return new Response(JSON.stringify({ error: 'Missing stripe signature' }), { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!webhookSecret) {
+      console.error('Webhook secret is not configured');
+      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get the request body as text for Stripe signature verification
     const body = await req.text();
-    const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    
+    // Log the first part of the body (truncated for security)
+    console.log(`Request body (truncated): ${body.substring(0, 100)}...`);
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    } catch (err) {
+      console.error(`Webhook signature verification failed: ${err.message}`);
+      return new Response(JSON.stringify({ error: `Webhook signature verification failed: ${err.message}` }), { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log(`Webhook received: ${event.type}`);
 
     // Handle different event types
@@ -39,12 +82,18 @@ serve(async (req) => {
 
       if (!userId) {
         console.error('Missing client_reference_id (user ID) in checkout session');
-        return new Response('Missing user ID', { status: 400 });
+        return new Response(JSON.stringify({ error: 'Missing user ID' }), { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
       if (!planId) {
         console.error('Missing planId in session metadata');
-        return new Response('Missing plan ID', { status: 400 });
+        return new Response(JSON.stringify({ error: 'Missing plan ID' }), { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
 
       // Update user profile
@@ -86,13 +135,19 @@ serve(async (req) => {
 
         if (subscriptionError) {
           console.error('Error storing subscription data:', subscriptionError);
-          return new Response(`Subscription storage error: ${subscriptionError.message}`, { status: 500 });
+          return new Response(JSON.stringify({ error: `Subscription storage error: ${subscriptionError.message}` }), { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         } else {
           console.log(`Successfully stored subscription for user ${userId}`);
         }
       } catch (subscriptionInsertError) {
         console.error('Exception storing subscription:', subscriptionInsertError);
-        return new Response(`Subscription exception: ${subscriptionInsertError.message}`, { status: 500 });
+        return new Response(JSON.stringify({ error: `Subscription exception: ${subscriptionInsertError.message}` }), { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     } else if (event.type === 'customer.subscription.updated') {
       const subscription = event.data.object;
@@ -145,12 +200,16 @@ serve(async (req) => {
       }
     }
 
+    // Return a success response
     return new Response(JSON.stringify({ received: true }), { 
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (err) {
     console.error(`Webhook Error: ${err.message}`);
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+    return new Response(JSON.stringify({ error: `Webhook Error: ${err.message}` }), { 
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });

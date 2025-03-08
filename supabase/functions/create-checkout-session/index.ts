@@ -106,6 +106,18 @@ serve(async (req) => {
     console.log(`Session metadata: ${JSON.stringify(session.metadata)}`);
     console.log(`Client reference ID: ${session.client_reference_id}`);
 
+    // Log the webhook endpoint configuration for debugging
+    try {
+      const webhookEndpoints = await stripe.webhookEndpoints.list({ limit: 10 });
+      console.log('Configured webhook endpoints:', webhookEndpoints.data.map(endpoint => ({
+        url: endpoint.url,
+        enabled_events: endpoint.enabled_events,
+        status: endpoint.status
+      })));
+    } catch (error) {
+      console.error('Error fetching webhook endpoints:', error.message);
+    }
+
     return new Response(
       JSON.stringify({ url: session.url }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
