@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { getSubscriptionStatus } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Bug } from "lucide-react";
+import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Bug, Home } from "lucide-react";
 import { toast } from "sonner";
 import { getPlanName } from "@/utils/subscription";
+import { Logo } from "@/components/Logo";
 
 const ManageSubscription = () => {
   const navigate = useNavigate();
@@ -123,6 +124,18 @@ const ManageSubscription = () => {
 
   return (
     <div className="container mx-auto py-10">
+      <div className="flex justify-between items-center mb-8">
+        <Link to="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
+          <Logo variant="dark" />
+        </Link>
+        <Link to="/dashboard">
+          <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Home className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </Link>
+      </div>
+      
       <Card className="max-w-2xl mx-auto">
         <CardHeader>
           <div className="flex items-center gap-2">

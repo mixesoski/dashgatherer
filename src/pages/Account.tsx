@@ -1,6 +1,5 @@
-
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +18,8 @@ import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import { Logo } from "@/components/Logo";
+import { Home } from "lucide-react";
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -200,6 +201,18 @@ const Account = () => {
 
   return (
     <div className="container mx-auto py-10">
+      <div className="flex justify-between items-center mb-8">
+        <Link to="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
+          <Logo variant="dark" />
+        </Link>
+        <Link to="/dashboard">
+          <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Home className="h-4 w-4" />
+            Back to Dashboard
+          </Button>
+        </Link>
+      </div>
+      
       <Card className="max-w-2xl mx-auto">
         <CardHeader>
           <CardTitle>Account Settings</CardTitle>
