@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,7 +46,7 @@ const Index = () => {
       const {
         data,
         error
-      } = await supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle();
+      } = await supabase.from('profiles').select('role').eq('user_id', userId).maybeSingle();
       if (error) throw error;
       return data?.role;
     },

@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +19,7 @@ export const InviteCoachDialog = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Fetch user role
+  // Fetch user role from profiles table
   const { data: userRole } = useQuery({
     queryKey: ['userRole'],
     queryFn: async () => {
@@ -26,7 +27,7 @@ export const InviteCoachDialog = () => {
       if (!user) return null;
 
       const { data, error } = await supabase
-        .from('user_roles')
+        .from('profiles')
         .select('role')
         .eq('user_id', user.id)
         .maybeSingle();
