@@ -1,5 +1,4 @@
-
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { usePremiumFeatures } from "@/hooks/usePremiumFeatures";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +16,16 @@ export const PremiumFeatureGuard: React.FC<PremiumFeatureGuardProps> = ({
 }) => {
   const { hasAccess, isLoading, subscriptionData } = usePremiumFeatures();
 
+  // Enhanced logging to debug premium feature access
+  useEffect(() => {
+    console.log('PremiumFeatureGuard mount/update:', { 
+      hasAccess, 
+      isLoading, 
+      subscriptionData,
+      featureName
+    });
+  }, [hasAccess, isLoading, subscriptionData, featureName]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
@@ -25,8 +34,12 @@ export const PremiumFeatureGuard: React.FC<PremiumFeatureGuardProps> = ({
     );
   }
 
-  // Debug information - will be visible in console but not to users
-  console.log('PremiumFeatureGuard status:', { hasAccess, subscriptionData });
+  // Detailed debug information
+  console.log('PremiumFeatureGuard rendering decision:', { 
+    hasAccess, 
+    subscriptionData,
+    featureName
+  });
 
   if (hasAccess) {
     return <>{children}</>;

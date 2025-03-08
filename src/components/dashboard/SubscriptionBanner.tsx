@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { getSubscriptionStatus } from "@/services/stripe";
 import { Loader2, CreditCard, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
 
 export const SubscriptionBanner = () => {
   const [loading, setLoading] = useState(true);
@@ -12,10 +13,67 @@ export const SubscriptionBanner = () => {
   useEffect(() => {
     const fetchSubscriptionStatus = async () => {
       try {
+        // First, try the API call
         const data = await getSubscriptionStatus();
         setSubscription(data);
       } catch (error) {
-        console.error("Error loading subscription:", error);
+        console.error("Error loading subscription from API:", error);
+        
+        // Fallback: Check directly in the database if the API call fails
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session?.user) {
+            // Check if user has an active subscription in the subscriptions table
+            const { data: subscriptionData, error } = await supabase
+              .from('subscriptions')
+              .select('*')
+              .eq('user_id', session.user.id)
+              .eq('status', 'active')
+              .maybeSingle();
+            
+            if (subscriptionData && !error) {
+              console.log('SubscriptionBanner: Found active subscription in database:', subscriptionData);
+              setSubscription({
+                active: true,
+                plan: subscriptionData.plan_id,
+                role: 'athlete', // Default to athlete
+                status: 'active'
+              });
+            } else {
+              // Also check for coach role in profiles
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('user_id', session.user.id)
+                .maybeSingle();
+              
+              if (profileData?.role === 'coach') {
+                setSubscription({
+                  active: true,
+                  plan: 'coach',
+                  role: 'coach',
+                  status: 'active'
+                });
+              } else {
+                setSubscription({
+                  active: false,
+                  plan: null,
+                  role: 'athlete',
+                  status: 'no_subscription'
+                });
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.error("Subscription banner fallback check also failed:", fallbackError);
+          setSubscription({
+            active: false,
+            plan: null,
+            role: 'athlete',
+            status: 'error'
+          });
+        }
       } finally {
         setLoading(false);
       }

@@ -100,23 +100,6 @@ serve(async (req) => {
 
     log.debug(`Subscription data: ${JSON.stringify(subscriptionData)}`);
 
-    // If there's a record in the subscriptions table with 'active' status, prioritize that
-    if (subscriptionData?.status === 'active') {
-      log.info(`Found active subscription in database for user ${userId}`);
-      return new Response(
-        JSON.stringify({
-          active: true,
-          plan: subscriptionData.plan_id,
-          status: 'active',
-          role: userRole,
-          trialEnd: null,
-          cancelAt: null,
-          renewsAt: null
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // If we have a subscription in the database and it's connected to Stripe
     if (subscriptionData?.stripe_subscription_id) {
       try {
@@ -127,27 +110,6 @@ serve(async (req) => {
         );
         
         log.debug(`Stripe subscription data: ${JSON.stringify(subscription)}`);
-
-        // After getting the Stripe status, also update our local database
-        if (subscription.status === 'active' || subscription.status === 'trialing') {
-          // Update the local record if needed
-          if (subscriptionData.status !== subscription.status) {
-            const { error: updateError } = await supabase
-              .from('subscriptions')
-              .update({ 
-                status: subscription.status,
-                updated_at: new Date().toISOString()
-              })
-              .eq('user_id', userId)
-              .eq('stripe_subscription_id', subscriptionData.stripe_subscription_id);
-            
-            if (updateError) {
-              log.error(`Error updating local subscription status: ${updateError.message}`);
-            } else {
-              log.info(`Updated local subscription status to ${subscription.status}`);
-            }
-          }
-        }
 
         return new Response(
           JSON.stringify({

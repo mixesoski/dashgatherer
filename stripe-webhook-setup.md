@@ -5,13 +5,15 @@
 1. Navigate to your Supabase project's "Functions" section
 2. Replace the existing `stripe-webhook` function with the code from `fix-stripe-webhook.ts`
 3. Replace the existing `create-checkout-session` function with the code from `fix-create-checkout-session.ts`
-4. Deploy both functions
+4. Replace the existing `get-subscription-status` function with the code from `fix-get-subscription-status.ts`
+5. Deploy all functions
 
 ## 2. Create the Subscriptions Table
 
 1. Go to the SQL Editor in your Supabase dashboard
 2. Paste the SQL from `create-subscription-table.sql` and run it
 3. Verify that the `subscriptions` table was created
+4. Note: If you previously had a `user_roles` table, your data will need to be migrated to the `profiles` table's `role` column
 
 ## 3. Set Up Environment Variables
 
@@ -63,4 +65,5 @@ If webhooks aren't being processed:
 - **Missing Environment Variables**: Ensure all required env vars are set
 - **Webhook URL Not Accessible**: Verify the URL is publicly accessible
 - **Database Errors**: Check if the subscriptions table exists and has the correct schema
-- **Different Stripe API Versions**: Make sure your Stripe API version in the code matches your account 
+- **Different Stripe API Versions**: Make sure your Stripe API version in the code matches your account
+- **"relation user_roles does not exist"**: This means your app is still trying to use the old table structure. Make sure to deploy the fixed get-subscription-status function. 

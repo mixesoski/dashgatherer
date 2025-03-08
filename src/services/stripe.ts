@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -78,7 +77,48 @@ export const getSubscriptionStatus = async () => {
 
     console.log(`Checking subscription status for user: ${session.user.id}`);
 
-    // First check if we can connect to the subscription status edge function
+    // First check directly in the database for an active subscription
+    const { data: directSubscriptionData, error: directSubscriptionError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'active')
+      .maybeSingle();
+    
+    if (directSubscriptionData && !directSubscriptionError) {
+      console.log('Found active subscription directly in database:', directSubscriptionData);
+      return {
+        active: true,
+        plan: directSubscriptionData.plan_id,
+        status: 'active',
+        role: 'athlete', // Default role, will be overridden if profile check succeeds
+        trialEnd: null,
+        cancelAt: null,
+        renewsAt: null
+      };
+    }
+
+    // Check for coach role in profiles
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    
+    if (profileData?.role === 'coach' && !profileError) {
+      console.log('User is a coach with premium access:', profileData);
+      return {
+        active: true,
+        plan: 'coach',
+        status: 'active',
+        role: 'coach',
+        trialEnd: null,
+        cancelAt: null,
+        renewsAt: null
+      };
+    }
+
+    // If no direct entry found, try the edge function
     try {
       const { data: webhookConfig } = await supabase.functions.invoke("check-webhook-config");
       console.log("Webhook configuration status:", webhookConfig.status);
