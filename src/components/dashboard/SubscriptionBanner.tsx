@@ -5,6 +5,7 @@ import { getSubscriptionStatus } from "@/services/stripe";
 import { Loader2, CreditCard, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { getPlanName } from "@/utils/subscription";
 
 export const SubscriptionBanner = () => {
   const [loading, setLoading] = useState(true);
@@ -106,7 +107,7 @@ export const SubscriptionBanner = () => {
           <div className="flex items-center">
             <CreditCard className="h-5 w-5 text-green-600 mr-2" />
             <span className="text-green-800">
-              Active <strong className="capitalize">{subscription.plan}</strong> subscription
+              Active <strong>{getPlanName(subscription.plan)}</strong> subscription
             </span>
           </div>
           <Link to="/subscription">

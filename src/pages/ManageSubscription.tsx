@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Separator } from "@/components/ui/separator";
 import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Bug } from "lucide-react";
 import { toast } from "sonner";
+import { getPlanName } from "@/utils/subscription";
 
 const ManageSubscription = () => {
   const navigate = useNavigate();
@@ -166,7 +167,7 @@ const ManageSubscription = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Plan</span>
-                    <span className="font-medium capitalize">{subscription.plan}</span>
+                    <span className="font-medium">{getPlanName(subscription.plan)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Role</span>
