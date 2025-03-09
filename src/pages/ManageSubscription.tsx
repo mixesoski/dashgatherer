@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -5,7 +6,7 @@ import { getSubscriptionStatus, cancelSubscription } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Bug, Home } from "lucide-react";
+import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Home } from "lucide-react";
 import { toast } from "sonner";
 import { getPlanName } from "@/utils/subscription";
 import { Logo } from "@/components/Logo";
@@ -127,15 +128,6 @@ const ManageSubscription = () => {
               <div className="flex flex-col sm:flex-row justify-center gap-3 mt-6">
                 <Button onClick={() => navigate("/pricing")}>
                   View Pricing Plans
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={createTestSubscription}
-                  className="flex items-center gap-2 border-amber-500 text-amber-700"
-                >
-                  <Bug className="h-4 w-4" />
-                  Update Profile to Athlete
                 </Button>
               </div>
             </div>
