@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { getSubscriptionStatus } from "@/services/stripe";
+import { getSubscriptionStatus, cancelSubscription } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +13,7 @@ import { Logo } from "@/components/Logo";
 const ManageSubscription = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -38,61 +39,6 @@ const ManageSubscription = () => {
     checkSubscription();
   }, [navigate]);
 
-  // DEBUG ONLY: Function to manually create a subscription entry for testing
-  const createTestSubscription = async () => {
-    if (!userId) {
-      toast.error("User ID not available");
-      return;
-    }
-
-    try {
-      // Check if user already has a profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-      
-      if (profileError && profileError.code !== 'PGRST116') {
-        // Error other than "not found"
-        throw profileError;
-      }
-      
-      // Update or insert profile with role set to athlete
-      const { error: updateProfileError } = await supabase
-        .from('profiles')
-        .upsert({ 
-          user_id: userId, 
-          role: 'athlete',
-          updated_at: new Date().toISOString(),
-          // Only set these fields if creating a new profile
-          ...(profile ? {} : {
-            created_at: new Date().toISOString(),
-          })
-        });
-      
-      if (updateProfileError) throw updateProfileError;
-
-      // Add a message to inform the user what to do next
-      toast.success("Profile updated successfully! You'll need to manually add an entry to the subscriptions table.");
-      
-      // Display subscription details that should be added
-      console.log("Please add the following subscription entry manually:");
-      console.log({
-        user_id: userId,
-        stripe_subscription_id: `test_${Date.now()}`,
-        stripe_customer_id: `cus_test_${Date.now()}`,
-        plan_id: 'athlete',
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    } catch (error: any) {
-      console.error("Error updating profile:", error);
-      toast.error(`Failed to update profile: ${error.message}`);
-    }
-  };
-
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString(undefined, {
@@ -111,6 +57,31 @@ const ManageSubscription = () => {
       return <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-800 px-2.5 py-0.5 rounded-full text-xs font-medium"><BadgeAlert className="h-3.5 w-3.5" /> Past Due</span>;
     } else {
       return <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-2.5 py-0.5 rounded-full text-xs font-medium">No Subscription</span>;
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!subscription?.stripeSubscriptionId) {
+      toast.error("No active subscription to cancel");
+      return;
+    }
+
+    try {
+      setCancelingSubscription(true);
+      const result = await cancelSubscription(subscription.stripeSubscriptionId);
+      
+      if (result.success) {
+        toast.success("Your subscription has been canceled");
+        const updatedSubscription = await getSubscriptionStatus();
+        setSubscription(updatedSubscription);
+      } else {
+        toast.error(result.message || "Failed to cancel subscription");
+      }
+    } catch (error: any) {
+      console.error("Error canceling subscription:", error);
+      toast.error(error.message || "Error canceling subscription");
+    } finally {
+      setCancelingSubscription(false);
     }
   };
 
@@ -158,7 +129,6 @@ const ManageSubscription = () => {
                   View Pricing Plans
                 </Button>
                 
-                {/* DEBUG Button for testing - remove in production */}
                 <Button 
                   variant="outline" 
                   onClick={createTestSubscription}
@@ -233,8 +203,20 @@ const ManageSubscription = () => {
             Back to Account
           </Button>
           {subscription && subscription.active && (
-            <Button variant="outline" className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white">
-              Cancel Subscription
+            <Button 
+              variant="outline" 
+              className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+              onClick={handleCancelSubscription}
+              disabled={cancelingSubscription}
+            >
+              {cancelingSubscription ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Canceling...
+                </>
+              ) : (
+                "Cancel Subscription"
+              )}
             </Button>
           )}
         </CardFooter>

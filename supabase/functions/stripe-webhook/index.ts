@@ -30,7 +30,13 @@ serve(async (req) => {
     
     // Log request headers and method for debugging
     console.log(`Request method: ${req.method}`);
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+    
+    // For debugging: Log headers in a more readable format
+    const headersObj = {};
+    for (const [key, value] of req.headers.entries()) {
+      headersObj[key] = value;
+    }
+    console.log('Request headers:', JSON.stringify(headersObj, null, 2));
     
     const signature = req.headers.get('stripe-signature');
     
@@ -38,7 +44,8 @@ serve(async (req) => {
       console.error('Missing stripe-signature header');
       return new Response(JSON.stringify({ 
         error: 'Missing stripe signature',
-        message: 'The webhook request is missing the stripe-signature header required for verification' 
+        message: 'The webhook request is missing the stripe-signature header required for verification',
+        received_headers: Object.keys(headersObj).join(', ')
       }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -49,7 +56,7 @@ serve(async (req) => {
       console.error('Webhook secret is not configured in environment variables');
       return new Response(JSON.stringify({ 
         error: 'Webhook secret not configured',
-        message: 'The STRIPE_WEBHOOK_SECRET environment variable is not set' 
+        message: 'The STRIPE_WEBHOOK_SECRET environment variable is not set or is empty' 
       }), { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -59,8 +66,10 @@ serve(async (req) => {
     // Get the request body as text for Stripe signature verification
     const body = await req.text();
     
-    // Log the first part of the body (truncated for security)
-    console.log(`Request body (truncated): ${body.substring(0, 200)}...`);
+    // Debug: Log the signature and first part of the body
+    console.log(`Stripe signature: ${signature.substring(0, 20)}...`);
+    console.log(`Request body length: ${body.length} bytes`);
+    console.log(`Request body (truncated): ${body.substring(0, 100)}...`);
 
     let event;
     try {
@@ -68,10 +77,14 @@ serve(async (req) => {
       console.log('Webhook signature verified successfully');
     } catch (err) {
       console.error(`Webhook signature verification failed: ${err.message}`);
+      // More detailed error response
       return new Response(JSON.stringify({ 
         error: `Webhook signature verification failed`,
         message: err.message,
-        hint: 'Make sure the webhook secret matches the one in your Stripe dashboard' 
+        hint: 'Make sure the webhook secret matches the one in your Stripe dashboard',
+        received_signature: signature.substring(0, 20) + '...',
+        webhook_secret_length: webhookSecret.length,
+        body_length: body.length
       }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -103,23 +116,18 @@ serve(async (req) => {
         console.error('Missing user ID in checkout session (client_reference_id is null)');
         return new Response(JSON.stringify({ 
           error: 'Missing user ID',
-          message: 'The checkout session does not include a client_reference_id or userId in metadata' 
+          message: 'The checkout session does not include a client_reference_id or userId in metadata',
+          session: JSON.stringify(session, null, 2)
         }), { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
-      // Get existing profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-      
-      // Update user profile
+      // Simplified logic: just update profile and subscription tables directly
       try {
-        const { error: updateError } = await supabase
+        // Update profile
+        const { error: profileError } = await supabase
           .from('profiles')
           .update({ 
             role: planId === 'organization' ? 'organization' : 'athlete',
@@ -127,17 +135,13 @@ serve(async (req) => {
           })
           .eq('user_id', userId);
 
-        if (updateError) {
-          console.error('Error updating profile:', updateError);
+        if (profileError) {
+          console.error('Error updating profile:', profileError);
         } else {
           console.log(`Updated user profile for ${userId} with role ${planId}`);
         }
-      } catch (profileUpdateError) {
-        console.error('Exception updating profile:', profileUpdateError);
-      }
-
-      // Store subscription data
-      try {
+        
+        // Prepare subscription data
         const subscriptionData = {
           user_id: userId,
           stripe_subscription_id: subscriptionId || `one_time_${Date.now()}`,
@@ -148,50 +152,28 @@ serve(async (req) => {
           updated_at: new Date().toISOString()
         };
         
-        console.log('Inserting subscription data:', subscriptionData);
-        
-        // Check if subscription already exists for this user and update it
-        const { data: existingSubscription, error: checkError } = await supabase
+        // Upsert subscription
+        const { error: subscriptionError } = await supabase
           .from('subscriptions')
-          .select('id')
-          .eq('user_id', userId)
-          .single();
-          
-        let subscriptionResult;
+          .upsert(subscriptionData);
         
-        if (existingSubscription) {
-          // Update existing subscription
-          subscriptionResult = await supabase
-            .from('subscriptions')
-            .update({
-              stripe_subscription_id: subscriptionData.stripe_subscription_id,
-              stripe_customer_id: subscriptionData.stripe_customer_id,
-              plan_id: subscriptionData.plan_id,
-              status: subscriptionData.status,
-              updated_at: subscriptionData.updated_at
-            })
-            .eq('user_id', userId);
-          console.log('Updated existing subscription');
-        } else {
-          // Insert new subscription
-          subscriptionResult = await supabase
-            .from('subscriptions')
-            .insert(subscriptionData);
-          console.log('Inserted new subscription');
-        }
-        
-        if (subscriptionResult.error) {
-          console.error('Error storing subscription data:', subscriptionResult.error);
-          return new Response(JSON.stringify({ error: `Subscription storage error: ${subscriptionResult.error.message}` }), { 
+        if (subscriptionError) {
+          console.error('Error storing subscription data:', subscriptionError);
+          return new Response(JSON.stringify({ 
+            error: `Subscription storage error: ${subscriptionError.message}`,
+            data: subscriptionData
+          }), { 
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           });
         } else {
           console.log(`Successfully stored subscription for user ${userId}`);
         }
-      } catch (subscriptionInsertError) {
-        console.error('Exception storing subscription:', subscriptionInsertError);
-        return new Response(JSON.stringify({ error: `Subscription exception: ${subscriptionInsertError.message}` }), { 
+      } catch (err) {
+        console.error('Exception processing checkout session:', err);
+        return new Response(JSON.stringify({ 
+          error: `Exception processing checkout: ${err.message}` 
+        }), { 
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -201,30 +183,19 @@ serve(async (req) => {
       const stripeSubscriptionId = subscription.id;
       console.log(`Subscription updated: ${stripeSubscriptionId}, status: ${subscription.status}`);
 
-      // Fetch user associated with this subscription
-      const { data, error } = await supabase
+      // Simple update to subscription table
+      const { error } = await supabase
         .from('subscriptions')
-        .select('user_id')
-        .eq('stripe_subscription_id', stripeSubscriptionId)
-        .single();
-
+        .update({
+          status: subscription.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('stripe_subscription_id', stripeSubscriptionId);
+        
       if (error) {
-        console.error('Error fetching subscription:', error);
-      } else if (data) {
-        // Update subscription status
-        const { error: updateError } = await supabase
-          .from('subscriptions')
-          .update({
-            status: subscription.status,
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_subscription_id', stripeSubscriptionId);
-          
-        if (updateError) {
-          console.error('Error updating subscription status:', updateError);
-        } else {
-          console.log(`Updated subscription status to ${subscription.status} for ID ${stripeSubscriptionId}`);
-        }
+        console.error('Error updating subscription status:', error);
+      } else {
+        console.log(`Updated subscription status to ${subscription.status} for ID ${stripeSubscriptionId}`);
       }
     } else if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object;
