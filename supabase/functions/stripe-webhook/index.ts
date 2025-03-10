@@ -137,6 +137,28 @@ serve(async (req) => {
         });
       }
 
+      // Verify 'subscriptions' table exists
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .limit(1);
+          
+        if (tableCheckError) {
+          console.error('Error verifying subscriptions table:', tableCheckError);
+          return new Response(JSON.stringify({
+            error: 'Database configuration error',
+            message: 'Could not access subscriptions table',
+            details: tableCheckError.message
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (tableCheckErr) {
+        console.error('Exception checking subscriptions table:', tableCheckErr);
+      }
+
       // First check if user exists
       try {
         const { data: userData, error: userError } = await supabase
@@ -203,15 +225,6 @@ serve(async (req) => {
         
         if (subscriptionError) {
           console.error('Error storing subscription data:', subscriptionError);
-          
-          // Check if the subscriptions table exists
-          const { error: tablesError } = await supabase
-            .rpc('get_tables')
-            .select('*');
-          
-          if (tablesError) {
-            console.error('Error checking tables:', tablesError);
-          }
           
           return new Response(JSON.stringify({ 
             error: `Subscription storage error: ${subscriptionError.message}`,
