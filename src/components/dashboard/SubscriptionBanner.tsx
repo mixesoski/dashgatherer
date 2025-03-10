@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { usePremiumFeatures } from '@/hooks/usePremiumFeatures';
 
 export function SubscriptionBanner() {
-  const { isSubscribed, isPending } = usePremiumFeatures();
+  const { hasAccess, isLoading } = usePremiumFeatures();
 
-  // Don't show the banner if the user is already subscribed or we're still checking
-  if (isSubscribed || isPending) {
+  // Don't show the banner if the user already has access or we're still checking
+  if (hasAccess || isLoading) {
     return null;
   }
 

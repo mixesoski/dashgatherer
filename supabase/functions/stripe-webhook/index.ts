@@ -28,10 +28,11 @@ serve(async (req) => {
   try {
     console.log('Webhook request received');
     
-    // Log request headers and method for debugging
-    console.log(`Request method: ${req.method}`);
+    // Log request method and path
+    const url = new URL(req.url);
+    console.log(`Request method: ${req.method}, path: ${url.pathname}`);
     
-    // For debugging: Log headers in a more readable format
+    // For debugging: Log headers in a readable format
     const headersObj = {};
     for (const [key, value] of req.headers.entries()) {
       headersObj[key] = value;
@@ -56,7 +57,13 @@ serve(async (req) => {
       console.error('Webhook secret is not configured in environment variables');
       return new Response(JSON.stringify({ 
         error: 'Webhook secret not configured',
-        message: 'The STRIPE_WEBHOOK_SECRET environment variable is not set or is empty' 
+        message: 'The STRIPE_WEBHOOK_SECRET environment variable is not set or is empty',
+        env_vars_status: {
+          webhook_secret: webhookSecret ? 'present' : 'missing',
+          stripe_key: Deno.env.get('STRIPE_SECRET_KEY') ? 'present' : 'missing',
+          supabase_url: supabaseUrl ? 'present' : 'missing',
+          supabase_key: supabaseKey ? 'present (length: ' + supabaseKey.length + ')' : 'missing'
+        }
       }), { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -69,7 +76,7 @@ serve(async (req) => {
     // Debug: Log the signature and first part of the body
     console.log(`Stripe signature: ${signature.substring(0, 20)}...`);
     console.log(`Request body length: ${body.length} bytes`);
-    console.log(`Request body (truncated): ${body.substring(0, 100)}...`);
+    console.log(`Request body preview: ${body.substring(0, 100)}...`);
 
     let event;
     try {
@@ -77,6 +84,7 @@ serve(async (req) => {
       console.log('Webhook signature verified successfully');
     } catch (err) {
       console.error(`Webhook signature verification failed: ${err.message}`);
+      
       // More detailed error response
       return new Response(JSON.stringify({ 
         error: `Webhook signature verification failed`,
@@ -102,7 +110,7 @@ serve(async (req) => {
         userId: session.client_reference_id,
         metadata: session.metadata,
         subscription: session.subscription
-      }));
+      }, null, 2));
       
       // Extract user ID from client_reference_id or metadata
       const userId = session.client_reference_id || session.metadata?.userId;
@@ -117,14 +125,42 @@ serve(async (req) => {
         return new Response(JSON.stringify({ 
           error: 'Missing user ID',
           message: 'The checkout session does not include a client_reference_id or userId in metadata',
-          session: JSON.stringify(session, null, 2)
+          session_data: {
+            id: session.id,
+            customer: session.customer,
+            client_reference_id: session.client_reference_id,
+            metadata: session.metadata,
+          }
         }), { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
 
-      // Simplified logic: just update profile and subscription tables directly
+      // First check if user exists
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .eq('user_id', userId)
+          .single();
+        
+        if (userError || !userData) {
+          console.error('User not found in profiles table:', userError);
+          return new Response(JSON.stringify({ 
+            error: 'User not found',
+            message: 'The user ID from the checkout session does not exist in the profiles table',
+            user_id: userId
+          }), { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (userCheckError) {
+        console.error('Error checking user existence:', userCheckError);
+      }
+
+      // Update profile and subscription
       try {
         // Update profile
         const { error: profileError } = await supabase
@@ -137,6 +173,14 @@ serve(async (req) => {
 
         if (profileError) {
           console.error('Error updating profile:', profileError);
+          return new Response(JSON.stringify({ 
+            error: 'Profile update error',
+            message: profileError.message,
+            details: profileError
+          }), { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         } else {
           console.log(`Updated user profile for ${userId} with role ${planId}`);
         }
@@ -159,9 +203,20 @@ serve(async (req) => {
         
         if (subscriptionError) {
           console.error('Error storing subscription data:', subscriptionError);
+          
+          // Check if the subscriptions table exists
+          const { error: tablesError } = await supabase
+            .rpc('get_tables')
+            .select('*');
+          
+          if (tablesError) {
+            console.error('Error checking tables:', tablesError);
+          }
+          
           return new Response(JSON.stringify({ 
             error: `Subscription storage error: ${subscriptionError.message}`,
-            data: subscriptionData
+            data: subscriptionData,
+            details: subscriptionError
           }), { 
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -172,7 +227,8 @@ serve(async (req) => {
       } catch (err) {
         console.error('Exception processing checkout session:', err);
         return new Response(JSON.stringify({ 
-          error: `Exception processing checkout: ${err.message}` 
+          error: `Exception processing checkout: ${err.message}`,
+          stack: err.stack
         }), { 
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -184,18 +240,37 @@ serve(async (req) => {
       console.log(`Subscription updated: ${stripeSubscriptionId}, status: ${subscription.status}`);
 
       // Simple update to subscription table
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          status: subscription.status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('stripe_subscription_id', stripeSubscriptionId);
-        
-      if (error) {
-        console.error('Error updating subscription status:', error);
-      } else {
-        console.log(`Updated subscription status to ${subscription.status} for ID ${stripeSubscriptionId}`);
+      try {
+        const { error } = await supabase
+          .from('subscriptions')
+          .update({
+            status: subscription.status,
+            updated_at: new Date().toISOString()
+          })
+          .eq('stripe_subscription_id', stripeSubscriptionId);
+          
+        if (error) {
+          console.error('Error updating subscription status:', error);
+          return new Response(JSON.stringify({ 
+            error: 'Subscription update error',
+            message: error.message,
+            details: error
+          }), { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          console.log(`Updated subscription status to ${subscription.status} for ID ${stripeSubscriptionId}`);
+        }
+      } catch (err) {
+        console.error('Exception updating subscription:', err);
+        return new Response(JSON.stringify({ 
+          error: `Exception updating subscription: ${err.message}`,
+          stack: err.stack
+        }), { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     } else if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object;
@@ -203,18 +278,37 @@ serve(async (req) => {
       console.log(`Subscription deleted: ${stripeSubscriptionId}`);
 
       // Update subscription to inactive
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          status: 'inactive',
-          updated_at: new Date().toISOString()
-        })
-        .eq('stripe_subscription_id', stripeSubscriptionId);
-        
-      if (error) {
-        console.error('Error updating deleted subscription:', error);
-      } else {
-        console.log(`Marked subscription ${stripeSubscriptionId} as inactive`);
+      try {
+        const { error } = await supabase
+          .from('subscriptions')
+          .update({
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+          })
+          .eq('stripe_subscription_id', stripeSubscriptionId);
+          
+        if (error) {
+          console.error('Error updating deleted subscription:', error);
+          return new Response(JSON.stringify({ 
+            error: 'Subscription delete error',
+            message: error.message,
+            details: error
+          }), { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          console.log(`Marked subscription ${stripeSubscriptionId} as inactive`);
+        }
+      } catch (err) {
+        console.error('Exception deleting subscription:', err);
+        return new Response(JSON.stringify({ 
+          error: `Exception deleting subscription: ${err.message}`,
+          stack: err.stack
+        }), { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     }
 

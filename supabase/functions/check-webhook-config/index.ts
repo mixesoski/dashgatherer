@@ -1,5 +1,6 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,13 +26,56 @@ serve(async (req) => {
   const athletePriceConfigured = athletePriceId.length > 0;
   const supabaseDatabaseConfigured = supabaseUrl.length > 0 && supabaseKey.length > 0;
   
+  let databaseStatus = {
+    tablesExist: false,
+    subscriptionsTableExists: false,
+    profilesTableExists: false,
+    error: null,
+    details: null
+  };
+
+  // Check database tables if we have Supabase credentials
+  if (supabaseDatabaseConfigured) {
+    try {
+      // Initialize Supabase client
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      // Check if subscriptions table exists
+      const { data: subscriptionsData, error: subscriptionsError } = await supabase
+        .from('subscriptions')
+        .select('count(*)', { count: 'exact', head: true });
+      
+      if (!subscriptionsError) {
+        databaseStatus.subscriptionsTableExists = true;
+      }
+      
+      // Check if profiles table exists
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('count(*)', { count: 'exact', head: true });
+      
+      if (!profilesError) {
+        databaseStatus.profilesTableExists = true;
+      }
+      
+      databaseStatus.tablesExist = databaseStatus.subscriptionsTableExists && 
+                                  databaseStatus.profilesTableExists;
+    } catch (error) {
+      console.error('Error checking database tables:', error);
+      databaseStatus.error = error.message;
+      databaseStatus.details = error;
+    }
+  }
+  
   // Create configuration status object
   const config = {
     webhookConfigured,
     stripeKeyConfigured,
     athletePriceConfigured,
     supabaseDatabaseConfigured,
-    status: webhookConfigured && stripeKeyConfigured && athletePriceConfigured && supabaseDatabaseConfigured 
+    database: databaseStatus,
+    status: webhookConfigured && stripeKeyConfigured && athletePriceConfigured && 
+            supabaseDatabaseConfigured && databaseStatus.tablesExist
       ? 'ready' 
       : 'missing_configuration',
     timestamp: new Date().toISOString(),
@@ -51,6 +95,7 @@ serve(async (req) => {
       headers: "The webhook should send the stripe-signature header with each request",
       secret: "The webhook secret must match between Stripe Dashboard and your environment variables",
       testing: "Use Stripe CLI to test webhook delivery: stripe listen --forward-to your-webhook-url",
+      database: "Make sure both the 'subscriptions' and 'profiles' tables exist in your database"
     },
     
     environmentVariables: {
