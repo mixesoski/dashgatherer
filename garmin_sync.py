@@ -1,4 +1,3 @@
-
 from garminconnect import Garmin
 import pandas as pd
 from datetime import datetime, timedelta
@@ -97,6 +96,8 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
 
             # Save activity data
             print("\nSaving data for all days:")
+            processed_dates = []  # Track which dates we've already processed
+            
             for date_str, data in daily_data.items():
                 activity_data = {
                     'user_id': user_id,
@@ -113,18 +114,40 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                         .eq('date', data['date'].isoformat())\
                         .execute()
                     
+                    # Track this date as processed
+                    processed_dates.append(data['date'].isoformat())
+                    
                     if existing.data and len(existing.data) > 0:
                         existing_data = existing.data[0]
                         existing_activities = existing_data.get('activity', '')
                         
-                        # If existing data has activities and it's not just "Rest day"
-                        if existing_activities and existing_activities != 'Rest day' and data['activities'] != ['Rest day']:
-                            # Combine existing activities with new ones
-                            existing_list = existing_activities.split(', ')
-                            combined_activities = existing_list + data['activities']
-                            # Don't remove duplicates - preserve all entries
-                            activity_data['activity'] = ', '.join(combined_activities)
-                            activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                        # If existing data already has real activities, we should combine them
+                        # But avoid creating duplicate entries
+                        if existing_activities:
+                            # Only process if we have real activities to add (not just Rest day)
+                            if data['activities'] != ['Rest day']:
+                                existing_list = existing_activities.split(', ')
+                                
+                                # If existing entry is just "Rest day", replace it instead of combining
+                                if existing_activities == 'Rest day':
+                                    activity_data['activity'] = ', '.join(data['activities'])
+                                    # Use new TRIMP only since we're replacing a Rest day
+                                    activity_data['trimp'] = float(data['trimp'])
+                                else:
+                                    # Combine activities from both entries (avoiding duplicates)
+                                    existing_activity_set = set(existing_list)
+                                    new_activity_set = set(data['activities'])
+                                    combined_activities = list(existing_activity_set.union(new_activity_set))
+                                    # Don't include 'Rest day' in the combined list
+                                    if 'Rest day' in combined_activities:
+                                        combined_activities.remove('Rest day')
+                                    
+                                    activity_data['activity'] = ', '.join(combined_activities)
+                                    activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                            else:
+                                # Keep existing data if we're just trying to add a Rest day to an entry with real activities
+                                if existing_activities != 'Rest day':
+                                    continue
                     
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
@@ -137,7 +160,7 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             # Calculate metrics
             print("\n=== CALCULATING METRICS ===")
             print(f"Date range: {start_date.date()} to {datetime.now().date()}")
-            metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync)
+            metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync, processed_dates)
 
             return {
                 'success': True,

@@ -130,11 +130,38 @@ export const GarminChart = ({
     setIsEditing(true);
   };
   console.log('GarminChart data:', data);
-  const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  console.log('Sorted data:', sortedData);
+  
+  // Deduplicate data by date (in case duplicates still exist in the database)
+  // We'll keep the entry with the higher TRIMP value
+  const uniqueDataMap = new Map();
+  
+  data.forEach(item => {
+    const date = item.date;
+    if (uniqueDataMap.has(date)) {
+      const existing = uniqueDataMap.get(date);
+      // Keep the entry with higher TRIMP value or non-Rest day activity
+      if (item.trimp > existing.trimp || 
+          (item.activity !== 'Rest day' && existing.activity === 'Rest day')) {
+        uniqueDataMap.set(date, item);
+      }
+    } else {
+      uniqueDataMap.set(date, item);
+    }
+  });
+  
+  // Convert back to array
+  const uniqueData = Array.from(uniqueDataMap.values());
+  
+  // Sort the data by date
+  const sortedData = [...uniqueData].sort((a, b) => {
+    return new Date(a.date).getTime() - new Date(b.date).getTime()
+  });
+  
+  console.log('Sorted unique data:', sortedData);
   const reverseSortedData = [...sortedData].reverse();
   const latestData = reverseSortedData[0];
   console.log('Latest data:', latestData);
+  
   const visibleDays = reverseSortedData.slice(0, visibleActivities);
   const hasMoreActivities = visibleActivities < reverseSortedData.length;
   const handleLoadMore = () => {

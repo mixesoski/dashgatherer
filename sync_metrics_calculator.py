@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from supabase_client import supabase
 import pandas as pd
 
-def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
+def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, processed_dates=None):
     try:
         # Get dates range
         end_date = datetime.now().replace(tzinfo=None)
@@ -16,6 +16,11 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
 
         print(f"\n=== CALCULATING METRICS ===")
         print(f"Date range: {start_date.date()} to {end_date.date()}")
+
+        # Convert processed_dates to a set for faster lookup
+        if processed_dates is None:
+            processed_dates = []
+        processed_dates_set = set(processed_dates)
 
         # Get ALL historical data for this user
         all_data = supabase.table('garmin_data')\
@@ -34,6 +39,11 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
         # Convert to DataFrame and handle dates with ISO8601 format
         df = pd.DataFrame(all_data.data)
         df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
+        
+        # Remove duplicate date entries - keep the entry with highest TRIMP
+        # This ensures we don't have both "Rest day" and active entries for the same day
+        df = df.sort_values(['date', 'trimp'], ascending=[True, False])
+        df = df.drop_duplicates(subset=['date'], keep='first')
         
         # Create a complete date range
         date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
@@ -71,11 +81,20 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
             df.at[df.index[i], 'ctl'] = round(ctl, 1)
             df.at[df.index[i], 'tsb'] = round(tsb, 1)
 
-        # Update database
+        # Update database - but skip dates that were already processed by garmin_sync.py
+        metrics_updates = []
         for _, row in df.iterrows():
+            date_str = row['date'].strftime("%Y-%m-%d")
+            date_iso = row['date'].isoformat()
+            
+            # Skip if this date was already processed in garmin_sync.py
+            if date_iso in processed_dates_set:
+                print(f"Skipping already processed date: {date_str}")
+                continue
+                
             metrics_data = {
                 'user_id': user_id,
-                'date': row['date'].strftime("%Y-%m-%d"),  # Zapisz tylko datę bez czasu
+                'date': date_str,
                 'trimp': float(row['trimp']),
                 'activity': row.get('activity', 'Rest day'),
                 'atl': round(float(row['atl']), 1),
@@ -87,13 +106,14 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False):
                 supabase.table('garmin_data')\
                     .upsert(metrics_data, on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {row['date'].strftime('%Y-%m-%d')} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
+                print(f"Updated {date_str} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
+                metrics_updates.append(date_str)
             except Exception as e:
-                print(f"Error updating metrics for {row['date']}: {e}")
+                print(f"Error updating metrics for {date_str}: {e}")
 
         return {
             'success': True,
-            'message': f'Updated metrics for {len(df)} days'
+            'message': f'Updated metrics for {len(metrics_updates)} days'
         }
 
     except Exception as e:
