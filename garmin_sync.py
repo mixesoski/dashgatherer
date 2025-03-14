@@ -125,48 +125,55 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     # Track this date as processed
                     processed_dates.append(data['date'].isoformat())
                     
+                    # CRITICAL CHANGE: Check if existing data has metrics to avoid creating a duplicate
+                    # We'll either update the existing record in place or create a new one with activity data
                     if existing.data and len(existing.data) > 0:
                         existing_data = existing.data[0]
                         existing_activities = existing_data.get('activity', '')
                         
-                        # If existing data already has real activities, we should combine them
-                        # But avoid creating duplicate entries
-                        if existing_activities:
-                            # Only process if we have real activities to add (not just Rest day)
-                            if data['activities'] != ['Rest day']:
-                                existing_list = existing_activities.split(', ')
-                                
-                                # If existing entry is just "Rest day", replace it instead of combining
-                                if existing_activities == 'Rest day':
-                                    activity_data['activity'] = ', '.join(data['activities'])
-                                    # Use new TRIMP only since we're replacing a Rest day
-                                    activity_data['trimp'] = float(data['trimp'])
-                                else:
-                                    # Combine activities from both entries (avoiding duplicates)
-                                    existing_activity_set = set(existing_list)
-                                    new_activity_set = set(data['activities'])
-                                    combined_activities = list(existing_activity_set.union(new_activity_set))
-                                    # Don't include 'Rest day' in the combined list
-                                    if 'Rest day' in combined_activities:
-                                        combined_activities.remove('Rest day')
-                                    
-                                    activity_data['activity'] = ', '.join(combined_activities)
-                                    activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
-                            else:
-                                # Keep existing data if we're just trying to add a Rest day to an entry with real activities
-                                if existing_activities != 'Rest day':
-                                    continue
+                        # Start with the existing data as a base
+                        activity_data = dict(existing_data)
                         
-                        # Preserve existing metrics if they exist
-                        if existing_data.get('atl') is not None:
-                            activity_data['atl'] = existing_data.get('atl')
-                            activity_data['ctl'] = existing_data.get('ctl')
-                            activity_data['tsb'] = existing_data.get('tsb')
-                            print(f"Preserving existing metrics - ATL: {activity_data['atl']}, CTL: {activity_data['ctl']}, TSB: {activity_data['tsb']}")
+                        # If there's activity data to update
+                        if data['activities'] != ['Rest day'] or existing_activities == 'Rest day':
+                            if existing_activities and existing_activities != 'Rest day' and data['activities'] != ['Rest day']:
+                                # Combine activities from both entries (avoiding duplicates)
+                                existing_list = existing_activities.split(', ')
+                                existing_activity_set = set(existing_list)
+                                new_activity_set = set(data['activities'])
+                                combined_activities = list(existing_activity_set.union(new_activity_set))
+                                
+                                # Don't include 'Rest day' in the combined list
+                                if 'Rest day' in combined_activities:
+                                    combined_activities.remove('Rest day')
+                                
+                                activity_data['activity'] = ', '.join(combined_activities)
+                                activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                            elif existing_activities == 'Rest day' and data['activities'] != ['Rest day']:
+                                # Replace 'Rest day' with actual activities
+                                activity_data['activity'] = ', '.join(data['activities'])
+                                activity_data['trimp'] = float(data['trimp'])
+                            elif data['activities'] == ['Rest day'] and existing_activities != 'Rest day':
+                                # Keep existing activities (don't replace with Rest day)
+                                pass
+                    else:
+                        # No existing data, create new entry
+                        activity_data = {
+                            'user_id': user_id,
+                            'date': data['date'].isoformat(),
+                            'trimp': float(data['trimp']),
+                            'activity': ', '.join(data['activities']),
+                            # Initialize metrics to null so we don't get null display issues
+                            'atl': None,
+                            'ctl': None,
+                            'tsb': None
+                        }
                     
+                    # Upsert the data (will either update existing or insert new)
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
                         .execute()
+                    
                     print(f"Saved data for {date_str} - TRIMP: {activity_data['trimp']}, Activity: {activity_data['activity']}")
                 except Exception as e:
                     print(f"Error saving activity data for {date_str}: {e}")

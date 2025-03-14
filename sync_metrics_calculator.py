@@ -137,16 +137,17 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
             if date_iso in processed_dates_set:
                 print(f"Skipping already processed date: {date_str}")
                 continue
-                
-            # Get existing data for this date to preserve activity and TRIMP data
-            existing_data_response = supabase.table('garmin_data')\
+            
+            # CRITICAL CHANGE: Always get the current state from the database
+            # This ensures we don't overwrite activity and TRIMP data
+            current_entry_response = supabase.table('garmin_data')\
                 .select('*')\
                 .eq('user_id', user_id)\
                 .eq('date', date_str)\
                 .execute()
             
-            # Initialize metrics_data with the calculated metrics
-            metrics_data = {
+            # Start with the calculated metrics
+            updated_entry = {
                 'user_id': user_id,
                 'date': date_str,
                 'atl': round(float(row['atl']), 1),
@@ -154,21 +155,25 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
                 'tsb': round(float(row['tsb']), 1)
             }
             
-            # If we have existing data, preserve the activity and TRIMP
-            if existing_data_response.data and len(existing_data_response.data) > 0:
-                existing_data = existing_data_response.data[0]
-                metrics_data['activity'] = existing_data.get('activity', row.get('activity', 'Rest day'))
-                metrics_data['trimp'] = existing_data.get('trimp', float(row['trimp']))
-                print(f"Preserving existing data - TRIMP: {metrics_data['trimp']}, Activity: {metrics_data['activity']}")
+            # If there's an existing entry, preserve the activity and TRIMP data
+            if current_entry_response.data and len(current_entry_response.data) > 0:
+                current_entry = current_entry_response.data[0]
+                # Keep the existing activity and TRIMP data
+                updated_entry['activity'] = current_entry.get('activity', row.get('activity', 'Rest day'))
+                updated_entry['trimp'] = current_entry.get('trimp', float(row['trimp']))
+                print(f"Updating metrics for existing entry with Activity: {updated_entry['activity']}, TRIMP: {updated_entry['trimp']}")
             else:
-                metrics_data['activity'] = row.get('activity', 'Rest day')
-                metrics_data['trimp'] = float(row['trimp'])
+                # If no existing entry, use the data from the calculation
+                updated_entry['activity'] = row.get('activity', 'Rest day')
+                updated_entry['trimp'] = float(row['trimp'])
             
             try:
+                # Use upsert to update just the metrics for the existing entry
                 supabase.table('garmin_data')\
-                    .upsert(metrics_data, on_conflict='user_id,date')\
+                    .upsert(updated_entry, on_conflict='user_id,date')\
                     .execute()
-                print(f"Updated {date_str} - ATL: {metrics_data['atl']}, CTL: {metrics_data['ctl']}, TSB: {metrics_data['tsb']}")
+                
+                print(f"Updated {date_str} - ATL: {updated_entry['atl']}, CTL: {updated_entry['ctl']}, TSB: {updated_entry['tsb']}")
                 metrics_updates.append(date_str)
             except Exception as e:
                 print(f"Error updating metrics for {date_str}: {e}")
