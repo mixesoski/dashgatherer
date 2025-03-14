@@ -14,8 +14,12 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
         else:
             start_date = end_date - timedelta(days=9)
 
+        # Always add the day before the start date to initialize values
+        day_before_start = start_date - timedelta(days=1)
+        
         print(f"\n=== CALCULATING METRICS ===")
-        print(f"Date range: {start_date.date()} to {end_date.date()}")
+        print(f"Actual date range: {day_before_start.date()} to {end_date.date()}")
+        print(f"User-selected date range: {start_date.date()} to {end_date.date()}")
 
         # Convert processed_dates to a set for faster lookup
         if processed_dates is None:
@@ -31,46 +35,78 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
 
         if not all_data.data:
             print("No data found for user")
-            return {
-                'success': False,
-                'message': 'No data found'
-            }
+            # Even with no data, we'll create our own dataset with initial values
+            empty_df = pd.DataFrame({
+                'date': pd.date_range(start=day_before_start.date(), end=end_date.date(), freq='D'),
+                'user_id': user_id,
+                'trimp': 0,
+                'activity': 'Rest day',
+                'atl': None,
+                'ctl': None,
+                'tsb': None
+            })
+            # Set initial values for the day before start
+            empty_df.loc[empty_df['date'] == pd.Timestamp(day_before_start.date()), 'atl'] = 50.0
+            empty_df.loc[empty_df['date'] == pd.Timestamp(day_before_start.date()), 'ctl'] = 50.0
+            empty_df.loc[empty_df['date'] == pd.Timestamp(day_before_start.date()), 'tsb'] = 0.0
+            df = empty_df
+        else:
+            # Convert to DataFrame and handle dates with ISO8601 format
+            df = pd.DataFrame(all_data.data)
+            df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
+            
+            # Remove duplicate date entries - keep the entry with highest TRIMP
+            # This ensures we don't have both "Rest day" and active entries for the same day
+            df = df.sort_values(['date', 'trimp'], ascending=[True, False])
+            df = df.drop_duplicates(subset=['date'], keep='first')
+            
+            # Create a complete date range including the day before start
+            date_range = pd.date_range(start=day_before_start.date(), end=end_date.date(), freq='D')
+            complete_df = pd.DataFrame(date_range, columns=['date'])
+            
+            # Merge with existing data, filling missing days with zero TRIMP
+            df = pd.merge(complete_df, df, on='date', how='left')
+            df['trimp'] = df['trimp'].fillna(0)
+            df['activity'] = df['activity'].fillna('Rest day')
+            df['user_id'] = user_id
+            df = df.sort_values('date')
 
-        # Convert to DataFrame and handle dates with ISO8601 format
-        df = pd.DataFrame(all_data.data)
-        df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
-        
-        # Remove duplicate date entries - keep the entry with highest TRIMP
-        # This ensures we don't have both "Rest day" and active entries for the same day
-        df = df.sort_values(['date', 'trimp'], ascending=[True, False])
-        df = df.drop_duplicates(subset=['date'], keep='first')
-        
-        # Create a complete date range
-        date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
-        complete_df = pd.DataFrame(date_range, columns=['date'])
-        
-        # Merge with existing data, filling missing days with zero TRIMP
-        df = pd.merge(complete_df, df, on='date', how='left')
-        df['trimp'] = df['trimp'].fillna(0)
-        df['activity'] = df['activity'].fillna('Rest day')
-        df['user_id'] = user_id
-        df = df.sort_values('date')
+            # Check if we have the day before start date
+            day_before_in_df = df[df['date'] == pd.Timestamp(day_before_start.date())]
+            if len(day_before_in_df) > 0:
+                # If the day before exists but has no metrics, set them to 50/50
+                if day_before_in_df.iloc[0]['atl'] is None or pd.isna(day_before_in_df.iloc[0]['atl']):
+                    idx = df[df['date'] == pd.Timestamp(day_before_start.date())].index[0]
+                    df.at[idx, 'atl'] = 50.0
+                    df.at[idx, 'ctl'] = 50.0
+                    df.at[idx, 'tsb'] = 0.0
+                    print(f"Setting initial values for existing day before start: {day_before_start.date()}")
+            else:
+                # This should not happen with our merge logic above, but just in case
+                print(f"Warning: Day before start date {day_before_start.date()} not found in DataFrame")
 
-        # Initialize first row with default values if it's first sync
-        if is_first_sync:
-            print("First sync detected - setting initial values ATL=50, CTL=50")
-            df.at[df.index[0], 'atl'] = 50.0
-            df.at[df.index[0], 'ctl'] = 50.0
-            df.at[df.index[0], 'tsb'] = 0.0
+        # Always ensure the day before has ATL=50, CTL=50 metrics if it's a first sync
+        # or if we don't have previous metrics
+        if is_first_sync or df.loc[df['date'] == pd.Timestamp(day_before_start.date()), 'atl'].iloc[0] is None:
+            print(f"Setting initial metrics for day before start: {day_before_start.date()}")
+            day_before_idx = df[df['date'] == pd.Timestamp(day_before_start.date())].index[0]
+            df.at[day_before_idx, 'atl'] = 50.0
+            df.at[day_before_idx, 'ctl'] = 50.0 
+            df.at[day_before_idx, 'tsb'] = 0.0
 
-        # Calculate metrics for each subsequent row
-        for i in range(1, len(df)):
+        # Calculate metrics for each day, starting after the day before start
+        first_idx = df[df['date'] == pd.Timestamp(day_before_start.date())].index[0]
+        
+        print(f"Starting metric calculations with initial values: ATL={df.iloc[first_idx]['atl']}, CTL={df.iloc[first_idx]['ctl']}")
+        
+        for i in range(first_idx + 1, len(df)):
             prev_row = df.iloc[i-1]
             curr_row = df.iloc[i]
             
-            prev_atl = float(prev_row['atl']) if prev_row['atl'] is not None else 50.0
-            prev_ctl = float(prev_row['ctl']) if prev_row['ctl'] is not None else 50.0
-            trimp = float(curr_row['trimp']) if curr_row['trimp'] is not None else 0.0
+            # Ensure we have numeric values for calculations
+            prev_atl = float(prev_row['atl']) if prev_row['atl'] is not None and not pd.isna(prev_row['atl']) else 50.0
+            prev_ctl = float(prev_row['ctl']) if prev_row['ctl'] is not None and not pd.isna(prev_row['ctl']) else 50.0
+            trimp = float(curr_row['trimp']) if curr_row['trimp'] is not None and not pd.isna(curr_row['trimp']) else 0.0
             
             # Calculate new metrics
             atl = prev_atl + (trimp - prev_atl) / 7
@@ -81,9 +117,15 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
             df.at[df.index[i], 'ctl'] = round(ctl, 1)
             df.at[df.index[i], 'tsb'] = round(tsb, 1)
 
+        # Get only the rows from the original requested start date onward for updating
+        update_df = df[df['date'] >= pd.Timestamp(start_date.date())]
+        
+        print(f"Calculated metrics for {len(update_df)} days")
+        print(f"First day: {update_df.iloc[0]['date'].date()} - ATL: {update_df.iloc[0]['atl']}, CTL: {update_df.iloc[0]['ctl']}, TSB: {update_df.iloc[0]['tsb']}")
+        
         # Update database - but skip dates that were already processed by garmin_sync.py
         metrics_updates = []
-        for _, row in df.iterrows():
+        for _, row in update_df.iterrows():
             date_str = row['date'].strftime("%Y-%m-%d")
             date_iso = row['date'].isoformat()
             
