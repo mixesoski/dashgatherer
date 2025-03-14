@@ -2,7 +2,25 @@ from datetime import datetime, timedelta
 from supabase_client import supabase
 import pandas as pd
 
+# DEPRECATED: This file is kept for reference but metrics calculation is now handled in garmin_sync.py
+# This helps ensure that activity data and metrics are always stored in the same row, preventing duplicate entries
+
 def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, processed_dates=None):
+    """
+    DEPRECATED: This function has been moved to garmin_sync.py to handle metrics inline with activity data.
+    Kept for reference only.
+    
+    Original function calculated metrics (ATL, CTL, TSB) for all dates in the given range.
+    """
+    print("WARNING: Using deprecated calculate_sync_metrics function. This functionality has been moved to garmin_sync.py")
+    
+    # Return early with a message about the deprecation
+    return {
+        'success': False,
+        'error': 'This function is deprecated. Metrics calculation is now handled in garmin_sync.py'
+    }
+    
+    # Original function code kept below for reference
     try:
         # Get dates range
         end_date = datetime.now().replace(tzinfo=None)

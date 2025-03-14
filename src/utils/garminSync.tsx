@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
@@ -29,14 +28,18 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
             { id: toastId }
         );
 
+        // Calculate days from start date until now
+        const daysDiff = Math.ceil((new Date().getTime() - startDate.getTime()) / (1000 * 3600 * 24));
+        
         const response = await fetch(`${API_URL}/api/sync-garmin`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
-                userId: user.id,
-                startDate: startDate.toISOString()
+                user_id: user.id,
+                days: daysDiff,
+                is_first_sync: false
             })
         });
 
@@ -45,21 +48,11 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         console.log('Response data:', data);
         
         if (data.success) {
-            // Show progress messages
+            // Show success message
             if (data.newActivities > 0) {
-                toast.loading(
-                    <ProgressToast message="Processing new activities..." />,
-                    { id: toastId }
-                );
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to read
-                toast.loading(
-                    <ProgressToast message="Calculating metrics..." />,
-                    { id: toastId }
-                );
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Give time to read
-                toast.success(`Synced ${data.newActivities} new activities!`);
+                toast.success(`Synced ${data.newActivities} new activities!`, { id: toastId });
             } else {
-                toast.success('Everything is up to date!');
+                toast.success('Everything is up to date!', { id: toastId });
             }
             return true;
         } else {

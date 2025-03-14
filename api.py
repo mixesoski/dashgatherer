@@ -8,6 +8,7 @@ import os
 import traceback
 import sys
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -52,55 +53,33 @@ def log_error(error_message, exception=None):
 def sync_garmin():
     try:
         data = request.json
-        user_id = data.get('userId')
-        start_date = data.get('startDate')
-        
-        print(f"\nReceived sync request for user: {user_id}, start date: {start_date}")
+        user_id = data.get('user_id')
+        days = data.get('days', 15)
         
         if not user_id:
-            log_error("Missing userId in request")
-            return jsonify({
-                'success': False,
-                'error': 'userId is required'
-            }), 400
-
-        # Check if this is first sync for user
-        existing_data = supabase.table('garmin_data')\
-            .select('*')\
-            .eq('user_id', user_id)\
-            .execute()
+            return jsonify({'success': False, 'error': 'User ID is required'})
         
-        is_first_sync = len(existing_data.data) == 0
-        print(f"Is first sync: {is_first_sync}")
-
-        # First step: Process Garmin activities and save TRIMP/activity data
-        print("STEP 1: Processing Garmin activities...")
-        result = sync_garmin_data(user_id, start_date, is_first_sync)
+        start_date = datetime.now() - timedelta(days=days)
+        is_first_sync = data.get('is_first_sync', False)
         
-        if not result.get('success', False):
-            print(f"Sync failed in step 1: {result.get('error', 'Unknown error')}")
-            return jsonify(result)
+        print(f"Starting sync for user {user_id}, days={days}, is_first_sync={is_first_sync}")
+        
+        # Sync Garmin data - now this function calculates metrics directly
+        sync_result = sync_garmin_data(user_id, start_date, is_first_sync)
+        
+        if not sync_result.get('success', False):
+            return jsonify(sync_result)
             
-        # Second step: Calculate metrics for all dates
-        print("\nSTEP 2: Calculating metrics...")
-        metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync, result.get('processed_dates', []))
-        
-        final_result = {
-            'success': True,
-            'newActivities': result.get('newActivities', 0),
-            'metricsCalculated': metrics_result.get('message', 'No metrics calculated')
-        }
-        
-        print(f"Sync completed with result: {final_result}")
-
-        return jsonify(final_result)
-        
-    except Exception as e:
-        log_error("Error in sync endpoint", e)
         return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+            'success': True,
+            'newActivities': sync_result.get('newActivities', 0),
+            'message': sync_result.get('message', 'Sync complete')
+        })
+    except Exception as e:
+        print(f"Error in sync-garmin: {e}")
+        traceback_str = traceback.format_exc()
+        print(traceback_str)
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update-chart', methods=['POST'])
 def update_chart():

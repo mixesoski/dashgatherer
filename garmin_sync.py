@@ -5,7 +5,6 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
-from sync_metrics_calculator import calculate_sync_metrics
 
 def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
@@ -94,100 +93,194 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     print(f"Error processing activity: {e}")
                     continue
 
-            # Save activity data
+            # Save activity data with metrics in a single operation
             print("\nSaving data for all days:")
-            processed_dates = []  # Track which dates we've already processed
+            processed_dates = []
             
-            # Debug: Print daily_data keys to see which dates we're processing
-            print(f"DEBUG: Processing dates: {list(daily_data.keys())}")
-            
-            for date_str, data in daily_data.items():
-                print(f"\nDEBUG: Processing date {date_str}:")
-                print(f"DEBUG: - Date object: {data['date']}")
-                print(f"DEBUG: - TRIMP: {data['trimp']}")
-                print(f"DEBUG: - Activities: {data['activities']}")
+            # Get all previous data to initialize metrics calculation
+            all_data = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .order('date')\
+                .execute()
                 
-                activity_data = {
+            # Convert to DataFrame for metrics calculation
+            if all_data.data:
+                df = pd.DataFrame(all_data.data)
+                df['date'] = pd.to_datetime(df['date'], format='ISO8601').dt.tz_localize(None)
+                # Sort by date
+                df = df.sort_values('date')
+            else:
+                df = pd.DataFrame(columns=['date', 'user_id', 'trimp', 'activity', 'atl', 'ctl', 'tsb'])
+            
+            # Determine if we need to set initial metrics (for first sync or missing metrics)
+            need_initial_metrics = is_first_sync or len(df) == 0 or df.iloc[0]['atl'] is None
+            
+            # Add day before start date if needed for metrics calculation
+            day_before_start = start_date - timedelta(days=1)
+            day_before_str = day_before_start.strftime("%Y-%m-%d")
+            
+            # Initialize metrics if needed
+            if need_initial_metrics:
+                print(f"Setting initial metrics for day before start: {day_before_str}")
+                # Check if we already have this day
+                day_before_entry = df[df['date'] == pd.Timestamp(day_before_start)]
+                
+                if len(day_before_entry) == 0:
+                    # Create entry for day before
+                    initial_entry = {
+                        'user_id': user_id,
+                        'date': day_before_str,
+                        'trimp': 0,
+                        'activity': 'Rest day',
+                        'atl': 50.0,
+                        'ctl': 50.0,
+                        'tsb': 0.0
+                    }
+                    
+                    # Insert initial entry
+                    supabase.table('garmin_data')\
+                        .upsert(initial_entry, on_conflict='user_id,date')\
+                        .execute()
+                        
+                    # Add to DataFrame for metrics calculation
+                    day_before_row = pd.DataFrame([{
+                        'date': pd.Timestamp(day_before_start),
+                        'user_id': user_id,
+                        'trimp': 0,
+                        'activity': 'Rest day',
+                        'atl': 50.0,
+                        'ctl': 50.0,
+                        'tsb': 0.0
+                    }])
+                    df = pd.concat([day_before_row, df], ignore_index=True)
+                    df = df.sort_values('date')
+                else:
+                    # Update existing day before
+                    idx = df[df['date'] == pd.Timestamp(day_before_start)].index[0]
+                    df.at[idx, 'atl'] = 50.0
+                    df.at[idx, 'ctl'] = 50.0
+                    df.at[idx, 'tsb'] = 0.0
+                    
+                    # Update in database
+                    supabase.table('garmin_data')\
+                        .update({'atl': 50.0, 'ctl': 50.0, 'tsb': 0.0})\
+                        .eq('user_id', user_id)\
+                        .eq('date', day_before_str)\
+                        .execute()
+            
+            # Now process each day, calculate and save both activity and metrics in one go
+            for date_str, data in daily_data.items():
+                print(f"\nProcessing date {date_str}:")
+                print(f"- TRIMP: {data['trimp']}")
+                print(f"- Activities: {data['activities']}")
+                
+                # Get existing data for this date if any
+                existing = supabase.table('garmin_data')\
+                    .select('*')\
+                    .eq('user_id', user_id)\
+                    .eq('date', data['date'].isoformat())\
+                    .execute()
+                
+                # Track this date as processed
+                processed_dates.append(data['date'].isoformat())
+                
+                # Determine activity data
+                if existing.data and len(existing.data) > 0:
+                    existing_data = existing.data[0]
+                    existing_activities = existing_data.get('activity', '')
+                    
+                    # If there's activity data to update
+                    if data['activities'] != ['Rest day'] or existing_activities == 'Rest day':
+                        if existing_activities and existing_activities != 'Rest day' and data['activities'] != ['Rest day']:
+                            # Combine activities from both entries (avoiding duplicates)
+                            existing_list = existing_activities.split(', ')
+                            existing_activity_set = set(existing_list)
+                            new_activity_set = set(data['activities'])
+                            combined_activities = list(existing_activity_set.union(new_activity_set))
+                            
+                            # Don't include 'Rest day' in the combined list
+                            if 'Rest day' in combined_activities:
+                                combined_activities.remove('Rest day')
+                            
+                            activity = ', '.join(combined_activities)
+                            trimp = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                        elif existing_activities == 'Rest day' and data['activities'] != ['Rest day']:
+                            # Replace 'Rest day' with actual activities
+                            activity = ', '.join(data['activities'])
+                            trimp = float(data['trimp'])
+                        elif data['activities'] == ['Rest day'] and existing_activities != 'Rest day':
+                            # Keep existing activities (don't replace with Rest day)
+                            activity = existing_activities
+                            trimp = float(existing_data.get('trimp', 0))
+                        else:
+                            activity = existing_activities
+                            trimp = float(existing_data.get('trimp', 0))
+                    else:
+                        activity = existing_activities
+                        trimp = float(existing_data.get('trimp', 0))
+                else:
+                    # No existing data, use new activity data
+                    activity = ', '.join(data['activities'])
+                    trimp = float(data['trimp'])
+                
+                # Calculate metrics for this date
+                # Look for previous day's metrics in our DataFrame
+                prev_date = data['date'] - timedelta(days=1)
+                prev_date_entry = df[df['date'] == prev_date]
+                
+                if len(prev_date_entry) > 0:
+                    prev_atl = float(prev_date_entry.iloc[0]['atl']) if prev_date_entry.iloc[0]['atl'] is not None else 50.0
+                    prev_ctl = float(prev_date_entry.iloc[0]['ctl']) if prev_date_entry.iloc[0]['ctl'] is not None else 50.0
+                else:
+                    # If no previous day, use default values
+                    prev_atl = 50.0
+                    prev_ctl = 50.0
+                
+                # Calculate new metrics
+                atl = prev_atl + (trimp - prev_atl) / 7
+                ctl = prev_ctl + (trimp - prev_ctl) / 42
+                tsb = prev_ctl - prev_atl
+                
+                # Create complete entry with both activity and metrics
+                complete_entry = {
                     'user_id': user_id,
                     'date': data['date'].isoformat(),
-                    'trimp': float(data['trimp']),
-                    'activity': ', '.join(data['activities'])
+                    'trimp': trimp,
+                    'activity': activity,
+                    'atl': round(atl, 1),
+                    'ctl': round(ctl, 1),
+                    'tsb': round(tsb, 1)
                 }
+                
+                # Upsert the complete entry
+                supabase.table('garmin_data')\
+                    .upsert(complete_entry, on_conflict='user_id,date')\
+                    .execute()
+                
+                print(f"Saved data for {date_str}:")
+                print(f"- TRIMP: {trimp}, Activity: {activity}")
+                print(f"- Metrics: ATL={round(atl, 1)}, CTL={round(ctl, 1)}, TSB={round(tsb, 1)}")
+                
+                # Add this entry to our DataFrame for next day's calculations
+                df = pd.concat([df, pd.DataFrame([{
+                    'date': data['date'],
+                    'user_id': user_id,
+                    'trimp': trimp,
+                    'activity': activity,
+                    'atl': round(atl, 1),
+                    'ctl': round(ctl, 1),
+                    'tsb': round(tsb, 1)
+                }])], ignore_index=True)
+                df = df.drop_duplicates(subset=['date', 'user_id'], keep='last')
+                df = df.sort_values('date')
 
-                try:
-                    # Get existing data for this date if any
-                    existing = supabase.table('garmin_data')\
-                        .select('*')\
-                        .eq('user_id', user_id)\
-                        .eq('date', data['date'].isoformat())\
-                        .execute()
-                    
-                    # Track this date as processed
-                    processed_dates.append(data['date'].isoformat())
-                    
-                    # CRITICAL CHANGE: Check if existing data has metrics to avoid creating a duplicate
-                    # We'll either update the existing record in place or create a new one with activity data
-                    if existing.data and len(existing.data) > 0:
-                        existing_data = existing.data[0]
-                        existing_activities = existing_data.get('activity', '')
-                        
-                        # Start with the existing data as a base
-                        activity_data = dict(existing_data)
-                        
-                        # If there's activity data to update
-                        if data['activities'] != ['Rest day'] or existing_activities == 'Rest day':
-                            if existing_activities and existing_activities != 'Rest day' and data['activities'] != ['Rest day']:
-                                # Combine activities from both entries (avoiding duplicates)
-                                existing_list = existing_activities.split(', ')
-                                existing_activity_set = set(existing_list)
-                                new_activity_set = set(data['activities'])
-                                combined_activities = list(existing_activity_set.union(new_activity_set))
-                                
-                                # Don't include 'Rest day' in the combined list
-                                if 'Rest day' in combined_activities:
-                                    combined_activities.remove('Rest day')
-                                
-                                activity_data['activity'] = ', '.join(combined_activities)
-                                activity_data['trimp'] = float(existing_data.get('trimp', 0)) + float(data['trimp'])
-                            elif existing_activities == 'Rest day' and data['activities'] != ['Rest day']:
-                                # Replace 'Rest day' with actual activities
-                                activity_data['activity'] = ', '.join(data['activities'])
-                                activity_data['trimp'] = float(data['trimp'])
-                            elif data['activities'] == ['Rest day'] and existing_activities != 'Rest day':
-                                # Keep existing activities (don't replace with Rest day)
-                                pass
-                    else:
-                        # No existing data, create new entry
-                        activity_data = {
-                            'user_id': user_id,
-                            'date': data['date'].isoformat(),
-                            'trimp': float(data['trimp']),
-                            'activity': ', '.join(data['activities']),
-                            # Initialize metrics to null so we don't get null display issues
-                            'atl': None,
-                            'ctl': None,
-                            'tsb': None
-                        }
-                    
-                    # Upsert the data (will either update existing or insert new)
-                    supabase.table('garmin_data')\
-                        .upsert(activity_data, on_conflict='user_id,date')\
-                        .execute()
-                    
-                    print(f"Saved data for {date_str} - TRIMP: {activity_data['trimp']}, Activity: {activity_data['activity']}")
-                except Exception as e:
-                    print(f"Error saving activity data for {date_str}: {e}")
-                    continue
-
-            # Calculate metrics
-            print("\n=== CALCULATING METRICS ===")
-            print(f"Date range: {start_date.date()} to {datetime.now().date()}")
-            
-            # Return the processed dates so they can be used by the metrics calculator
+            # Return the processed dates
             return {
                 'success': True,
                 'newActivities': len(daily_data),
-                'processed_dates': processed_dates
+                'processed_dates': processed_dates,
+                'message': 'Activities and metrics saved in a single row per date'
             }
 
         finally:
