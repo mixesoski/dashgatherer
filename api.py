@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
+from sync_metrics_calculator import calculate_sync_metrics
 from chart_updater import update_chart_data
 from supabase import create_client
 import os
