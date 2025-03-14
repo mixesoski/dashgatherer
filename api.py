@@ -72,11 +72,27 @@ def sync_garmin():
         is_first_sync = len(existing_data.data) == 0
         print(f"Is first sync: {is_first_sync}")
 
-        # Always use garmin_sync for consistent handling of all days
+        # First step: Process Garmin activities and save TRIMP/activity data
+        print("STEP 1: Processing Garmin activities...")
         result = sync_garmin_data(user_id, start_date, is_first_sync)
-        print(f"Sync completed with result: {result}")
+        
+        if not result.get('success', False):
+            print(f"Sync failed in step 1: {result.get('error', 'Unknown error')}")
+            return jsonify(result)
+            
+        # Second step: Calculate metrics for all dates
+        print("\nSTEP 2: Calculating metrics...")
+        metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync, result.get('processed_dates', []))
+        
+        final_result = {
+            'success': True,
+            'newActivities': result.get('newActivities', 0),
+            'metricsCalculated': metrics_result.get('message', 'No metrics calculated')
+        }
+        
+        print(f"Sync completed with result: {final_result}")
 
-        return jsonify(result)
+        return jsonify(final_result)
         
     except Exception as e:
         log_error("Error in sync endpoint", e)

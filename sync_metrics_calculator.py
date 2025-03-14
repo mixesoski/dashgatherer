@@ -25,7 +25,11 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
         if processed_dates is None:
             processed_dates = []
         processed_dates_set = set(processed_dates)
-
+        
+        # Debug info for processed dates
+        print(f"DEBUG: Received processed_dates: {processed_dates}")
+        print(f"DEBUG: Number of processed dates: {len(processed_dates)}")
+        
         # Get ALL historical data for this user
         all_data = supabase.table('garmin_data')\
             .select('*')\
@@ -134,15 +138,31 @@ def calculate_sync_metrics(user_id, start_date=None, is_first_sync=False, proces
                 print(f"Skipping already processed date: {date_str}")
                 continue
                 
+            # Get existing data for this date to preserve activity and TRIMP data
+            existing_data_response = supabase.table('garmin_data')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('date', date_str)\
+                .execute()
+            
+            # Initialize metrics_data with the calculated metrics
             metrics_data = {
                 'user_id': user_id,
                 'date': date_str,
-                'trimp': float(row['trimp']),
-                'activity': row.get('activity', 'Rest day'),
                 'atl': round(float(row['atl']), 1),
                 'ctl': round(float(row['ctl']), 1),
                 'tsb': round(float(row['tsb']), 1)
             }
+            
+            # If we have existing data, preserve the activity and TRIMP
+            if existing_data_response.data and len(existing_data_response.data) > 0:
+                existing_data = existing_data_response.data[0]
+                metrics_data['activity'] = existing_data.get('activity', row.get('activity', 'Rest day'))
+                metrics_data['trimp'] = existing_data.get('trimp', float(row['trimp']))
+                print(f"Preserving existing data - TRIMP: {metrics_data['trimp']}, Activity: {metrics_data['activity']}")
+            else:
+                metrics_data['activity'] = row.get('activity', 'Rest day')
+                metrics_data['trimp'] = float(row['trimp'])
             
             try:
                 supabase.table('garmin_data')\

@@ -98,7 +98,15 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             print("\nSaving data for all days:")
             processed_dates = []  # Track which dates we've already processed
             
+            # Debug: Print daily_data keys to see which dates we're processing
+            print(f"DEBUG: Processing dates: {list(daily_data.keys())}")
+            
             for date_str, data in daily_data.items():
+                print(f"\nDEBUG: Processing date {date_str}:")
+                print(f"DEBUG: - Date object: {data['date']}")
+                print(f"DEBUG: - TRIMP: {data['trimp']}")
+                print(f"DEBUG: - Activities: {data['activities']}")
+                
                 activity_data = {
                     'user_id': user_id,
                     'date': data['date'].isoformat(),
@@ -148,6 +156,13 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                                 # Keep existing data if we're just trying to add a Rest day to an entry with real activities
                                 if existing_activities != 'Rest day':
                                     continue
+                        
+                        # Preserve existing metrics if they exist
+                        if existing_data.get('atl') is not None:
+                            activity_data['atl'] = existing_data.get('atl')
+                            activity_data['ctl'] = existing_data.get('ctl')
+                            activity_data['tsb'] = existing_data.get('tsb')
+                            print(f"Preserving existing metrics - ATL: {activity_data['atl']}, CTL: {activity_data['ctl']}, TSB: {activity_data['tsb']}")
                     
                     supabase.table('garmin_data')\
                         .upsert(activity_data, on_conflict='user_id,date')\
@@ -160,12 +175,12 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             # Calculate metrics
             print("\n=== CALCULATING METRICS ===")
             print(f"Date range: {start_date.date()} to {datetime.now().date()}")
-            metrics_result = calculate_sync_metrics(user_id, start_date, is_first_sync, processed_dates)
-
+            
+            # Return the processed dates so they can be used by the metrics calculator
             return {
                 'success': True,
                 'newActivities': len(daily_data),
-                'metrics': metrics_result
+                'processed_dates': processed_dates
             }
 
         finally:
