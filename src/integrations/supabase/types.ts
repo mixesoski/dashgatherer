@@ -219,6 +219,24 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_locks: {
+        Row: {
+          id: string
+          timestamp: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          timestamp?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          timestamp?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

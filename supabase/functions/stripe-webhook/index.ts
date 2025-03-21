@@ -39,6 +39,8 @@ serve(async (req) => {
     }
     console.log('Request headers:', JSON.stringify(headersObj, null, 2));
     
+    // For Stripe webhooks, we don't need the normal authorization header
+    // Instead, we use the stripe-signature header
     const signature = req.headers.get('stripe-signature');
     
     if (!signature) {

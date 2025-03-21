@@ -31,6 +31,22 @@ serve(async (req) => {
   }
 
   try {
+    // Check if this is the webhook endpoint accidentally being called
+    const url = new URL(req.url);
+    if (url.pathname.includes('webhook')) {
+      console.error('Webhook request sent to checkout endpoint');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Incorrect endpoint',
+          message: 'This appears to be a webhook request sent to the checkout endpoint'
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     // Parse request body
     const { planId, userId, successUrl, cancelUrl } = await req.json();
 
