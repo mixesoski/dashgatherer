@@ -3,6 +3,25 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
+// Enhanced logging for debugging
+const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
+
+const log = {
+  debug: (...args: any[]) => {
+    if (LOG_LEVEL === 'debug') {
+      console.log('[DEBUG]', ...args);
+    }
+  },
+  info: (...args: any[]) => {
+    if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info') {
+      console.log('[INFO]', ...args);
+    }
+  },
+  error: (...args: any[]) => {
+    console.error('[ERROR]', ...args);
+  }
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -34,7 +53,7 @@ serve(async (req) => {
     // Check if this is the webhook endpoint accidentally being called
     const url = new URL(req.url);
     if (url.pathname.includes('webhook')) {
-      console.error('Webhook request sent to checkout endpoint');
+      log.error('Webhook request sent to checkout endpoint');
       return new Response(
         JSON.stringify({ 
           error: 'Incorrect endpoint',
@@ -48,22 +67,26 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { planId, userId, successUrl, cancelUrl } = await req.json();
+    const { planId, userId, successUrl, cancelUrl, metadata = {} } = await req.json();
 
-    console.log(`Creating checkout session for plan: ${planId}, user: ${userId}`);
-    console.log(`Using price ID for athlete plan: ${planPriceIds.athlete}`);
+    log.info(`Creating checkout session for plan: ${planId}, user: ${userId}`);
+    log.debug(`Using price ID for athlete plan: ${planPriceIds.athlete}`);
 
     // Free coach subscription - no need for Stripe
     if (planId === 'coach') {
-      // Update user profile to coach
-      const { error: profileError } = await supabase
+      log.info(`Assigning coach role directly for user: ${userId}`);
+      // Update profile with coach role
+      const { error } = await supabase
         .from('profiles')
-        .update({ role: 'coach' })
-        .eq('user_id', userId);
+        .upsert({ 
+          user_id: userId, 
+          role: 'coach',
+          updated_at: new Date().toISOString()
+        });
 
-      if (profileError) {
-        console.error('Error updating profile to coach:', profileError);
-        throw new Error('Failed to update user role');
+      if (error) {
+        log.error(`Error updating profile with coach role: ${error.message}`);
+        throw new Error(`Failed to update profile: ${error.message}`);
       }
 
       // Return success without Stripe checkout
@@ -75,6 +98,7 @@ serve(async (req) => {
 
     // Organization subscription - contact sales
     if (planId === 'organization') {
+      log.info(`Organization plan requested for user: ${userId}`);
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -87,16 +111,25 @@ serve(async (req) => {
 
     // Verify we have a valid price ID for athlete plan
     if (!planPriceIds.athlete || planPriceIds.athlete === '') {
-      console.error('Missing athlete price ID in environment variables');
+      log.error('Missing athlete price ID in environment variables');
       throw new Error('Athlete price ID not configured');
     }
 
     // Get user email from Supabase
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
-    if (userError || !userData.user?.email) {
-      console.error('Error fetching user email:', userError);
+    if (userError || !userData?.user?.email) {
+      log.error('Error fetching user email:', userError);
       throw new Error('Unable to fetch user email');
     }
+
+    log.debug(`Creating checkout session for user: ${userId}, email: ${userData.user.email}`);
+
+    // Merge metadata with required fields to ensure we have userId and planId
+    const sessionMetadata = {
+      ...metadata,
+      userId: userId,
+      planId: planId
+    };
 
     // Create Stripe checkout session for athlete
     const session = await stripe.checkout.sessions.create({
@@ -110,24 +143,40 @@ serve(async (req) => {
       mode: 'subscription',
       success_url: successUrl,
       cancel_url: cancelUrl,
-      client_reference_id: userId, // This is critical to identify the user
+      client_reference_id: userId, // This is crucial - webhook uses this to identify the user
       customer_email: userData.user.email,
-      metadata: {
-        userId: userId, // Store user ID in metadata for double safety
-        planId: planId, // Store plan ID in metadata
-      },
+      metadata: sessionMetadata,
     });
 
-    console.log(`Checkout session created: ${session.id}, URL: ${session.url}`);
-    console.log(`Session metadata: ${JSON.stringify(session.metadata)}`);
-    console.log(`Client reference ID: ${session.client_reference_id}`);
+    log.info(`Checkout session created: ${session.id}, URL: ${session.url}`);
+    log.debug(`Session details: client_reference_id=${session.client_reference_id}, metadata=${JSON.stringify(session.metadata)}`);
+
+    // Pre-create a subscription record with pending status
+    // This helps ensure we have a record even if webhook fails
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .upsert({
+        user_id: userId,
+        stripe_subscription_id: `pending_${session.id}`, // This will be updated by webhook
+        status: 'pending',
+        plan_id: planId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      
+    if (subscriptionError) {
+      log.error(`Error creating pending subscription: ${subscriptionError.message}`);
+      // Continue anyway as this is just a precaution
+    } else {
+      log.info('Created pending subscription record');
+    }
 
     return new Response(
       JSON.stringify({ url: session.url }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    log.error('Error creating checkout session:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
