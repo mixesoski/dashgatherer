@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -94,7 +95,8 @@ export const getSubscriptionStatus = async () => {
         role: 'athlete', // Default role, will be overridden if profile check succeeds
         trialEnd: null,
         cancelAt: null,
-        renewsAt: null
+        renewsAt: null,
+        stripeSubscriptionId: directSubscriptionData.stripe_subscription_id
       };
     }
 
@@ -115,6 +117,28 @@ export const getSubscriptionStatus = async () => {
         trialEnd: null,
         cancelAt: null,
         renewsAt: null
+      };
+    }
+
+    // Also check pending subscriptions - if we just initiated checkout
+    const { data: pendingSubscriptionData, error: pendingSubError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .eq('status', 'pending')
+      .maybeSingle();
+    
+    if (pendingSubscriptionData && !pendingSubError) {
+      console.log('Found pending subscription in database:', pendingSubscriptionData);
+      return {
+        active: false,
+        plan: pendingSubscriptionData.plan_id,
+        status: 'pending',
+        role: 'athlete',
+        trialEnd: null,
+        cancelAt: null,
+        renewsAt: null,
+        pendingCheckout: true
       };
     }
 
@@ -181,8 +205,23 @@ export const cancelSubscription = async (subscriptionId: string) => {
 
     console.log(`Canceling subscription: ${subscriptionId} for user: ${session.user.id}`);
 
-    // Update the subscription status in our database first
-    const { data: updateData, error: updateError } = await supabase
+    // Call the cancel-subscription edge function
+    const { data, error } = await supabase.functions.invoke("cancel-subscription", {
+      body: {
+        subscriptionId,
+        userId: session.user.id
+      }
+    });
+
+    if (error) {
+      console.error("Error calling cancel-subscription function:", error);
+      throw new Error(error.message || "Failed to cancel subscription");
+    }
+
+    console.log("Subscription cancellation result:", data);
+    
+    // Also update the subscription status in our database for immediate feedback
+    const { error: updateError } = await supabase
       .from('subscriptions')
       .update({ 
         status: 'canceled',
@@ -193,18 +232,13 @@ export const cancelSubscription = async (subscriptionId: string) => {
     
     if (updateError) {
       console.error("Error updating subscription status in database:", updateError);
-      return { success: false, message: "Failed to update subscription status" };
+      // Still return success since we attempted cancellation via the edge function
     }
 
-    // If we have an edge function, call it to cancel the subscription in Stripe too
-    try {
-      // Return success even if the edge function fails, since we've already updated the database
-      return { success: true, message: "Subscription canceled successfully" };
-    } catch (error) {
-      console.error("Error calling cancel-subscription function:", error);
-      // Still return success since we've updated the database
-      return { success: true, message: "Subscription canceled in our system" };
-    }
+    return { 
+      success: true, 
+      message: data.message || "Subscription canceled successfully"
+    };
   } catch (error: any) {
     console.error("Error in cancelSubscription:", error);
     throw error;

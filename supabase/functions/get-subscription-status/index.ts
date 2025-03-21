@@ -58,7 +58,7 @@ serve(async (req) => {
       .from('profiles')
       .select('role')
       .eq('user_id', userId)
-      .maybeSingle();
+      .single();
 
     if (profileError) {
       log.debug(`No profile found for user ${userId}`);
@@ -101,26 +101,29 @@ serve(async (req) => {
 
     log.debug(`Subscription data: ${JSON.stringify(subscriptionData)}`);
 
-    // If there's a record in the subscriptions table with 'active' status, prioritize that
-    if (subscriptionData?.status === 'active') {
-      log.info(`Found active subscription in database for user ${userId}`);
+    // If we have a pending subscription (created during checkout but not completed yet)
+    if (subscriptionData?.status === 'pending') {
+      log.info(`Found pending subscription for user ${userId}`);
       return new Response(
         JSON.stringify({
-          active: true,
+          active: false,
           plan: subscriptionData.plan_id,
-          status: 'active',
+          status: 'pending',
           role: userRole,
           trialEnd: null,
           cancelAt: null,
           renewsAt: null,
-          stripeSubscriptionId: subscriptionData.stripe_subscription_id
+          pendingCheckout: true,
+          stripeSubscriptionId: null // Don't include the pending ID
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // If we have a subscription in the database and it's connected to Stripe
-    if (subscriptionData?.stripe_subscription_id) {
+    // Only try to fetch from Stripe if the subscription ID doesn't start with 'pending_'
+    if (subscriptionData?.stripe_subscription_id && 
+        !subscriptionData.stripe_subscription_id.startsWith('pending_')) {
       try {
         // Fetch the latest subscription status from Stripe
         log.debug(`Fetching subscription from Stripe: ${subscriptionData.stripe_subscription_id}`);
@@ -139,14 +142,30 @@ serve(async (req) => {
             trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
             cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
             renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-            stripeSubscriptionId: subscriptionData.stripe_subscription_id
+            stripeSubscriptionId: subscription.id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (stripeError) {
         log.error(`Error retrieving Stripe subscription: ${stripeError.message}`);
         
-        // If we can't reach Stripe, use the local data
+        // If the subscription wasn't found in Stripe, but we have it in our database
+        if (stripeError.code === 'resource_missing') {
+          log.info(`Subscription ${subscriptionData.stripe_subscription_id} not found in Stripe, using local data`);
+          
+          // If the status is 'active' in our database but not in Stripe, we should update our database
+          if (subscriptionData.status === 'active') {
+            log.info(`Updating subscription status to 'inactive' in database`);
+            await supabase
+              .from('subscriptions')
+              .update({ status: 'inactive', updated_at: new Date().toISOString() })
+              .eq('id', subscriptionData.id);
+            
+            subscriptionData.status = 'inactive';
+          }
+        }
+        
+        // Return based on our database status
         return new Response(
           JSON.stringify({
             active: subscriptionData.status === 'active' || subscriptionData.status === 'trialing',
@@ -161,6 +180,22 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    } else if (subscriptionData) {
+      // We have subscription data in our database but no valid Stripe subscription ID
+      log.info(`Using local subscription data for user ${userId}`);
+      return new Response(
+        JSON.stringify({
+          active: subscriptionData.status === 'active' || subscriptionData.status === 'trialing',
+          plan: subscriptionData.plan_id,
+          status: subscriptionData.status,
+          role: userRole,
+          trialEnd: null,
+          cancelAt: null,
+          renewsAt: null,
+          stripeSubscriptionId: subscriptionData.stripe_subscription_id?.startsWith('pending_') ? null : subscriptionData.stripe_subscription_id
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Default response for users without a subscription
@@ -187,4 +222,4 @@ serve(async (req) => {
       }
     );
   }
-});
+}); 

@@ -15,6 +15,8 @@ export type SubscriptionStatus = {
   renewsAt: string | null;
   // Store the raw subscription ID for operations like cancel
   stripeSubscriptionId?: string;
+  // Flag to indicate a pending checkout
+  pendingCheckout?: boolean;
 };
 
 export function useSubscription() {
@@ -79,6 +81,30 @@ export function useSubscription() {
             };
           } else {
             console.log("No active subscription found directly in DB");
+          }
+          
+          // Check for pending subscriptions
+          const { data: pendingSubscription, error: pendingError } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'pending')
+            .maybeSingle();
+            
+          if (pendingError) {
+            console.error("Error checking pending subscription in DB:", pendingError);
+          } else if (pendingSubscription) {
+            console.log("Found pending subscription in DB:", pendingSubscription);
+            return {
+              active: false,
+              plan: pendingSubscription.plan_id,
+              status: 'pending',
+              role: 'athlete',
+              trialEnd: null,
+              cancelAt: null,
+              renewsAt: null,
+              pendingCheckout: true
+            };
           }
           
           // Also check for coach role which gets premium access
