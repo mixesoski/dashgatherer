@@ -111,6 +111,54 @@ serve(async (req) => {
       
       if (pendingSubscriptionData && !pendingError) {
         log.info(`Found pending subscription for user ${userId}`);
+
+        // Special handling for subscriptions that should be active but are still marked pending
+        // If the stripe_subscription_id doesn't start with 'pending_', it means the webhook didn't update it properly
+        if (pendingSubscriptionData.stripe_subscription_id && 
+            !pendingSubscriptionData.stripe_subscription_id.startsWith('pending_')) {
+          
+          try {
+            // Try to check the subscription status directly with Stripe
+            const subscription = await stripe.subscriptions.retrieve(
+              pendingSubscriptionData.stripe_subscription_id
+            );
+            
+            if (subscription.status === 'active' || subscription.status === 'trialing') {
+              // Update the subscription to active since we confirmed it with Stripe
+              const { error: updateError } = await supabase
+                .from('subscriptions')
+                .update({
+                  status: subscription.status,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingSubscriptionData.id);
+              
+              if (updateError) {
+                log.error(`Error updating pending subscription to active: ${updateError.message}`);
+              } else {
+                log.info(`Successfully updated subscription to ${subscription.status} from pending`);
+                
+                return new Response(
+                  JSON.stringify({
+                    active: true,
+                    plan: pendingSubscriptionData.plan_id,
+                    status: subscription.status,
+                    role: userRole,
+                    trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+                    cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
+                    renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+                    stripeSubscriptionId: pendingSubscriptionData.stripe_subscription_id
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+            }
+          } catch (stripeError) {
+            // If we can't reach Stripe or the subscription doesn't exist, continue with the pending status
+            log.error(`Error retrieving Stripe subscription: ${stripeError.message}`);
+          }
+        }
+        
         return new Response(
           JSON.stringify({
             active: false,
@@ -139,6 +187,22 @@ serve(async (req) => {
         );
         
         log.debug(`Stripe subscription data: ${JSON.stringify(subscription)}`);
+
+        // Update our local database if the status has changed
+        if (subscription.status !== subscriptionData.status) {
+          log.info(`Updating subscription status from ${subscriptionData.status} to ${subscription.status}`);
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              status: subscription.status,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', subscriptionData.id);
+            
+          if (updateError) {
+            log.error(`Error updating subscription status: ${updateError.message}`);
+          }
+        }
 
         return new Response(
           JSON.stringify({
@@ -214,4 +278,4 @@ serve(async (req) => {
       }
     );
   }
-}); 
+});

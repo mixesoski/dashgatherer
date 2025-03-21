@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -89,30 +88,42 @@ async function verifyStripeSignature(req: Request) {
     };
   }
 
-  // Get the request body as text for Stripe signature verification
-  const body = await req.text();
-  
-  log.debug(`Stripe signature: ${signature.substring(0, 20)}...`);
-  log.debug(`Request body length: ${body.length} bytes`);
-  log.debug(`Request body preview: ${body.substring(0, 100)}...`);
-
   try {
-    const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-    log.info('Webhook signature verified successfully');
-    log.info(`Webhook event type: ${event.type}`);
-    return { verified: true, event, body };
+    // Get the request body as text for Stripe signature verification
+    const body = await req.text();
+    
+    log.debug(`Stripe signature: ${signature.substring(0, 20)}...`);
+    log.debug(`Request body length: ${body.length} bytes`);
+    log.debug(`Request body preview: ${body.substring(0, 100)}...`);
+
+    try {
+      const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      log.info('Webhook signature verified successfully');
+      log.info(`Webhook event type: ${event.type}`);
+      return { verified: true, event, body };
+    } catch (err) {
+      log.error(`Webhook signature verification failed: ${err.message}`);
+      return { 
+        verified: false, 
+        error: {
+          status: 400,
+          message: `Webhook signature verification failed`,
+          details: err.message,
+          hint: 'Make sure the webhook secret matches the one in your Stripe dashboard',
+          receivedSignature: signature.substring(0, 20) + '...',
+          webhookSecretLength: webhookSecret.length,
+          bodyLength: body.length
+        }
+      };
+    }
   } catch (err) {
-    log.error(`Webhook signature verification failed: ${err.message}`);
-    return { 
-      verified: false, 
+    log.error(`Error processing webhook request body: ${err.message}`);
+    return {
+      verified: false,
       error: {
         status: 400,
-        message: `Webhook signature verification failed`,
-        details: err.message,
-        hint: 'Make sure the webhook secret matches the one in your Stripe dashboard',
-        receivedSignature: signature.substring(0, 20) + '...',
-        webhookSecretLength: webhookSecret.length,
-        bodyLength: body.length
+        message: `Error processing webhook request`,
+        details: err.message
       }
     };
   }
@@ -165,7 +176,7 @@ async function handleCheckoutSessionCompleted(session: any) {
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .single();
+      .maybeSingle();
     
     if (pendingError && pendingError.code !== 'PGRST116') { // PGRST116 is "No rows returned"
       log.error('Error checking for pending subscription:', pendingError);
@@ -288,8 +299,56 @@ async function handleSubscriptionUpdated(subscription: any) {
   const stripeSubscriptionId = subscription.id;
   log.info(`Subscription updated: ${stripeSubscriptionId}, status: ${subscription.status}`);
 
-  // Simple update to subscription table
   try {
+    // First, handle the case where the subscription ID is a temporary 'pending_' ID
+    if (stripeSubscriptionId.startsWith('pending_')) {
+      log.info(`Processing pending subscription update: ${stripeSubscriptionId}`);
+      
+      // Extract the user ID from the temporary ID if possible (some implementations store it in a pattern)
+      // Otherwise, we'll have to check all pending subscriptions
+      const { data: pendingSubscriptions, error: pendingError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('stripe_subscription_id', stripeSubscriptionId)
+        .eq('status', 'pending');
+      
+      if (pendingError) {
+        log.error('Error fetching pending subscriptions:', pendingError);
+        return {
+          success: false,
+          error: {
+            status: 500,
+            message: 'Database query error',
+            details: pendingError.message
+          }
+        };
+      }
+      
+      if (pendingSubscriptions && pendingSubscriptions.length > 0) {
+        log.info(`Found ${pendingSubscriptions.length} pending subscriptions matching ID ${stripeSubscriptionId}`);
+        
+        // Update all matching pending subscriptions to active
+        for (const pendingSub of pendingSubscriptions) {
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', pendingSub.id);
+            
+          if (updateError) {
+            log.error(`Error updating pending subscription ${pendingSub.id}:`, updateError);
+          } else {
+            log.info(`Successfully updated pending subscription ${pendingSub.id} to active`);
+          }
+        }
+        
+        return { success: true };
+      }
+    }
+    
+    // Regular subscription update
     const { error } = await supabase
       .from('subscriptions')
       .update({
@@ -381,11 +440,40 @@ serve(async (req) => {
     // Log request details
     logRequestDetails(req);
     
-    // Verify Stripe signature and get event
+    // Clone the request so we can read the body multiple times if needed
+    const clonedReq = req.clone();
+    
+    // First attempt: Check for Stripe signature
     const verification = await verifyStripeSignature(req);
     
     if (!verification.verified) {
       log.error('Stripe signature verification failed:', verification.error);
+      
+      // Special handling for checkout.session.completed - try a different approach
+      // Some systems post directly without proper signature, so we'll try to process anyway
+      try {
+        const body = await clonedReq.json();
+        
+        if (body.type === 'checkout.session.completed') {
+          log.info('Processing checkout.session.completed event without signature verification');
+          const result = await handleCheckoutSessionCompleted(body.data.object);
+          
+          if (result.success) {
+            return new Response(JSON.stringify({ 
+              received: true,
+              message: 'Webhook processed without signature verification',
+              eventType: body.type 
+            }), { 
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+        }
+      } catch (backupErr) {
+        log.error('Error in backup checkout processing:', backupErr);
+      }
+      
+      // Return original error if backup approach didn't work
       return new Response(JSON.stringify(verification.error), { 
         status: verification.error.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

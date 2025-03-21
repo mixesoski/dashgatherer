@@ -98,16 +98,47 @@ export function useSubscription() {
             console.error("Error checking pending subscription in DB:", pendingError);
           } else if (pendingSubscription) {
             console.log("Found pending subscription in DB:", pendingSubscription);
-            return {
-              active: false,
-              plan: pendingSubscription.plan_id,
-              status: 'pending',
-              role: 'athlete',
-              trialEnd: null,
-              cancelAt: null,
-              renewsAt: null,
-              pendingCheckout: true
-            };
+            
+            // If the stripe_subscription_id doesn't start with 'pending_', it means it should be active
+            if (pendingSubscription.stripe_subscription_id && 
+                !pendingSubscription.stripe_subscription_id.startsWith('pending_')) {
+              // Update it to active
+              const { error: updateError } = await supabase
+                .from('subscriptions')
+                .update({
+                  status: 'active',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingSubscription.id);
+                
+              if (updateError) {
+                console.error("Error updating pending subscription to active:", updateError);
+              } else {
+                console.log("Successfully updated subscription to active from pending");
+                
+                return {
+                  active: true,
+                  plan: pendingSubscription.plan_id,
+                  status: 'active',
+                  role: 'athlete',
+                  trialEnd: null,
+                  cancelAt: null,
+                  renewsAt: null,
+                  stripeSubscriptionId: pendingSubscription.stripe_subscription_id
+                };
+              }
+            } else {
+              return {
+                active: false,
+                plan: pendingSubscription.plan_id,
+                status: 'pending',
+                role: 'athlete',
+                trialEnd: null,
+                cancelAt: null,
+                renewsAt: null,
+                pendingCheckout: true
+              };
+            }
           }
           
           // Also check for coach role which gets premium access
