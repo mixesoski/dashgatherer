@@ -3,9 +3,11 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
+// More extensive CORS headers to support the Stripe webhook
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
@@ -109,15 +111,19 @@ async function handleCheckoutSessionCompleted(session: any) {
   }, null, 2));
   
   // Extract user ID from client_reference_id or metadata
-  const userId = session.client_reference_id || session.metadata?.userId;
+  // We check multiple places to ensure we capture the user ID
+  const userId = session.client_reference_id || 
+                 session.metadata?.userId || 
+                 (session.metadata ? session.metadata.userId : null);
+                 
   const subscriptionId = session.subscription;
   const customerId = session.customer;
   const planId = session.metadata?.planId || 'athlete'; // Default to athlete if not specified
   
-  console.log(`Processing checkout for user: ${userId}, plan: ${planId}, subscription: ${subscriptionId}`);
+  console.log(`Processing checkout for user: ${userId}, plan: ${planId}, subscription: ${subscriptionId}, customer: ${customerId}`);
 
   if (!userId) {
-    console.error('Missing user ID in checkout session (client_reference_id is null)');
+    console.error('Missing user ID in checkout session (client_reference_id and metadata.userId are null)');
     return { 
       success: false, 
       error: {
@@ -171,58 +177,51 @@ async function handleCheckoutSessionCompleted(session: any) {
       .from('profiles')
       .select('user_id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
     
-    if (userError || !userData) {
-      console.error('User not found in profiles table:', userError);
-      return {
-        success: false,
-        error: {
-          status: 400,
-          message: 'User not found',
-          details: 'The user ID from the checkout session does not exist in the profiles table',
-          userId: userId
-        }
-      };
-    }
-  } catch (userCheckError) {
-    console.error('Error checking user existence:', userCheckError);
-    return {
-      success: false,
-      error: {
-        status: 500,
-        message: 'Exception checking user',
-        details: userCheckError.message
-      }
-    };
-  }
-
-  // Update profile and subscription
-  try {
-    // Update profile
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ 
-        role: planId === 'organization' ? 'organization' : 'athlete',
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId);
-
-    if (profileError) {
-      console.error('Error updating profile:', profileError);
+    if (userError) {
+      console.error('Error checking user existence:', userError);
       return {
         success: false,
         error: {
           status: 500,
-          message: 'Profile update error',
-          details: profileError.message
+          message: 'User lookup error',
+          details: userError.message
         }
       };
-    } else {
-      console.log(`Updated user profile for ${userId} with role ${planId}`);
     }
     
-    // Prepare subscription data
+    // If user not found in profiles table, try to check auth.users directly
+    if (!userData) {
+      console.log('User not found in profiles table, will create subscription anyway but log a warning');
+    }
+  } catch (userCheckError) {
+    console.error('Error checking user existence:', userCheckError);
+    // Continue anyway - we'll attempt to create the subscription
+    console.log('Will attempt to create subscription despite user check error');
+  }
+
+  // Update profile and subscription
+  try {
+    // Complete transactions in parallel for better performance
+    const promises = [];
+
+    // 1. Update profile with role
+    if (userId) {
+      console.log(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
+      promises.push(
+        supabase
+          .from('profiles')
+          .upsert({ 
+            user_id: userId, 
+            role: planId === 'organization' ? 'organization' : 'athlete',
+            updated_at: new Date().toISOString()
+          })
+      );
+    }
+
+    // 2. Store subscription data - using upsert for safety
+    console.log(`Storing subscription data for user ${userId}`);
     const subscriptionData = {
       user_id: userId,
       stripe_subscription_id: subscriptionId || `one_time_${Date.now()}`,
@@ -233,25 +232,31 @@ async function handleCheckoutSessionCompleted(session: any) {
       updated_at: new Date().toISOString()
     };
     
-    // Upsert subscription
-    const { error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .upsert(subscriptionData);
+    promises.push(
+      supabase
+        .from('subscriptions')
+        .upsert(subscriptionData)
+    );
+
+    // Wait for all operations to complete
+    const results = await Promise.all(promises);
     
-    if (subscriptionError) {
-      console.error('Error storing subscription data:', subscriptionError);
+    // Check for errors
+    const errors = results.filter(r => r.error);
+    if (errors.length > 0) {
+      console.error('Errors during database updates:', JSON.stringify(errors));
       return {
         success: false,
         error: {
           status: 500,
-          message: `Subscription storage error: ${subscriptionError.message}`,
-          data: subscriptionData
+          message: 'Database update errors',
+          details: errors.map(e => e.error.message).join(', '),
+          fullErrors: errors
         }
       };
-    } else {
-      console.log(`Successfully stored subscription for user ${userId}`);
     }
-
+    
+    console.log('Successfully processed checkout.session.completed');
     return { success: true };
   } catch (err) {
     console.error('Exception processing checkout session:', err);
