@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -57,7 +58,7 @@ serve(async (req) => {
       .from('profiles')
       .select('role')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (profileError) {
       log.debug(`No profile found for user ${userId}`);
@@ -111,7 +112,8 @@ serve(async (req) => {
           role: userRole,
           trialEnd: null,
           cancelAt: null,
-          renewsAt: null
+          renewsAt: null,
+          stripeSubscriptionId: subscriptionData.stripe_subscription_id
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -128,27 +130,6 @@ serve(async (req) => {
         
         log.debug(`Stripe subscription data: ${JSON.stringify(subscription)}`);
 
-        // After getting the Stripe status, also update our local database
-        if (subscription.status === 'active' || subscription.status === 'trialing') {
-          // Update the local record if needed
-          if (subscriptionData.status !== subscription.status) {
-            const { error: updateError } = await supabase
-              .from('subscriptions')
-              .update({ 
-                status: subscription.status,
-                updated_at: new Date().toISOString()
-              })
-              .eq('user_id', userId)
-              .eq('stripe_subscription_id', subscriptionData.stripe_subscription_id);
-            
-            if (updateError) {
-              log.error(`Error updating local subscription status: ${updateError.message}`);
-            } else {
-              log.info(`Updated local subscription status to ${subscription.status}`);
-            }
-          }
-        }
-
         return new Response(
           JSON.stringify({
             active: subscription.status === 'active' || subscription.status === 'trialing',
@@ -157,7 +138,8 @@ serve(async (req) => {
             role: userRole,
             trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
             cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-            renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+            renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+            stripeSubscriptionId: subscriptionData.stripe_subscription_id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -173,7 +155,8 @@ serve(async (req) => {
             role: userRole,
             trialEnd: null,
             cancelAt: null,
-            renewsAt: null
+            renewsAt: null,
+            stripeSubscriptionId: subscriptionData.stripe_subscription_id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -204,4 +187,4 @@ serve(async (req) => {
       }
     );
   }
-}); 
+});
