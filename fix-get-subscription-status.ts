@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -73,6 +74,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
+      .eq('status', 'active')
       .maybeSingle();
 
     if (subscriptionError) {
@@ -98,6 +100,33 @@ serve(async (req) => {
       throw subscriptionError;
     }
 
+    // Check for pending subscriptions
+    if (!subscriptionData) {
+      const { data: pendingSubscriptionData, error: pendingError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .maybeSingle();
+      
+      if (pendingSubscriptionData && !pendingError) {
+        log.info(`Found pending subscription for user ${userId}`);
+        return new Response(
+          JSON.stringify({
+            active: false,
+            plan: pendingSubscriptionData.plan_id,
+            status: 'pending',
+            role: userRole,
+            trialEnd: null,
+            cancelAt: null,
+            renewsAt: null,
+            pendingCheckout: true
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     log.debug(`Subscription data: ${JSON.stringify(subscriptionData)}`);
 
     // If we have a subscription in the database and it's connected to Stripe
@@ -119,7 +148,8 @@ serve(async (req) => {
             role: userRole,
             trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
             cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-            renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null
+            renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+            stripeSubscriptionId: subscriptionData.stripe_subscription_id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -135,11 +165,29 @@ serve(async (req) => {
             role: userRole,
             trialEnd: null,
             cancelAt: null,
-            renewsAt: null
+            renewsAt: null,
+            stripeSubscriptionId: subscriptionData.stripe_subscription_id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    }
+
+    // Check if user has coach role (which gets premium access)
+    if (userRole === 'coach') {
+      log.info(`User ${userId} has coach role with premium access`);
+      return new Response(
+        JSON.stringify({
+          active: true,
+          plan: 'coach',
+          status: 'active',
+          role: 'coach',
+          trialEnd: null,
+          cancelAt: null,
+          renewsAt: null
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Default response for users without a subscription

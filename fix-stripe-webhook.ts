@@ -1,3 +1,6 @@
+
+// This is a copy of the changes made to the stripe-webhook edge function
+// for testing purposes
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -65,51 +68,96 @@ serve(async (req) => {
         return new Response('User ID not found in session data', { status: 400 });
       }
 
-      if (!subscriptionId) {
-        log.error('Subscription ID not found in session data');
-        return new Response('Subscription ID not found in session data', { status: 400 });
+      // Check if there's a pending subscription record first
+      const { data: pendingSubscription, error: pendingError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .single();
+      
+      if (pendingError && pendingError.code !== 'PGRST116') { // PGRST116 is "No rows returned"
+        log.error('Error checking for pending subscription:', pendingError);
       }
-
-      // Complete transactions in parallel for better performance
-      const promises = [];
-
-      // 1. Update profile with role
-      log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
-      promises.push(
-        supabase
-          .from('profiles')
-          .upsert({ 
-            user_id: userId, 
-            role: planId === 'organization' ? 'organization' : 'athlete',
-            updated_at: new Date().toISOString()
-          })
-      );
-
-      // 2. Store subscription data
-      log.debug(`Storing subscription data for user ${userId}`);
-      promises.push(
-        supabase
+      
+      // If we found a pending subscription, update it instead of creating a new one
+      if (pendingSubscription) {
+        log.info(`Found pending subscription for user ${userId}, updating it to active`);
+        
+        const { error: updateError } = await supabase
           .from('subscriptions')
-          .upsert({
-            user_id: userId,
+          .update({
             stripe_subscription_id: subscriptionId,
             stripe_customer_id: session.customer,
-            plan_id: planId,
             status: 'active',
-            created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
-      );
+          .eq('id', pendingSubscription.id);
+        
+        if (updateError) {
+          log.error('Error updating pending subscription to active:', updateError);
+          return new Response(JSON.stringify({ error: updateError }), { status: 500 });
+        }
+        
+        log.info(`Successfully updated pending subscription to active for user ${userId}`);
+      } else {
+        // Complete transactions in parallel for better performance
+        const promises = [];
 
-      // Wait for all operations to complete
-      const results = await Promise.all(promises);
-      log.debug('Database update results:', JSON.stringify(results));
+        // 1. Update profile with role
+        log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
+        promises.push(
+          supabase
+            .from('profiles')
+            .upsert({ 
+              user_id: userId, 
+              role: planId === 'organization' ? 'organization' : 'athlete',
+              updated_at: new Date().toISOString()
+            })
+        );
+
+        // 2. Store subscription data
+        log.debug(`Storing subscription data for user ${userId}`);
+        promises.push(
+          supabase
+            .from('subscriptions')
+            .upsert({
+              user_id: userId,
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: session.customer,
+              plan_id: planId,
+              status: 'active',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+        );
+
+        // Wait for all operations to complete
+        const results = await Promise.all(promises);
+        log.debug('Database update results:', JSON.stringify(results));
+        
+        // Check for errors
+        const errors = results.filter(r => r.error);
+        if (errors.length > 0) {
+          log.error('Errors during database updates:', JSON.stringify(errors));
+          return new Response(JSON.stringify({ errors }), { status: 500 });
+        }
+      }
       
-      // Check for errors
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) {
-        log.error('Errors during database updates:', JSON.stringify(errors));
-        return new Response(JSON.stringify({ errors }), { status: 500 });
+      // Double check that subscription was actually created
+      const { data: checkData, error: checkError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .single();
+        
+      if (checkError) {
+        log.error('Verification check for subscription failed:', checkError);
+      } else if (checkData) {
+        log.info('Subscription successfully verified in database:', checkData.id);
+      } else {
+        log.error('Subscription verification failed: No active record found after operation');
       }
       
       log.info('Successfully processed checkout.session.completed');

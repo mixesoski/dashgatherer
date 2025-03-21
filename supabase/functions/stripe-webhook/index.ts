@@ -159,80 +159,113 @@ async function handleCheckoutSessionCompleted(session: any) {
   }
 
   try {
-    // Complete transactions in parallel for better performance
-    const promises = [];
-
-    // 1. Update profile with role
-    log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
-    promises.push(
-      supabase
-        .from('profiles')
-        .upsert({ 
-          user_id: userId, 
-          role: planId === 'organization' ? 'organization' : 'athlete',
+    // Check if there's a pending subscription record first
+    const { data: pendingSubscription, error: pendingError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .single();
+    
+    if (pendingError && pendingError.code !== 'PGRST116') { // PGRST116 is "No rows returned"
+      log.error('Error checking for pending subscription:', pendingError);
+    }
+    
+    // If we found a pending subscription, update it instead of creating a new one
+    if (pendingSubscription) {
+      log.info(`Found pending subscription for user ${userId}, updating it to active`);
+      
+      const { error: updateError } = await supabase
+        .from('subscriptions')
+        .update({
+          stripe_subscription_id: subscriptionId,
+          stripe_customer_id: customerId,
+          status: 'active',
           updated_at: new Date().toISOString()
         })
-    );
+        .eq('id', pendingSubscription.id);
+      
+      if (updateError) {
+        log.error('Error updating pending subscription to active:', updateError);
+        return {
+          success: false,
+          error: {
+            status: 500,
+            message: 'Database update error',
+            details: updateError.message
+          }
+        };
+      }
+      
+      log.info(`Successfully updated pending subscription to active for user ${userId}`);
+    } else {
+      // No pending subscription found, create a new active subscription
+      log.info(`No pending subscription found for user ${userId}, creating new active subscription`);
+      
+      // Complete transactions in parallel for better performance
+      const promises = [];
 
-    // 2. Store subscription data - using upsert for safety
-    log.debug(`Storing subscription data for user ${userId}`);
-    const subscriptionData = {
-      user_id: userId,
-      stripe_subscription_id: subscriptionId || `one_time_${Date.now()}`,
-      stripe_customer_id: customerId,
-      plan_id: planId,
-      status: 'active',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    
-    promises.push(
-      supabase
-        .from('subscriptions')
-        .upsert(subscriptionData)
-    );
+      // 1. Update profile with role if needed
+      log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
+      promises.push(
+        supabase
+          .from('profiles')
+          .upsert({ 
+            user_id: userId, 
+            role: planId === 'organization' ? 'organization' : 'athlete',
+            updated_at: new Date().toISOString()
+          })
+      );
 
-    // Wait for all operations to complete
-    const results = await Promise.all(promises);
-    
-    // Check for errors and log them in detail
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (result.error) {
-        log.error(`Database operation ${i} failed:`, JSON.stringify(result.error));
-        log.error(`Operation ${i} details:`, i === 0 ? 'profile update' : 'subscription upsert');
-      } else {
-        log.info(`Database operation ${i} succeeded`);
+      // 2. Store subscription data
+      log.debug(`Storing subscription data for user ${userId}`);
+      promises.push(
+        supabase
+          .from('subscriptions')
+          .upsert({
+            user_id: userId,
+            stripe_subscription_id: subscriptionId,
+            stripe_customer_id: customerId,
+            plan_id: planId,
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+      );
+
+      // Wait for all operations to complete
+      const results = await Promise.all(promises);
+      
+      // Check for errors
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        log.error('Errors during database updates:', JSON.stringify(errors));
+        return {
+          success: false,
+          error: {
+            status: 500,
+            message: 'Database update errors',
+            details: errors.map(e => e.error.message).join(', '),
+            fullErrors: errors
+          }
+        };
       }
     }
     
-    const errors = results.filter(r => r.error);
-    if (errors.length > 0) {
-      log.error('Errors during database updates:', JSON.stringify(errors));
-      return {
-        success: false,
-        error: {
-          status: 500,
-          message: 'Database update errors',
-          details: errors.map(e => e.error.message).join(', '),
-          fullErrors: errors
-        }
-      };
-    }
-    
-    // Double check that subscription was actually created
+    // Double check that subscription was actually created/updated
     const { data: checkData, error: checkError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
+      .eq('status', 'active')
       .single();
       
     if (checkError) {
-      log.error('Verification check for subscription creation failed:', checkError);
+      log.error('Verification check for subscription failed:', checkError);
     } else if (checkData) {
       log.info('Subscription successfully verified in database:', checkData.id);
     } else {
-      log.error('Subscription verification failed: No record found after insertion');
+      log.error('Subscription verification failed: No active record found after operation');
     }
     
     log.info('Successfully processed checkout.session.completed');
