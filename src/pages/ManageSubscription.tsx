@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { getSubscriptionStatus, cancelSubscription } from "@/services/stripe";
+import { getSubscriptionStatus } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -10,16 +10,17 @@ import { CreditCard, Calendar, BadgeAlert, CheckCircle, XCircle, Loader2, Home }
 import { toast } from "sonner";
 import { getPlanName } from "@/utils/subscription";
 import { Logo } from "@/components/Logo";
+import { useSubscription } from "@/hooks/useSubscription";
+import { CancelSubscriptionButton } from "@/components/CancelSubscriptionButton";
 
 const ManageSubscription = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [cancelingSubscription, setCancelingSubscription] = useState(false);
-  const [subscription, setSubscription] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const { subscription, isLoading: subscriptionLoading } = useSubscription();
 
   useEffect(() => {
-    const checkSubscription = async () => {
+    const checkAuth = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -28,16 +29,14 @@ const ManageSubscription = () => {
         }
 
         setUserId(user.id);
-        const subscriptionData = await getSubscriptionStatus();
-        setSubscription(subscriptionData);
       } catch (error: any) {
-        toast.error(error.message || "Error loading subscription details");
+        toast.error(error.message || "Error checking authentication");
       } finally {
         setLoading(false);
       }
     };
 
-    checkSubscription();
+    checkAuth();
   }, [navigate]);
 
   const formatDate = (dateString: string | null) => {
@@ -61,32 +60,7 @@ const ManageSubscription = () => {
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (!subscription?.stripeSubscriptionId) {
-      toast.error("No active subscription to cancel");
-      return;
-    }
-
-    try {
-      setCancelingSubscription(true);
-      const result = await cancelSubscription(subscription.stripeSubscriptionId);
-      
-      if (result.success) {
-        toast.success("Your subscription has been canceled");
-        const updatedSubscription = await getSubscriptionStatus();
-        setSubscription(updatedSubscription);
-      } else {
-        toast.error(result.message || "Failed to cancel subscription");
-      }
-    } catch (error: any) {
-      console.error("Error canceling subscription:", error);
-      toast.error(error.message || "Error canceling subscription");
-    } finally {
-      setCancelingSubscription(false);
-    }
-  };
-
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -138,7 +112,7 @@ const ManageSubscription = () => {
                 <div className="rounded-md border p-4 grid gap-3">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Status</span>
-                    <span>{getStatusBadge(subscription.status)}</span>
+                    <span>{getStatusBadge(subscription.status || '')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Plan</span>
@@ -194,23 +168,12 @@ const ManageSubscription = () => {
           <Button variant="outline" onClick={() => navigate("/account")}>
             Back to Account
           </Button>
-          {subscription && subscription.active && (
-            <Button 
-              variant="outline" 
-              className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-              onClick={handleCancelSubscription}
-              disabled={cancelingSubscription}
-            >
-              {cancelingSubscription ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Canceling...
-                </>
-              ) : (
-                "Cancel Subscription"
-              )}
-            </Button>
-          )}
+          
+          {/* This CancelSubscriptionButton will only be visible for active subscriptions */}
+          <CancelSubscriptionButton 
+            variant="outline" 
+            className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+          />
         </CardFooter>
       </Card>
     </div>

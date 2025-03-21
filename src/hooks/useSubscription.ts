@@ -1,6 +1,6 @@
 
 import { useQuery } from "@tanstack/react-query";
-import { getSubscriptionStatus } from "@/services/stripe";
+import { getSubscriptionStatus, cancelSubscription } from "@/services/stripe";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -17,10 +17,13 @@ export type SubscriptionStatus = {
   stripeSubscriptionId?: string;
   // Flag to indicate a pending checkout
   pendingCheckout?: boolean;
+  // Flag to indicate cancellation in progress
+  cancelingSubscription?: boolean;
 };
 
 export function useSubscription() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [cancelingSubscription, setCancelingSubscription] = useState(false);
 
   // Check if user is logged in
   useEffect(() => {
@@ -143,11 +146,38 @@ export function useSubscription() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  // Handle subscription cancellation
+  const handleCancelSubscription = async () => {
+    if (!subscription?.stripeSubscriptionId) {
+      toast.error("No active subscription to cancel");
+      return;
+    }
+
+    try {
+      setCancelingSubscription(true);
+      const result = await cancelSubscription(subscription.stripeSubscriptionId);
+      
+      if (result.success) {
+        toast.success("Your subscription has been canceled");
+        await refetch(); // Refresh subscription data
+      } else {
+        toast.error(result.message || "Failed to cancel subscription");
+      }
+    } catch (error: any) {
+      console.error("Error canceling subscription:", error);
+      toast.error(error.message || "Error canceling subscription");
+    } finally {
+      setCancelingSubscription(false);
+    }
+  };
+
   return {
     subscription: subscription as SubscriptionStatus,
     isLoading,
     error,
     refetch,
+    cancelingSubscription,
+    handleCancelSubscription
   };
 }
 

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { CreditCard, User, LogOut } from "lucide-react";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface ProfileMenuProps {
   onDeleteGarminCredentials: () => void;
@@ -19,6 +20,7 @@ interface ProfileMenuProps {
 
 export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => {
   const navigate = useNavigate();
+  const { subscription } = useSubscription();
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -45,7 +47,7 @@ export const ProfileMenu = ({ onDeleteGarminCredentials }: ProfileMenuProps) => 
         <Link to="/subscription" className="block w-full">
           <DropdownMenuLabel className="cursor-pointer hover:bg-accent hover:text-accent-foreground flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
-            Manage Subscription
+            {subscription?.active ? "Manage Subscription" : "Get Premium"}
           </DropdownMenuLabel>
         </Link>
         
