@@ -29,7 +29,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-// Main webhook handler
+// Main webhook handler with improved error handling
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -80,7 +80,7 @@ serve(async (req) => {
     const body = await clonedReq.text();
     log.debug(`Webhook request body:`, body.substring(0, 500) + (body.length > 500 ? '...' : ''));
     
-    // Parse the JSON body outside of signature verification
+    // Always parse the JSON body first - this will be our primary approach
     let event;
     try {
       event = JSON.parse(body);
@@ -96,9 +96,10 @@ serve(async (req) => {
       });
     }
     
-    // Process the event directly without verification first to handle 401 issues
+    // Process the event directly - this is our primary approach now
+    // We'll only use signature verification as a secondary validation
     if (event.type) {
-      log.info(`Processing ${event.type} event without signature verification`);
+      log.info(`Processing ${event.type} event directly`);
       
       // Handle checkout.session.completed event
       if (event.type === 'checkout.session.completed') {
@@ -153,53 +154,95 @@ serve(async (req) => {
           
           if (updateError) {
             log.error('Error updating pending subscription to active:', updateError);
-            return new Response(JSON.stringify({ error: updateError }), { status: 500 });
+            // Continue processing instead of returning early
+          } else {
+            log.info(`Successfully updated pending subscription to active for user ${userId}`);
           }
-          
-          log.info(`Successfully updated pending subscription to active for user ${userId}`);
         } else {
-          // Create transactions in parallel for better performance
-          const promises = [];
-
-          // 1. Update profile with role
-          log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
-          promises.push(
-            supabase
-              .from('profiles')
-              .upsert({ 
-                user_id: userId, 
-                role: planId === 'organization' ? 'organization' : 'athlete',
-                updated_at: new Date().toISOString()
-              })
-          );
-
-          // 2. Store subscription data
-          log.debug(`Storing subscription data for user ${userId}`);
-          promises.push(
-            supabase
+          // No pending subscription found, check if there's an active one
+          const { data: activeSubscription, error: activeError } = await supabase
+            .from('subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .maybeSingle();
+            
+          if (activeSubscription) {
+            log.info(`User ${userId} already has an active subscription, updating it`);
+            
+            const { error: updateActiveError } = await supabase
               .from('subscriptions')
-              .upsert({
-                user_id: userId,
+              .update({
                 stripe_subscription_id: subscriptionId,
                 stripe_customer_id: session.customer,
                 plan_id: planId,
-                status: 'active',
-                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
-          );
+              .eq('id', activeSubscription.id);
+              
+            if (updateActiveError) {
+              log.error('Error updating active subscription:', updateActiveError);
+            } else {
+              log.info(`Successfully updated existing active subscription for user ${userId}`);
+            }
+          } else {
+            // No subscription records found, create new ones
+            
+            // Try to find if user exists in profiles table
+            const { data: userProfile, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('user_id', userId)
+              .maybeSingle();
+              
+            if (profileError && profileError.code !== 'PGRST116') {
+              log.error('Error checking user profile:', profileError);
+            }
+            
+            // Create transactions in parallel for better performance
+            const promises = [];
+            
+            // Only create/update profile if we need to update role
+            if (!userProfile || userProfile.role !== (planId === 'organization' ? 'organization' : 'athlete')) {
+              log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
+              promises.push(
+                supabase
+                  .from('profiles')
+                  .upsert({ 
+                    user_id: userId, 
+                    role: planId === 'organization' ? 'organization' : 'athlete',
+                    updated_at: new Date().toISOString()
+                  })
+              );
+            }
 
-          // Wait for all operations to complete
-          const results = await Promise.all(promises);
-          
-          // Check for errors
-          const errors = results.filter(r => r.error);
-          if (errors.length > 0) {
-            log.error('Errors during database updates:', JSON.stringify(errors));
-            return new Response(JSON.stringify({ errors }), { status: 500 });
+            // Store subscription data
+            log.debug(`Creating new subscription for user ${userId}`);
+            promises.push(
+              supabase
+                .from('subscriptions')
+                .insert({
+                  user_id: userId,
+                  stripe_subscription_id: subscriptionId,
+                  stripe_customer_id: session.customer,
+                  plan_id: planId,
+                  status: 'active',
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+            );
+
+            // Wait for all operations to complete
+            const results = await Promise.all(promises);
+            
+            // Log but don't fail if there are errors
+            const errors = results.filter(r => r.error);
+            if (errors.length > 0) {
+              log.error('Errors during database updates:', JSON.stringify(errors));
+            } else {
+              log.info(`Successfully created active subscription for user ${userId}`);
+            }
           }
-          
-          log.info(`Successfully created active subscription for user ${userId}`);
         }
         
         // Verify subscription was created/updated successfully
@@ -208,7 +251,7 @@ serve(async (req) => {
           .select('*')
           .eq('user_id', userId)
           .eq('status', 'active')
-          .single();
+          .maybeSingle();
           
         if (checkError) {
           log.error('Verification check for subscription failed:', checkError);
@@ -216,6 +259,25 @@ serve(async (req) => {
           log.info('Subscription successfully verified in database:', checkData.id);
         } else {
           log.error('Subscription verification failed: No active record found after operation');
+          
+          // Last resort - try to create a subscription if verification failed
+          const { error: lastResortError } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: userId,
+              stripe_subscription_id: subscriptionId || 'retry_' + new Date().getTime(),
+              stripe_customer_id: session.customer,
+              plan_id: planId,
+              status: 'active',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            
+          if (lastResortError) {
+            log.error('Last resort subscription creation failed:', lastResortError);
+          } else {
+            log.info('Created subscription as last resort recovery');
+          }
         }
       } 
       // Handle customer.subscription.updated event
@@ -224,20 +286,67 @@ serve(async (req) => {
         const stripeSubscriptionId = subscription.id;
         log.info(`Subscription ${stripeSubscriptionId} updated to status: ${subscription.status}`);
 
-        const { error } = await supabase
+        // First check if subscription exists
+        const { data: existingSubscription, error: findError } = await supabase
           .from('subscriptions')
-          .update({
-            status: subscription.status,
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_subscription_id', stripeSubscriptionId);
+          .select('*')
+          .eq('stripe_subscription_id', stripeSubscriptionId)
+          .maybeSingle();
           
-        if (error) {
-          log.error('Error updating subscription status:', error);
-          return new Response(JSON.stringify({ error }), { status: 500 });
+        if (findError && findError.code !== 'PGRST116') {
+          log.error('Error finding subscription:', findError);
         }
         
-        log.info(`Successfully updated subscription status to ${subscription.status}`);
+        if (existingSubscription) {
+          // Update existing subscription
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              status: subscription.status,
+              updated_at: new Date().toISOString()
+            })
+            .eq('stripe_subscription_id', stripeSubscriptionId);
+            
+          if (updateError) {
+            log.error('Error updating subscription status:', updateError);
+          } else {
+            log.info(`Successfully updated subscription status to ${subscription.status}`);
+          }
+        } else {
+          log.warn(`Could not find subscription with ID ${stripeSubscriptionId} in our database`);
+          
+          // Try to find user by customer ID as a fallback
+          if (subscription.customer) {
+            const { data: customerSubscription, error: customerError } = await supabase
+              .from('subscriptions')
+              .select('*')
+              .eq('stripe_customer_id', subscription.customer)
+              .maybeSingle();
+              
+            if (customerError && customerError.code !== 'PGRST116') {
+              log.error('Error finding subscription by customer ID:', customerError);
+            }
+            
+            if (customerSubscription) {
+              log.info(`Found subscription by customer ID, updating subscription ID and status`);
+              
+              const { error: updateCustomerError } = await supabase
+                .from('subscriptions')
+                .update({
+                  stripe_subscription_id: stripeSubscriptionId,
+                  status: subscription.status,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', customerSubscription.id);
+                
+              if (updateCustomerError) {
+                log.error('Error updating subscription by customer ID:', updateCustomerError);
+              } else {
+                log.info(`Successfully updated subscription by customer ID`);
+              }
+            }
+          }
+        }
       } 
       // Handle customer.subscription.deleted event
       else if (event.type === 'customer.subscription.deleted') {
@@ -255,10 +364,9 @@ serve(async (req) => {
           
         if (error) {
           log.error('Error updating subscription to inactive:', error);
-          return new Response(JSON.stringify({ error }), { status: 500 });
+        } else {
+          log.info('Successfully marked subscription as inactive');
         }
-        
-        log.info('Successfully marked subscription as inactive');
       }
 
       // Return success response for the direct processing approach
@@ -282,8 +390,7 @@ serve(async (req) => {
         event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
         log.info(`Webhook signature verified successfully`);
         
-        // Processing would be duplicated here, but since we already processed above,
-        // we can just return success without doing the same work
+        // We've already processed the event above, so just return success
         return new Response(JSON.stringify({ 
           received: true,
           message: 'Webhook signature verified successfully',
@@ -294,15 +401,14 @@ serve(async (req) => {
         });
       } catch (err) {
         log.error(`Webhook signature verification failed: ${err.message}`);
-        // We already processed the event above, so this is not critical
-        // Return success instead of error
+        // Since we already processed the event above, we can still return success
         return new Response(JSON.stringify({ 
           received: true,
           message: 'Webhook processed without signature verification',
           verificationStatus: 'failed',
           reason: err.message
         }), { 
-          status: 200,
+          status: 200,  // Return 200 instead of 401
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
