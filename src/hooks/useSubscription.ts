@@ -103,6 +103,8 @@ export function useSubscription() {
             // If the stripe_subscription_id doesn't start with 'pending_', it means it should be active
             if (pendingSubscription.stripe_subscription_id && 
                 !pendingSubscription.stripe_subscription_id.startsWith('pending_')) {
+              console.log("Pending subscription has valid Stripe ID - activating immediately");
+              
               // Update it to active immediately in our app
               const { error: updateError } = await supabase
                 .from('subscriptions')
@@ -140,6 +142,7 @@ export function useSubscription() {
                 console.log("Pending subscription is more than 10 minutes old, trying to update status via edge function");
                 
                 try {
+                  // Force a subscription status check through the edge function
                   await supabase.functions.invoke("get-subscription-status", {
                     body: { userId: userId, forceFetch: true }
                   });
@@ -167,6 +170,36 @@ export function useSubscription() {
                   }
                 } catch (webhookError) {
                   console.error("Failed to manually update subscription status:", webhookError);
+                }
+                
+                // As an additional fallback, try to directly update the subscription status
+                // This is helpful when webhook processing failed but the checkout actually completed
+                try {
+                  const { error: manualUpdateError } = await supabase
+                    .from('subscriptions')
+                    .update({
+                      status: 'active',
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', pendingSubscription.id);
+                    
+                  if (!manualUpdateError) {
+                    console.log("Manual update of pending subscription to active succeeded as fallback");
+                    toast.success("Your subscription is now active");
+                    
+                    return {
+                      active: true,
+                      plan: pendingSubscription.plan_id,
+                      status: 'active',
+                      role: 'athlete',
+                      trialEnd: null,
+                      cancelAt: null,
+                      renewsAt: null,
+                      stripeSubscriptionId: pendingSubscription.stripe_subscription_id || 'manual_activation'
+                    };
+                  }
+                } catch (manualError) {
+                  console.error("Manual activation fallback failed:", manualError);
                 }
               }
               
