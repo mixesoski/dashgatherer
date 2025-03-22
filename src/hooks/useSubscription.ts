@@ -61,6 +61,7 @@ export function useSubscription() {
       try {
         // First, directly check the subscriptions table
         if (userId) {
+          // Check for active subscriptions
           const { data: directDbSubscription, error: dbError } = await supabase
             .from('subscriptions')
             .select('*')
@@ -102,7 +103,7 @@ export function useSubscription() {
             // If the stripe_subscription_id doesn't start with 'pending_', it means it should be active
             if (pendingSubscription.stripe_subscription_id && 
                 !pendingSubscription.stripe_subscription_id.startsWith('pending_')) {
-              // Update it to active
+              // Update it to active immediately in our app
               const { error: updateError } = await supabase
                 .from('subscriptions')
                 .update({
@@ -116,6 +117,7 @@ export function useSubscription() {
               } else {
                 console.log("Successfully updated subscription to active from pending");
                 
+                // Return the now active subscription
                 return {
                   active: true,
                   plan: pendingSubscription.plan_id,
@@ -127,7 +129,48 @@ export function useSubscription() {
                   stripeSubscriptionId: pendingSubscription.stripe_subscription_id
                 };
               }
-            } else {
+            } else if (pendingSubscription.created_at) {
+              // Check if the pending subscription is more than 10 minutes old
+              const pendingTime = new Date(pendingSubscription.created_at).getTime();
+              const currentTime = new Date().getTime();
+              const tenMinutesInMs = 10 * 60 * 1000;
+              
+              if (currentTime - pendingTime > tenMinutesInMs) {
+                // If it's been more than 10 minutes, try to call the webhook manually
+                console.log("Pending subscription is more than 10 minutes old, trying to update status via edge function");
+                
+                try {
+                  await supabase.functions.invoke("get-subscription-status", {
+                    body: { userId: userId, forceFetch: true }
+                  });
+                  
+                  // After the function call, refetch directly from the database
+                  const { data: refreshSubscription } = await supabase
+                    .from('subscriptions')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .eq('status', 'active')
+                    .maybeSingle();
+                    
+                  if (refreshSubscription) {
+                    console.log("Successfully updated subscription status to active");
+                    return {
+                      active: true,
+                      plan: refreshSubscription.plan_id,
+                      status: 'active',
+                      role: 'athlete',
+                      trialEnd: null,
+                      cancelAt: null,
+                      renewsAt: null,
+                      stripeSubscriptionId: refreshSubscription.stripe_subscription_id
+                    };
+                  }
+                } catch (webhookError) {
+                  console.error("Failed to manually update subscription status:", webhookError);
+                }
+              }
+              
+              // Return the pending subscription info
               return {
                 active: false,
                 plan: pendingSubscription.plan_id,
