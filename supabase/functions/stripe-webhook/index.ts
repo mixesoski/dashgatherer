@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
 // Enhanced logging for debugging
-const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
+const LOG_LEVEL = 'info'; // 'debug' | 'info' | 'error'
 
 const log = {
   debug: (...args: any[]) => {
@@ -22,14 +22,13 @@ const log = {
   }
 };
 
-// More extensive CORS headers to support the Stripe webhook
+// CORS headers for the webhook endpoint
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-// Main webhook handler with improved error handling
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -40,30 +39,28 @@ serve(async (req) => {
   try {
     log.info('Webhook request received');
     
-    // Log request details for debugging
-    const url = new URL(req.url);
-    log.info(`Request method: ${req.method}, path: ${url.pathname}`);
-    
-    // Log headers in a readable format
-    const headersObj: Record<string, string> = {};
-    for (const [key, value] of req.headers.entries()) {
-      headersObj[key] = value;
-    }
-    log.debug('Request headers:', JSON.stringify(headersObj, null, 2));
-    
     // Initialize environment variables and clients
     const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     
-    // Log environment status
-    log.debug('Environment status:', {
-      webhook_secret: webhookSecret ? 'present' : 'missing',
-      stripe_key: stripeKey ? 'present' : 'missing',
-      supabase_url: supabaseUrl ? 'present' : 'missing',
-      supabase_key: supabaseKey ? 'present (length: ' + supabaseKey.length + ')' : 'missing'
-    });
+    if (!stripeKey || !supabaseUrl || !supabaseKey) {
+      log.error('Missing required environment variables');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Configuration error',
+          details: 'Missing required environment variables',
+          status: 'stripe_key: ' + (stripeKey ? 'present' : 'missing') + 
+                  ', supabase_url: ' + (supabaseUrl ? 'present' : 'missing') +
+                  ', supabase_key: ' + (supabaseKey ? 'present' : 'missing')
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
     
     // Initialize clients
     const stripe = new Stripe(stripeKey, {
@@ -73,365 +70,190 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseKey);
     
-    // Clone the request so we can read the body multiple times if needed
-    const clonedReq = req.clone();
-    
-    // Get the request body as text
-    const body = await clonedReq.text();
-    log.debug(`Webhook request body:`, body.substring(0, 500) + (body.length > 500 ? '...' : ''));
-    
-    // Always parse the JSON body first - this will be our primary approach
+    // Get the request body as text for processing
+    const body = await req.text();
     let event;
+    
+    // First try to parse the event directly from the request body
     try {
       event = JSON.parse(body);
       log.info(`Parsed event type: ${event.type}`);
     } catch (parseErr) {
       log.error(`Error parsing request body: ${parseErr.message}`);
-      return new Response(JSON.stringify({ 
-        error: 'Invalid JSON',
-        details: parseErr.message
-      }), { 
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid JSON',
+          details: parseErr.message
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
-    
-    // Process the event directly - this is our primary approach now
-    // We'll only use signature verification as a secondary validation
-    if (event.type) {
-      log.info(`Processing ${event.type} event directly`);
-      
-      // Handle checkout.session.completed event
-      if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        
-        // Extract user ID in various ways to ensure we catch it
-        const userId = session.client_reference_id || 
-                      session.metadata?.userId || 
-                      (session.metadata ? session.metadata.userId : null);
-                      
-        const subscriptionId = session.subscription;
-        const planId = session.metadata?.planId || 'athlete'; // Default to athlete if not specified
-        
-        log.info(`User ID: ${userId}, Subscription ID: ${subscriptionId}, Plan ID: ${planId}`);
 
-        if (!userId) {
-          log.error('User ID not found in session data');
-          return new Response(JSON.stringify({
-            error: 'User ID not found',
-            details: 'The checkout session does not include a client_reference_id or userId in metadata'
-          }), { 
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          });
-        }
-
-        // Check if there's a pending subscription record first
-        const { data: pendingSubscription, error: pendingError } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('status', 'pending')
-          .maybeSingle();
-        
-        if (pendingError && pendingError.code !== 'PGRST116') { // PGRST116 is "No rows returned"
-          log.error('Error checking for pending subscription:', pendingError);
-        }
-        
-        // If we found a pending subscription, update it instead of creating a new one
-        if (pendingSubscription) {
-          log.info(`Found pending subscription for user ${userId}, updating it to active`);
-          
-          const { error: updateError } = await supabase
-            .from('subscriptions')
-            .update({
-              stripe_subscription_id: subscriptionId,
-              stripe_customer_id: session.customer,
-              status: 'active',
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', pendingSubscription.id);
-          
-          if (updateError) {
-            log.error('Error updating pending subscription to active:', updateError);
-            // Continue processing instead of returning early
-          } else {
-            log.info(`Successfully updated pending subscription to active for user ${userId}`);
-          }
-        } else {
-          // No pending subscription found, check if there's an active one
-          const { data: activeSubscription, error: activeError } = await supabase
-            .from('subscriptions')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('status', 'active')
-            .maybeSingle();
-            
-          if (activeSubscription) {
-            log.info(`User ${userId} already has an active subscription, updating it`);
-            
-            const { error: updateActiveError } = await supabase
-              .from('subscriptions')
-              .update({
-                stripe_subscription_id: subscriptionId,
-                stripe_customer_id: session.customer,
-                plan_id: planId,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', activeSubscription.id);
-              
-            if (updateActiveError) {
-              log.error('Error updating active subscription:', updateActiveError);
-            } else {
-              log.info(`Successfully updated existing active subscription for user ${userId}`);
-            }
-          } else {
-            // No subscription records found, create new ones
-            
-            // Try to find if user exists in profiles table
-            const { data: userProfile, error: profileError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('user_id', userId)
-              .maybeSingle();
-              
-            if (profileError && profileError.code !== 'PGRST116') {
-              log.error('Error checking user profile:', profileError);
-            }
-            
-            // Create transactions in parallel for better performance
-            const promises = [];
-            
-            // Only create/update profile if we need to update role
-            if (!userProfile || userProfile.role !== (planId === 'organization' ? 'organization' : 'athlete')) {
-              log.debug(`Updating profile for user ${userId} with role ${planId === 'organization' ? 'organization' : 'athlete'}`);
-              promises.push(
-                supabase
-                  .from('profiles')
-                  .upsert({ 
-                    user_id: userId, 
-                    role: planId === 'organization' ? 'organization' : 'athlete',
-                    updated_at: new Date().toISOString()
-                  })
-              );
-            }
-
-            // Store subscription data
-            log.debug(`Creating new subscription for user ${userId}`);
-            promises.push(
-              supabase
-                .from('subscriptions')
-                .insert({
-                  user_id: userId,
-                  stripe_subscription_id: subscriptionId,
-                  stripe_customer_id: session.customer,
-                  plan_id: planId,
-                  status: 'active',
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
-            );
-
-            // Wait for all operations to complete
-            const results = await Promise.all(promises);
-            
-            // Log but don't fail if there are errors
-            const errors = results.filter(r => r.error);
-            if (errors.length > 0) {
-              log.error('Errors during database updates:', JSON.stringify(errors));
-            } else {
-              log.info(`Successfully created active subscription for user ${userId}`);
-            }
-          }
-        }
-        
-        // Verify subscription was created/updated successfully
-        const { data: checkData, error: checkError } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', userId)
-          .eq('status', 'active')
-          .maybeSingle();
-          
-        if (checkError) {
-          log.error('Verification check for subscription failed:', checkError);
-        } else if (checkData) {
-          log.info('Subscription successfully verified in database:', checkData.id);
-        } else {
-          log.error('Subscription verification failed: No active record found after operation');
-          
-          // Last resort - try to create a subscription if verification failed
-          const { error: lastResortError } = await supabase
-            .from('subscriptions')
-            .insert({
-              user_id: userId,
-              stripe_subscription_id: subscriptionId || 'retry_' + new Date().getTime(),
-              stripe_customer_id: session.customer,
-              plan_id: planId,
-              status: 'active',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-            
-          if (lastResortError) {
-            log.error('Last resort subscription creation failed:', lastResortError);
-          } else {
-            log.info('Created subscription as last resort recovery');
-          }
-        }
-      } 
-      // Handle customer.subscription.updated event
-      else if (event.type === 'customer.subscription.updated') {
-        const subscription = event.data.object;
-        const stripeSubscriptionId = subscription.id;
-        log.info(`Subscription ${stripeSubscriptionId} updated to status: ${subscription.status}`);
-
-        // First check if subscription exists
-        const { data: existingSubscription, error: findError } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('stripe_subscription_id', stripeSubscriptionId)
-          .maybeSingle();
-          
-        if (findError && findError.code !== 'PGRST116') {
-          log.error('Error finding subscription:', findError);
-        }
-        
-        if (existingSubscription) {
-          // Update existing subscription
-          const { error: updateError } = await supabase
-            .from('subscriptions')
-            .update({
-              status: subscription.status,
-              updated_at: new Date().toISOString()
-            })
-            .eq('stripe_subscription_id', stripeSubscriptionId);
-            
-          if (updateError) {
-            log.error('Error updating subscription status:', updateError);
-          } else {
-            log.info(`Successfully updated subscription status to ${subscription.status}`);
-          }
-        } else {
-          log.warn(`Could not find subscription with ID ${stripeSubscriptionId} in our database`);
-          
-          // Try to find user by customer ID as a fallback
-          if (subscription.customer) {
-            const { data: customerSubscription, error: customerError } = await supabase
-              .from('subscriptions')
-              .select('*')
-              .eq('stripe_customer_id', subscription.customer)
-              .maybeSingle();
-              
-            if (customerError && customerError.code !== 'PGRST116') {
-              log.error('Error finding subscription by customer ID:', customerError);
-            }
-            
-            if (customerSubscription) {
-              log.info(`Found subscription by customer ID, updating subscription ID and status`);
-              
-              const { error: updateCustomerError } = await supabase
-                .from('subscriptions')
-                .update({
-                  stripe_subscription_id: stripeSubscriptionId,
-                  status: subscription.status,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', customerSubscription.id);
-                
-              if (updateCustomerError) {
-                log.error('Error updating subscription by customer ID:', updateCustomerError);
-              } else {
-                log.info(`Successfully updated subscription by customer ID`);
-              }
-            }
-          }
-        }
-      } 
-      // Handle customer.subscription.deleted event
-      else if (event.type === 'customer.subscription.deleted') {
-        const subscription = event.data.object;
-        const stripeSubscriptionId = subscription.id;
-        log.info(`Subscription ${stripeSubscriptionId} deleted`);
-
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({
-            status: 'inactive',
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_subscription_id', stripeSubscriptionId);
-          
-        if (error) {
-          log.error('Error updating subscription to inactive:', error);
-        } else {
-          log.info('Successfully marked subscription as inactive');
-        }
-      }
-
-      // Return success response for the direct processing approach
-      return new Response(JSON.stringify({ 
-        received: true,
-        message: 'Webhook processed successfully without signature verification',
-        eventType: event.type
-      }), { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    // Fallback to signature verification only if direct processing didn't work
-    // This is now secondary since we often get 401 errors with missing signature
+    // Get the Stripe signature header if it exists
     const signature = req.headers.get('stripe-signature');
+    let signatureVerified = false;
     
+    // Verify the signature if possible
     if (signature && webhookSecret) {
       try {
-        log.info('Attempting webhook signature verification as fallback');
-        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-        log.info(`Webhook signature verified successfully`);
-        
-        // We've already processed the event above, so just return success
-        return new Response(JSON.stringify({ 
-          received: true,
-          message: 'Webhook signature verified successfully',
-          eventType: event.type 
-        }), { 
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        const verifiedEvent = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+        log.info('Stripe signature verified successfully');
+        signatureVerified = true;
+        // Update the event with the verified one
+        event = verifiedEvent;
       } catch (err) {
-        log.error(`Webhook signature verification failed: ${err.message}`);
-        // Since we already processed the event above, we can still return success
-        return new Response(JSON.stringify({ 
-          received: true,
-          message: 'Webhook processed without signature verification',
-          verificationStatus: 'failed',
-          reason: err.message
-        }), { 
-          status: 200,  // Return 200 instead of 401
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        log.info(`Signature verification failed: ${err.message}. Will still process the event.`);
+        // Continue with the directly parsed event
+      }
+    } else if (!signature) {
+      log.info('No stripe-signature header. Proceeding with unverified event.');
+    } else if (!webhookSecret) {
+      log.info('No webhook secret configured. Proceeding with unverified event.');
+    }
+    
+    // Process the Stripe event
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      log.info(`Processing checkout.session.completed event`);
+      
+      // Extract user ID from the session data
+      const userId = session.client_reference_id || 
+                    session.metadata?.userId || 
+                    (session.metadata ? session.metadata.userId : null);
+      
+      const subscriptionId = session.subscription;
+      const planId = session.metadata?.planId || 'athlete';
+      
+      log.info(`User ID: ${userId}, Subscription ID: ${subscriptionId}, Plan ID: ${planId}`);
+      
+      if (!userId) {
+        log.error('User ID not found in session data');
+        return new Response(
+          JSON.stringify({
+            error: 'User ID not found',
+            details: 'The checkout session does not include a client_reference_id or userId in metadata'
+          }),
+          { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
+
+      // Update profile to set role
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: userId,
+          role: planId === 'organization' ? 'organization' : 'athlete',
+          updated_at: new Date().toISOString()
         });
+        
+      if (profileError) {
+        log.error('Error updating profile:', profileError);
+      } else {
+        log.info(`Updated profile role to ${planId} for user ${userId}`);
+      }
+      
+      // Create or update subscription record
+      const { error: subscriptionError } = await supabase
+        .from('subscriptions')
+        .upsert({
+          user_id: userId,
+          stripe_subscription_id: subscriptionId,
+          stripe_customer_id: session.customer,
+          plan_id: planId,
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        
+      if (subscriptionError) {
+        log.error('Error creating subscription record:', subscriptionError);
+      } else {
+        log.info(`Created/updated subscription record for user ${userId}`);
+      }
+    }
+    else if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object;
+      log.info(`Processing customer.subscription.updated event for subscription ${subscription.id}`);
+      
+      // Find the subscription in our database
+      const { data: subsData, error: subsError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('stripe_subscription_id', subscription.id)
+        .maybeSingle();
+        
+      if (subsError) {
+        log.error('Error finding subscription:', subsError);
+      } else if (subsData) {
+        // Update the subscription status
+        const { error: updateError } = await supabase
+          .from('subscriptions')
+          .update({
+            status: subscription.status,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', subsData.id);
+          
+        if (updateError) {
+          log.error('Error updating subscription status:', updateError);
+        } else {
+          log.info(`Updated subscription status to ${subscription.status}`);
+        }
+      } else {
+        log.info(`No subscription found with ID ${subscription.id}`);
+      }
+    }
+    else if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      log.info(`Processing customer.subscription.deleted event for subscription ${subscription.id}`);
+      
+      // Update the subscription status to inactive
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({
+          status: 'inactive',
+          updated_at: new Date().toISOString()
+        })
+        .eq('stripe_subscription_id', subscription.id);
+        
+      if (error) {
+        log.error('Error updating subscription status to inactive:', error);
+      } else {
+        log.info(`Successfully marked subscription ${subscription.id} as inactive`);
       }
     }
     
-    // We've already processed the event without verification at this point
-    return new Response(JSON.stringify({ 
-      received: true,
-      message: 'Webhook processed without signature verification',
-      note: 'Signature verification was skipped because signature or webhook secret was missing'
-    }), { 
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    // Return a success response
+    return new Response(
+      JSON.stringify({ 
+        received: true,
+        signatureVerified,
+        eventType: event.type
+      }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   } catch (err) {
-    log.error(`Webhook Error: ${err.message}`, err);
-    return new Response(JSON.stringify({ 
-      error: 'Webhook Error',
-      message: err.message,
-      stack: err.stack
-    }), { 
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    log.error('Unexpected error processing webhook:', err);
+    
+    return new Response(
+      JSON.stringify({ 
+        error: 'Webhook Error',
+        message: err.message,
+        stack: err.stack
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 });
