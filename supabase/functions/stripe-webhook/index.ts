@@ -157,171 +157,183 @@ serve(async (req) => {
         );
       }
 
-      // Update profile to set role
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: userId,
-          role: planId === 'organization' ? 'organization' : 'athlete',
-          updated_at: new Date().toISOString()
-        });
-        
-      if (profileError) {
-        log.error('Error updating profile:', profileError);
-      } else {
-        log.info(`Updated profile role to ${planId === 'organization' ? 'organization' : 'athlete'} for user ${userId}`);
-      }
-      
-      // Check for existing pending subscription
-      const { data: pendingSubscription, error: pendingError } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'pending')
-        .maybeSingle();
-        
-      if (pendingError) {
-        log.error('Error checking for pending subscription:', pendingError);
-      }
-      
-      if (pendingSubscription) {
-        // Update the pending subscription to active
-        const { error: updateError } = await supabase
-          .from('subscriptions')
-          .update({
-            stripe_subscription_id: subscriptionId,
-            stripe_customer_id: session.customer,
-            status: 'active',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', pendingSubscription.id);
-          
-        if (updateError) {
-          log.error('Error updating pending subscription:', updateError);
-        } else {
-          log.info(`Updated pending subscription to active for user ${userId}`);
-        }
-      } else {
-        // Create a new subscription record
-        const { error: subscriptionError } = await supabase
-          .from('subscriptions')
+      try {
+        // Update profile to set role
+        const { error: profileError } = await supabase
+          .from('profiles')
           .upsert({
             user_id: userId,
-            stripe_subscription_id: subscriptionId,
-            stripe_customer_id: session.customer,
-            plan_id: planId,
-            status: 'active',
-            created_at: new Date().toISOString(),
+            role: planId === 'organization' ? 'organization' : 'athlete',
             updated_at: new Date().toISOString()
           });
           
-        if (subscriptionError) {
-          log.error('Error creating subscription record:', subscriptionError);
+        if (profileError) {
+          log.error('Error updating profile:', profileError);
         } else {
-          log.info(`Created subscription record for user ${userId}`);
+          log.info(`Updated profile role to ${planId === 'organization' ? 'organization' : 'athlete'} for user ${userId}`);
         }
-      }
-      
-      // Verify the subscription was created
-      const { data: verifyData, error: verifyError } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .maybeSingle();
         
-      if (verifyError) {
-        log.error('Error verifying subscription:', verifyError);
-      } else if (verifyData) {
-        log.info(`Verified subscription created successfully with ID ${verifyData.id}`);
-      } else {
-        log.error('Failed to verify subscription creation');
+        // Check for existing pending subscription
+        const { data: pendingSubscription, error: pendingError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'pending')
+          .maybeSingle();
+          
+        if (pendingError) {
+          log.error('Error checking for pending subscription:', pendingError);
+        }
+        
+        if (pendingSubscription) {
+          // Update the pending subscription to active
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: session.customer,
+              status: 'active',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', pendingSubscription.id);
+            
+          if (updateError) {
+            log.error('Error updating pending subscription:', updateError);
+          } else {
+            log.info(`Updated pending subscription to active for user ${userId}`);
+          }
+        } else {
+          // Create a new subscription record
+          const { error: subscriptionError } = await supabase
+            .from('subscriptions')
+            .upsert({
+              user_id: userId,
+              stripe_subscription_id: subscriptionId,
+              stripe_customer_id: session.customer,
+              plan_id: planId,
+              status: 'active',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            
+          if (subscriptionError) {
+            log.error('Error creating subscription record:', subscriptionError);
+          } else {
+            log.info(`Created subscription record for user ${userId}`);
+          }
+        }
+        
+        // Verify the subscription was created
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .maybeSingle();
+          
+        if (verifyError) {
+          log.error('Error verifying subscription:', verifyError);
+        } else if (verifyData) {
+          log.info(`Verified subscription created successfully with ID ${verifyData.id}`);
+        } else {
+          log.error('Failed to verify subscription creation');
+        }
+      } catch (dbErr) {
+        log.error('Database operation error:', dbErr);
       }
     }
     else if (event.type === 'customer.subscription.updated') {
       const subscription = event.data.object;
       log.info(`Processing customer.subscription.updated event for subscription ${subscription.id}`);
       
-      // Find the subscription in our database
-      const { data: subsData, error: subsError } = await supabase
-        .from('subscriptions')
-        .select('*')
-        .eq('stripe_subscription_id', subscription.id)
-        .maybeSingle();
-        
-      if (subsError) {
-        log.error('Error finding subscription:', subsError);
-      } else if (subsData) {
-        // Update the subscription status
-        const { error: updateError } = await supabase
+      try {
+        // Find the subscription in our database
+        const { data: subsData, error: subsError } = await supabase
           .from('subscriptions')
-          .update({
-            status: subscription.status,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', subsData.id);
+          .select('*')
+          .eq('stripe_subscription_id', subscription.id)
+          .maybeSingle();
           
-        if (updateError) {
-          log.error('Error updating subscription status:', updateError);
-        } else {
-          log.info(`Updated subscription status to ${subscription.status}`);
-        }
-      } else {
-        log.info(`No subscription found with ID ${subscription.id}`);
-        
-        // Try to find by customer ID as a fallback
-        if (subscription.customer) {
-          const { data: customerData, error: customerError } = await supabase
+        if (subsError) {
+          log.error('Error finding subscription:', subsError);
+        } else if (subsData) {
+          // Update the subscription status
+          const { error: updateError } = await supabase
             .from('subscriptions')
-            .select('*')
-            .eq('stripe_customer_id', subscription.customer)
-            .maybeSingle();
+            .update({
+              status: subscription.status,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', subsData.id);
             
-          if (customerError) {
-            log.error('Error finding subscription by customer ID:', customerError);
-          } else if (customerData) {
-            log.info(`Found subscription by customer ID instead: ${customerData.id}`);
-            
-            // Update with the correct subscription ID and status
-            const { error: updateError } = await supabase
+          if (updateError) {
+            log.error('Error updating subscription status:', updateError);
+          } else {
+            log.info(`Updated subscription status to ${subscription.status}`);
+          }
+        } else {
+          log.info(`No subscription found with ID ${subscription.id}`);
+          
+          // Try to find by customer ID as a fallback
+          if (subscription.customer) {
+            const { data: customerData, error: customerError } = await supabase
               .from('subscriptions')
-              .update({
-                stripe_subscription_id: subscription.id,
-                status: subscription.status,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', customerData.id);
+              .select('*')
+              .eq('stripe_customer_id', subscription.customer)
+              .maybeSingle();
               
-            if (updateError) {
-              log.error('Error updating subscription found by customer ID:', updateError);
-            } else {
-              log.info(`Updated subscription with correct subscription ID and status`);
+            if (customerError) {
+              log.error('Error finding subscription by customer ID:', customerError);
+            } else if (customerData) {
+              log.info(`Found subscription by customer ID instead: ${customerData.id}`);
+              
+              // Update with the correct subscription ID and status
+              const { error: updateError } = await supabase
+                .from('subscriptions')
+                .update({
+                  stripe_subscription_id: subscription.id,
+                  status: subscription.status,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', customerData.id);
+                
+              if (updateError) {
+                log.error('Error updating subscription found by customer ID:', updateError);
+              } else {
+                log.info(`Updated subscription with correct subscription ID and status`);
+              }
             }
           }
         }
+      } catch (dbErr) {
+        log.error('Database operation error:', dbErr);
       }
     }
     else if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object;
       log.info(`Processing customer.subscription.deleted event for subscription ${subscription.id}`);
       
-      // Update the subscription status to inactive
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          status: 'inactive',
-          updated_at: new Date().toISOString()
-        })
-        .eq('stripe_subscription_id', subscription.id);
-        
-      if (error) {
-        log.error('Error updating subscription status to inactive:', error);
-      } else {
-        log.info(`Successfully marked subscription ${subscription.id} as inactive`);
+      try {
+        // Update the subscription status to inactive
+        const { error } = await supabase
+          .from('subscriptions')
+          .update({
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+          })
+          .eq('stripe_subscription_id', subscription.id);
+          
+        if (error) {
+          log.error('Error updating subscription status to inactive:', error);
+        } else {
+          log.info(`Successfully marked subscription ${subscription.id} as inactive`);
+        }
+      } catch (dbErr) {
+        log.error('Database operation error:', dbErr);
       }
     }
     
-    // Always return a success response
+    // Always return a success response to Stripe, even if there were internal processing errors
     return new Response(
       JSON.stringify({ 
         received: true,
@@ -337,7 +349,8 @@ serve(async (req) => {
   } catch (err) {
     log.error('Unexpected error processing webhook:', err);
     
-    // Even for errors, return 200 to prevent Stripe retries (we'll handle errors internally)
+    // Return a 200 response even for errors, to acknowledge receipt 
+    // (Stripe will retry if not 2xx)
     return new Response(
       JSON.stringify({ 
         received: true,
