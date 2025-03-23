@@ -6,6 +6,7 @@ import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
 };
 
 serve(async (req) => {
@@ -15,126 +16,115 @@ serve(async (req) => {
   }
 
   try {
-    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-    const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
-    const athletePriceId = Deno.env.get('STRIPE_ATHLETE_PRICE_ID');
+    // Retrieve environment variables
+    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
+    const webhookSecretKey = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
+    const athletePriceId = Deno.env.get('STRIPE_ATHLETE_PRICE_ID') || '';
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-    const configStatus = {
-      status: 'ok',
-      stripeKeyConfigured: !!stripeSecretKey,
-      webhookConfigured: !!webhookSecret,
-      athletePriceConfigured: !!athletePriceId,
+    console.log('Checking Stripe configuration...');
+    
+    // Prepare response data
+    const configurationData: any = {
+      webhookConfigured: webhookSecretKey.length > 0,
+      webhookInfo: webhookSecretKey 
+        ? 'Webhook secret is configured' 
+        : 'Webhook secret is not configured',
+      
+      stripeKeyConfigured: stripeSecretKey.length > 0,
+      stripeInfo: stripeSecretKey
+        ? `Stripe API key is configured (${stripeSecretKey.startsWith('sk_test_') ? 'TEST' : 'LIVE'} mode)`
+        : 'Stripe API key is not configured',
+      
+      athletePriceConfigured: athletePriceId.length > 0,
+      athletePriceInfo: athletePriceId
+        ? `Athlete price ID is configured: ${athletePriceId.substring(0, 5)}...`
+        : 'Athlete price ID is not configured',
+        
       environmentVariables: {
-        'STRIPE_SECRET_KEY': stripeSecretKey ? 
-          `✓ Key exists${stripeSecretKey.startsWith('sk_test_') ? ' (Test Mode)' : ' (Live Mode)'}` : 
-          '✗ Missing',
-        'STRIPE_WEBHOOK_SECRET': webhookSecret ? 
-          `✓ Secret exists${webhookSecret.startsWith('whsec_') ? '' : ' (Invalid format)'}` : 
-          '✗ Missing',
-        'STRIPE_ATHLETE_PRICE_ID': athletePriceId ? 
-          `✓ Price ID exists${athletePriceId.startsWith('price_') ? '' : ' (Invalid format)'}` : 
-          '✗ Missing'
-      },
-      details: {}
+        'STRIPE_SECRET_KEY': stripeSecretKey ? `${stripeSecretKey.substring(0, 8)}... ✓` : 'Missing ✗',
+        'STRIPE_WEBHOOK_SECRET': webhookSecretKey ? `${webhookSecretKey.substring(0, 8)}... ✓` : 'Missing ✗',
+        'STRIPE_ATHLETE_PRICE_ID': athletePriceId ? `${athletePriceId.substring(0, 8)}... ✓` : 'Missing ✗',
+      }
     };
 
-    // Check Stripe key configuration
-    if (!stripeSecretKey) {
-      configStatus.status = 'error';
-      configStatus.stripeInfo = 'Stripe secret key is not configured';
-    } else if (!stripeSecretKey.startsWith('sk_test_')) {
-      configStatus.stripeInfo = 'Warning: Not using a test mode key (sk_test_)';
-    } else {
+    // Try to connect to Stripe if we have an API key
+    if (stripeSecretKey) {
       try {
         const stripe = new Stripe(stripeSecretKey, {
           httpClient: Stripe.createFetchHttpClient(),
           apiVersion: '2023-10-16',
         });
         
-        // Test the Stripe API with a simple call
-        await stripe.customers.list({ limit: 1 });
-        configStatus.stripeInfo = 'Stripe API TEST mode connection successful';
-      } catch (error) {
-        configStatus.status = 'error';
-        configStatus.stripeInfo = `Stripe API connection failed: ${error.message}`;
+        // Verify we can connect to Stripe by making a simple request
+        const account = await stripe.account.retrieve();
+        configurationData.stripeConnectionVerified = true;
+        configurationData.stripeAccount = {
+          id: account.id,
+          businessName: account.business_profile?.name || 'Not set',
+          testMode: stripeSecretKey.startsWith('sk_test_')
+        };
+      } catch (stripeError) {
+        console.error('Stripe connection error:', stripeError);
+        configurationData.stripeConnectionVerified = false;
+        configurationData.stripeConnectionError = stripeError.message;
       }
     }
 
-    // Check webhook configuration
-    if (!webhookSecret) {
-      configStatus.status = 'error';
-      configStatus.webhookInfo = 'Webhook secret is not configured';
-    } else if (!webhookSecret.startsWith('whsec_')) {
-      configStatus.webhookInfo = 'Warning: Webhook secret does not start with whsec_';
-    } else {
-      configStatus.webhookInfo = 'Webhook secret is properly formatted';
-    }
-
-    // Check price ID configuration
-    if (!athletePriceId) {
-      configStatus.status = 'error';
-      configStatus.athletePriceInfo = 'Athlete price ID is not configured';
-    } else if (!athletePriceId.startsWith('price_')) {
-      configStatus.athletePriceInfo = 'Warning: Price ID does not start with price_';
-    } else {
-      configStatus.athletePriceInfo = 'Price ID is properly formatted';
-    }
-
-    // Check database setup
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-      
-      if (supabaseUrl && supabaseKey) {
+    // Check database tables if we have Supabase credentials
+    if (supabaseUrl && supabaseKey) {
+      try {
         const supabase = createClient(supabaseUrl, supabaseKey);
         
         // Check if subscriptions table exists
-        const { count, error } = await supabase
+        const { data, error, count } = await supabase
           .from('subscriptions')
           .select('*', { count: 'exact', head: true });
           
         if (error) {
-          configStatus.database = {
+          configurationData.database = {
             tablesExist: false,
             error: error.message
           };
         } else {
-          configStatus.database = {
+          configurationData.database = {
             tablesExist: true,
             subscriptionCount: count
           };
         }
-      } else {
-        configStatus.database = {
+      } catch (dbError) {
+        console.error('Database check error:', dbError);
+        configurationData.database = {
           tablesExist: false,
-          error: 'Supabase credentials not configured'
+          error: dbError.message
         };
       }
-    } catch (dbError) {
-      configStatus.database = {
-        tablesExist: false,
-        error: dbError.message
-      };
     }
 
     return new Response(
-      JSON.stringify(configStatus),
+      JSON.stringify(configurationData),
       { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json' 
+        } 
       }
     );
   } catch (error) {
-    console.error('Error checking webhook config:', error);
+    console.error('Error checking webhook configuration:', error);
     
     return new Response(
       JSON.stringify({ 
-        status: 'error',
-        message: error.message
+        error: 'Failed to check webhook configuration',
+        message: error.message 
       }),
       { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        headers: { 
+          ...corsHeaders,
+          'Content-Type': 'application/json' 
+        } 
       }
     );
   }
