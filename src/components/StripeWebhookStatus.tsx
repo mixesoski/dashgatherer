@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertCircle, CheckCircle, XCircle, ShieldAlert, ExternalLink, RefreshCw, Database } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle, XCircle, ShieldAlert, ExternalLink, RefreshCw, Database, BarChart } from "lucide-react";
 import { verifyStripeWebhookConfig } from "@/services/stripe";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,9 @@ export const StripeWebhookStatus = () => {
   const [config, setConfig] = useState<any>(null);
   const [subscriptionCount, setSubscriptionCount] = useState<number | null>(null);
   const [checkingDatabase, setCheckingDatabase] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [fetchingLogs, setFetchingLogs] = useState(false);
 
   const checkWebhookConfig = async () => {
     setLoading(true);
@@ -58,6 +61,44 @@ export const StripeWebhookStatus = () => {
     }
   };
 
+  const fetchWebhookLogs = async () => {
+    setFetchingLogs(true);
+    try {
+      // Call edge function to check logs if available, or display dummy logs
+      const { data, error } = await supabase.functions.invoke("check-webhook-config", {
+        body: { fetchLogs: true }
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (data.logs) {
+        setLogs(data.logs);
+      } else {
+        setLogs([{
+          timestamp: new Date().toISOString(),
+          message: "No logs available or log fetching not supported"
+        }]);
+      }
+      
+      setShowLogs(true);
+    } catch (error: any) {
+      console.error("Error fetching webhook logs:", error);
+      toast.error(`Failed to fetch webhook logs: ${error.message}`);
+      
+      // Set dummy log entry on error
+      setLogs([{
+        timestamp: new Date().toISOString(),
+        message: `Error fetching logs: ${error.message}`,
+        level: "error"
+      }]);
+      setShowLogs(true);
+    } finally {
+      setFetchingLogs(false);
+    }
+  };
+
   // Only for admins/developers
   return (
     <Card className="mt-4">
@@ -73,7 +114,7 @@ export const StripeWebhookStatus = () => {
             Check that Stripe webhook is properly configured to process payments.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-wrap gap-2">
             <Button 
               variant="outline" 
               size="sm" 
@@ -94,6 +135,17 @@ export const StripeWebhookStatus = () => {
               {checkingDatabase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Database className={`mr-2 h-4 w-4 ${checkingDatabase ? 'hidden' : ''}`} />
               Check Subscriptions in Database
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={fetchWebhookLogs} 
+              disabled={fetchingLogs}
+            >
+              {fetchingLogs && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <BarChart className={`mr-2 h-4 w-4 ${fetchingLogs ? 'hidden' : ''}`} />
+              View Webhook Logs
             </Button>
           </div>
           
@@ -128,6 +180,13 @@ export const StripeWebhookStatus = () => {
                     <XCircle className="h-4 w-4 text-red-500" />}
                   </span>
                 </div>
+                <div className="flex justify-between">
+                  <span>Webhook URL Format:</span>
+                  <span>{config.webhookUrlFormatCorrect ? 
+                    <CheckCircle className="h-4 w-4 text-green-500" /> : 
+                    <XCircle className="h-4 w-4 text-red-500" />}
+                  </span>
+                </div>
               </div>
               
               {/* Detailed configuration info */}
@@ -137,6 +196,11 @@ export const StripeWebhookStatus = () => {
                   {config.webhookInfo && <p>{config.webhookInfo}</p>}
                   {config.stripeInfo && <p>{config.stripeInfo}</p>}
                   {config.athletePriceInfo && <p>{config.athletePriceInfo}</p>}
+                  {config.webhookEndpoint && (
+                    <p className="text-gray-700 break-all">
+                      <span className="font-medium">Webhook URL:</span> {config.webhookEndpoint}
+                    </p>
+                  )}
                   {config.database?.error && (
                     <p className="text-red-500">Database error: {config.database.error}</p>
                   )}
@@ -167,14 +231,29 @@ export const StripeWebhookStatus = () => {
             </div>
           )}
           
+          {showLogs && logs.length > 0 && (
+            <div className="mt-4 border rounded-md p-3">
+              <h4 className="font-medium mb-2">Recent Webhook Logs</h4>
+              <div className="bg-gray-900 text-gray-100 p-3 rounded text-xs font-mono overflow-x-auto max-h-60 overflow-y-auto">
+                {logs.map((log, idx) => (
+                  <div key={idx} className={`mb-1 ${log.level === 'error' ? 'text-red-400' : ''}`}>
+                    <span className="text-gray-500">[{new Date(log.timestamp).toLocaleString()}]</span> {log.message}
+                  </div>
+                ))}
+                {logs.length === 0 && <div>No logs available</div>}
+              </div>
+            </div>
+          )}
+          
           <div className="mt-4 text-xs text-muted-foreground">
             <p className="font-semibold">Troubleshooting Steps:</p>
             <ol className="list-decimal pl-5 space-y-1 mt-1">
               <li>Check that your Stripe secret and webhook secret are correctly set in Supabase Edge Function configuration</li>
               <li>Verify your webhook URL is correctly configured in Stripe dashboard</li>
-              <li>Make sure the <code>stripe-signature</code> header is being sent with webhook requests</li>
-              <li>Check that you have enabled the <code>checkout.session.completed</code> and subscription events</li>
               <li>The webhook URL should be: <code>https://[project-id].functions.supabase.co/stripe-webhook</code></li>
+              <li><strong>Important:</strong> Do not include any authorization token parameters or api keys in the webhook URL itself</li>
+              <li>Make sure you have enabled the <code>checkout.session.completed</code> and subscription events</li>
+              <li>Stripe will still send events even without proper authentication, and our webhook now accepts them without verification</li>
             </ol>
             <div className="mt-2">
               <a 

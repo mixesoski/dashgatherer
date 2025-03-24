@@ -22,10 +22,10 @@ const log = {
   }
 };
 
-// CORS headers for the webhook endpoint
+// CORS headers for the webhook endpoint - allow all origins
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+  'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
@@ -33,7 +33,10 @@ serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     log.info('Handling OPTIONS request for CORS preflight');
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -65,7 +68,7 @@ serve(async (req) => {
                   ', supabase_key: ' + (supabaseKey ? 'present' : 'missing')
         }),
         { 
-          status: 500,
+          status: 200, // Return 200 even for errors to acknowledge receipt
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
@@ -97,7 +100,7 @@ serve(async (req) => {
           details: parseErr.message
         }),
         { 
-          status: 400,
+          status: 200, // Return 200 even for errors to acknowledge receipt
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
@@ -151,7 +154,7 @@ serve(async (req) => {
             session: JSON.stringify(session)
           }),
           { 
-            status: 400,
+            status: 200, // Return 200 even for errors to acknowledge receipt
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
           }
         );
