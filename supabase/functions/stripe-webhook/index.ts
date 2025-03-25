@@ -1,10 +1,9 @@
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
 // Enhanced logging for debugging
-const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
+const LOG_LEVEL = 'debug';
 
 const log = {
   debug: (...args: any[]) => {
@@ -22,20 +21,25 @@ const log = {
   }
 };
 
-// CORS headers for the webhook endpoint - allow all origins
+// More permissive CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': '*',
   'Access-Control-Allow-Headers': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight requests with a more permissive response
   if (req.method === 'OPTIONS') {
     log.info('Handling OPTIONS request for CORS preflight');
     return new Response(null, { 
       status: 200,
-      headers: corsHeaders 
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+      }
     });
   }
 
@@ -44,37 +48,34 @@ serve(async (req) => {
     log.debug('Request URL:', req.url);
     log.debug('Request method:', req.method);
     
-    // Log headers for debugging
+    // Log all headers for debugging
     const headersObj: Record<string, string> = {};
     for (const [key, value] of req.headers.entries()) {
       headersObj[key] = value;
     }
     log.debug('Request headers:', JSON.stringify(headersObj, null, 2));
-    
-    // Initialize environment variables and clients
-    const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
+    const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    
+
     if (!stripeKey || !supabaseUrl || !supabaseKey) {
       log.error('Missing required environment variables');
+      // Return 200 to acknowledge receipt even with configuration issues
       return new Response(
         JSON.stringify({ 
-          error: 'Configuration error',
-          details: 'Missing required environment variables',
-          status: 'stripe_key: ' + (stripeKey ? 'present' : 'missing') + 
-                  ', supabase_url: ' + (supabaseUrl ? 'present' : 'missing') +
-                  ', supabase_key: ' + (supabaseKey ? 'present' : 'missing')
+          status: 'configuration_error',
+          message: 'Missing required environment variables',
+          received: true
         }),
         { 
-          status: 200, // Return 200 even for errors to acknowledge receipt
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Initialize clients
+
     const stripe = new Stripe(stripeKey, {
       httpClient: Stripe.createFetchHttpClient(),
       apiVersion: '2023-10-16',
@@ -83,24 +84,26 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     
     // Get the request body as text for processing
-    const body = await req.text();
-    log.debug('Request body (first 500 chars):', body.substring(0, 500));
+    const rawBody = await req.text();
+    log.debug('Raw request body (first 500 chars):', rawBody.substring(0, 500));
     
     let event;
     
     // First try to parse the event directly from the request body
     try {
-      event = JSON.parse(body);
+      event = JSON.parse(rawBody);
       log.info(`Parsed event type: ${event.type}`);
     } catch (parseErr) {
       log.error(`Error parsing request body: ${parseErr.message}`);
+      // Return 200 even for parsing errors to acknowledge receipt
       return new Response(
         JSON.stringify({ 
-          error: 'Invalid JSON',
-          details: parseErr.message
+          status: 'parse_error',
+          message: parseErr.message,
+          received: true
         }),
         { 
-          status: 200, // Return 200 even for errors to acknowledge receipt
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
@@ -110,27 +113,22 @@ serve(async (req) => {
     const signature = req.headers.get('stripe-signature');
     let signatureVerified = false;
     
-    // Verify the signature if possible
+    // Try to verify signature if available, but don't require it
     if (signature && webhookSecret) {
       try {
-        const verifiedEvent = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+        const verifiedEvent = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
         log.info('Stripe signature verified successfully');
         signatureVerified = true;
-        // Update the event with the verified one
         event = verifiedEvent;
       } catch (err) {
         log.info(`Signature verification failed: ${err.message}. Will still process the event.`);
         // Continue with the directly parsed event
       }
-    } else if (!signature) {
-      log.info('No stripe-signature header. Proceeding with unverified event.');
-    } else if (!webhookSecret) {
-      log.info('No webhook secret configured. Proceeding with unverified event.');
+    } else {
+      log.info('Processing webhook without signature verification');
     }
-    
-    // Process the Stripe event regardless of signature verification
-    log.info(`Processing event type: ${event.type}`);
-    
+
+    // Process the event regardless of signature verification
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       log.info(`Processing checkout.session.completed event for session ${session.id}`);
@@ -336,7 +334,7 @@ serve(async (req) => {
       }
     }
     
-    // Always return a success response to Stripe, even if there were internal processing errors
+    // Always return success to Stripe
     return new Response(
       JSON.stringify({ 
         received: true,
@@ -352,18 +350,16 @@ serve(async (req) => {
   } catch (err) {
     log.error('Unexpected error processing webhook:', err);
     
-    // Return a 200 response even for errors, to acknowledge receipt 
-    // (Stripe will retry if not 2xx)
+    // Return 200 even for errors to acknowledge receipt
     return new Response(
       JSON.stringify({ 
-        received: true,
-        error: 'Internal error',
+        status: 'error',
         message: err.message,
-        // Don't expose the full stack trace in production
+        received: true,
         trace: LOG_LEVEL === 'debug' ? err.stack : undefined
       }),
       { 
-        status: 200, // Return 200 to acknowledge receipt even if we had an error
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
