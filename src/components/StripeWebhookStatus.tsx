@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,9 +15,9 @@ export const StripeWebhookStatus = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [fetchingLogs, setFetchingLogs] = useState(false);
 
-  // Get the correct webhook URL from the project ID
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "eeaebxnbcxhzafzpzqsu";
   const correctWebhookUrl = `https://${projectId}.functions.supabase.co/stripe-webhook`;
+  const incorrectWebhookUrl = `https://${projectId}.supabase.co/functions/v1/stripe-webhook`;
 
   const checkWebhookConfig = async () => {
     setLoading(true);
@@ -150,7 +149,6 @@ export const StripeWebhookStatus = () => {
             </Button>
           </div>
           
-          {/* Webhook URL Alert - Always show this */}
           <div className="mt-2 p-3 border border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md">
             <h4 className="font-medium flex items-center text-amber-800 dark:text-amber-300">
               <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -163,7 +161,10 @@ export const StripeWebhookStatus = () => {
               {correctWebhookUrl}
             </code>
             <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              Common errors include using <code>.supabase.co/functions/v1/</code> instead of <code>.functions.supabase.co/</code>
+              Common errors include using <code className="bg-white dark:bg-gray-800 px-1">{incorrectWebhookUrl}</code> (incorrect format)
+            </p>
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400 font-bold">
+              The URL should use <code className="bg-white dark:bg-gray-800 px-1">.functions.supabase.co/</code> and NOT <code className="bg-white dark:bg-gray-800 px-1">.supabase.co/functions/v1/</code>
             </p>
           </div>
           
@@ -266,7 +267,7 @@ export const StripeWebhookStatus = () => {
             <ol className="list-decimal pl-5 space-y-1 mt-1">
               <li>Check that your Stripe secret and webhook secret are correctly set in Supabase Edge Function configuration</li>
               <li><strong>Verify your webhook URL is in the correct format:</strong> <code>{correctWebhookUrl}</code></li>
-              <li><strong>Do not use</strong> <code>https://{projectId}.supabase.co/functions/v1/stripe-webhook</code> (incorrect format)</li>
+              <li><strong>Do not use</strong> <code>{incorrectWebhookUrl}</code> (incorrect format)</li>
               <li><strong>Important:</strong> Do not include any authorization token parameters or api keys in the webhook URL itself</li>
               <li>Make sure you have enabled the <code>checkout.session.completed</code> and subscription events</li>
               <li>If you're getting 401 errors, check that the webhook is configured in Supabase to allow unauthenticated requests</li>

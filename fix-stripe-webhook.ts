@@ -1,4 +1,3 @@
-
 // This is a copy of the changes made to the stripe-webhook edge function
 // for testing purposes
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -40,6 +39,7 @@ const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+const projectRef = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
 // Main webhook handler
 serve(async (req) => {
@@ -56,6 +56,10 @@ serve(async (req) => {
     const url = new URL(req.url);
     log.info(`Request method: ${req.method}, path: ${url.pathname}`);
     
+    // Log correct webhook URL format for reference
+    const correctWebhookUrl = `https://${projectRef}.functions.supabase.co/stripe-webhook`;
+    log.debug(`Correct webhook URL format: ${correctWebhookUrl}`);
+
     // Log headers in a readable format
     const headersObj: Record<string, string> = {};
     for (const [key, value] of req.headers.entries()) {
@@ -190,7 +194,8 @@ serve(async (req) => {
         JSON.stringify({ 
           error: 'Missing stripe-signature header',
           details: 'The webhook request is missing the stripe-signature header required for verification',
-          headersReceived: JSON.stringify(headersObj)
+          headersReceived: JSON.stringify(headersObj),
+          correctWebhookUrl
         }), { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

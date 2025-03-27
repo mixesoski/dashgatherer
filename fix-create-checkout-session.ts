@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
@@ -35,6 +34,7 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+const projectRef = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
 // Price IDs for subscription plans
 const planPriceIds = {
@@ -55,6 +55,10 @@ serve(async (req) => {
 
     log.info(`Creating checkout session for plan: ${planId}, user: ${userId}`);
     log.debug(`Using price ID for athlete plan: ${planPriceIds.athlete}`);
+    
+    // Log correct webhook URL format
+    const correctWebhookUrl = `https://${projectRef}.functions.supabase.co/stripe-webhook`;
+    log.debug(`Correct webhook URL for Stripe should be: ${correctWebhookUrl}`);
 
     // Free coach subscription - no need for Stripe
     if (planId === 'coach') {
