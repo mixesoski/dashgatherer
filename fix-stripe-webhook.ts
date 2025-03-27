@@ -1,3 +1,4 @@
+
 // This is a copy of the changes made to the stripe-webhook edge function
 // for testing purposes
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';

@@ -59,8 +59,10 @@ serve(async (req) => {
             if (webhooks.length > 0) {
               webhookEndpoint = webhooks[0].url;
               // Check if it's using the correct format (.functions.supabase.co)
+              // And ensure it doesn't have /v1/ in the URL
               webhookUrlFormatCorrect = webhookEndpoint.includes('.functions.supabase.co') && 
-                                       !webhookEndpoint.includes('/functions/v1/');
+                                       !webhookEndpoint.includes('/functions/v1/') &&
+                                       !webhookEndpoint.includes('/v1/');
             }
           }
         }
