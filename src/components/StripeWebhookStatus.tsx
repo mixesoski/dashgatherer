@@ -16,6 +16,10 @@ export const StripeWebhookStatus = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [fetchingLogs, setFetchingLogs] = useState(false);
 
+  // Get the correct webhook URL from the project ID
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "eeaebxnbcxhzafzpzqsu";
+  const correctWebhookUrl = `https://${projectId}.functions.supabase.co/stripe-webhook`;
+
   const checkWebhookConfig = async () => {
     setLoading(true);
     try {
@@ -146,6 +150,23 @@ export const StripeWebhookStatus = () => {
             </Button>
           </div>
           
+          {/* Webhook URL Alert - Always show this */}
+          <div className="mt-2 p-3 border border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md">
+            <h4 className="font-medium flex items-center text-amber-800 dark:text-amber-300">
+              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              Important: Correct Webhook URL Format
+            </h4>
+            <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+              Your Stripe webhook must use this exact URL:
+            </p>
+            <code className="block mt-1 p-2 bg-white dark:bg-gray-800 border rounded text-sm break-all">
+              {correctWebhookUrl}
+            </code>
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              Common errors include using <code>.supabase.co/functions/v1/</code> instead of <code>.functions.supabase.co/</code>
+            </p>
+          </div>
+          
           {config && (
             <div className="mt-4 space-y-4">
               <div className="text-sm space-y-2 border rounded-md p-3">
@@ -244,12 +265,12 @@ export const StripeWebhookStatus = () => {
             <p className="font-semibold">Troubleshooting Steps:</p>
             <ol className="list-decimal pl-5 space-y-1 mt-1">
               <li>Check that your Stripe secret and webhook secret are correctly set in Supabase Edge Function configuration</li>
-              <li>Verify your webhook URL is correctly configured in Stripe dashboard</li>
-              <li>The webhook URL should be: <code>https://[project-id].functions.supabase.co/stripe-webhook</code></li>
+              <li><strong>Verify your webhook URL is in the correct format:</strong> <code>{correctWebhookUrl}</code></li>
+              <li><strong>Do not use</strong> <code>https://{projectId}.supabase.co/functions/v1/stripe-webhook</code> (incorrect format)</li>
               <li><strong>Important:</strong> Do not include any authorization token parameters or api keys in the webhook URL itself</li>
               <li>Make sure you have enabled the <code>checkout.session.completed</code> and subscription events</li>
-              <li><strong>Note:</strong> This webhook is now configured to accept requests without authentication or signature verification</li>
-              <li><strong>Security note:</strong> The webhook is now fully public and will process any valid JSON payload</li>
+              <li>If you're getting 401 errors, check that the webhook is configured in Supabase to allow unauthenticated requests</li>
+              <li>Ensure headers in the webhook function allow the requests from Stripe</li>
             </ol>
             <div className="mt-2">
               <a 
@@ -259,6 +280,14 @@ export const StripeWebhookStatus = () => {
                 className="inline-flex items-center text-blue-500 hover:text-blue-700"
               >
                 Stripe Webhook Documentation <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+              <a 
+                href="https://stripe.com/docs/api/webhook_endpoints/create" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-blue-500 hover:text-blue-700 ml-4"
+              >
+                Stripe API Webhook Reference <ExternalLink className="ml-1 h-3 w-3" />
               </a>
             </div>
           </div>

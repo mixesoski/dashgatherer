@@ -23,5 +23,6 @@ export default defineConfig(({ mode }) => ({
   define: {
     // Ensure environment variables are available in the client
     'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'http://localhost:5001'),
+    'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(process.env.VITE_SUPABASE_PROJECT_ID || 'eeaebxnbcxhzafzpzqsu'),
   }
 }));
