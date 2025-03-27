@@ -56,6 +56,7 @@ serve(async (req) => {
     const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const projectRef = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
     if (!stripeKey || !supabaseUrl || !supabaseKey) {
       log.error('Missing required environment variables');
@@ -79,6 +80,12 @@ serve(async (req) => {
     });
     
     const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Log correct webhook URL format
+    if (projectRef) {
+      const correctWebhookUrl = `https://${projectRef}.functions.supabase.co/stripe-webhook`;
+      log.debug(`Correct webhook URL format: ${correctWebhookUrl}`);
+    }
     
     // Get the request body as text for processing
     const rawBody = await req.text();

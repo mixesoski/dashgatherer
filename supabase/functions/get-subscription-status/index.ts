@@ -35,6 +35,7 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+const projectRef = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -46,6 +47,12 @@ serve(async (req) => {
     // Parse request body
     const { userId } = await req.json();
     log.info(`Getting subscription status for user: ${userId}`);
+
+    // Log correct webhook URL format
+    if (projectRef) {
+      const correctWebhookUrl = `https://${projectRef}.functions.supabase.co/stripe-webhook`;
+      log.debug(`Correct webhook URL format: ${correctWebhookUrl}`);
+    }
 
     // Verify userId is provided
     if (!userId) {
