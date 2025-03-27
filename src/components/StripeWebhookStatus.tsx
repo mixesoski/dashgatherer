@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,7 +63,6 @@ export const StripeWebhookStatus = () => {
   const fetchWebhookLogs = async () => {
     setFetchingLogs(true);
     try {
-      // Call edge function to check logs if available, or display dummy logs
       const { data, error } = await supabase.functions.invoke("check-webhook-config", {
         body: { fetchLogs: true }
       });
@@ -87,7 +85,6 @@ export const StripeWebhookStatus = () => {
       console.error("Error fetching webhook logs:", error);
       toast.error(`Failed to fetch webhook logs: ${error.message}`);
       
-      // Set dummy log entry on error
       setLogs([{
         timestamp: new Date().toISOString(),
         message: `Error fetching logs: ${error.message}`,
@@ -99,7 +96,6 @@ export const StripeWebhookStatus = () => {
     }
   };
 
-  // Only for admins/developers
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -189,7 +185,6 @@ export const StripeWebhookStatus = () => {
                 </div>
               </div>
               
-              {/* Detailed configuration info */}
               <div className="text-xs space-y-2 border rounded-md p-3 bg-muted/50">
                 <h4 className="font-semibold">Detailed Configuration</h4>
                 <div className="grid grid-cols-1 gap-1">
@@ -207,7 +202,6 @@ export const StripeWebhookStatus = () => {
                 </div>
               </div>
               
-              {/* Environment variables section */}
               <div className="text-xs space-y-2 border rounded-md p-3 bg-muted/50">
                 <h4 className="font-semibold">Environment Variables</h4>
                 <div className="grid grid-cols-1 gap-1">
@@ -253,7 +247,8 @@ export const StripeWebhookStatus = () => {
               <li>The webhook URL should be: <code>https://[project-id].functions.supabase.co/stripe-webhook</code></li>
               <li><strong>Important:</strong> Do not include any authorization token parameters or api keys in the webhook URL itself</li>
               <li>Make sure you have enabled the <code>checkout.session.completed</code> and subscription events</li>
-              <li>Stripe will still send events even without proper authentication, and our webhook now accepts them without verification</li>
+              <li><strong>Note:</strong> This webhook is now configured to accept requests without authentication or signature verification</li>
+              <li><strong>Security note:</strong> The webhook is now fully public and will process any valid JSON payload</li>
             </ol>
             <div className="mt-2">
               <a 

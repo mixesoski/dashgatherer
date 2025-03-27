@@ -21,7 +21,7 @@ const log = {
   }
 };
 
-// More permissive CORS headers
+// Completely permissive CORS headers to allow any request
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': '*',
@@ -30,16 +30,12 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests with a more permissive response
+  // Handle CORS preflight requests with a completely permissive response
   if (req.method === 'OPTIONS') {
     log.info('Handling OPTIONS request for CORS preflight');
     return new Response(null, { 
       status: 200,
-      headers: {
-        ...corsHeaders,
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
-      }
+      headers: corsHeaders
     });
   }
 
