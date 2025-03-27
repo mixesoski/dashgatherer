@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
 // Enhanced logging for debugging
-const LOG_LEVEL = 'debug';
+const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
 
 const log = {
   debug: (...args: any[]) => {
@@ -35,9 +35,6 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Get the project ID for correct URL construction
-const projectId = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -141,11 +138,6 @@ serve(async (req) => {
               } else {
                 log.info(`Successfully updated subscription to ${subscription.status} from pending`);
                 
-                // Note that correct webhook URL should be used for automatic updates
-                if (projectId) {
-                  log.info(`Make sure webhook is configured at https://${projectId}.functions.supabase.co/stripe-webhook`);
-                }
-                
                 return new Response(
                   JSON.stringify({
                     active: true,
@@ -209,8 +201,6 @@ serve(async (req) => {
             
           if (updateError) {
             log.error(`Error updating subscription status: ${updateError.message}`);
-          } else {
-            log.info(`Note: This update should normally happen via webhook at https://${projectId}.functions.supabase.co/stripe-webhook`);
           }
         }
 
@@ -266,12 +256,6 @@ serve(async (req) => {
 
     // Default response for users without a subscription
     log.info(`No subscription found for user ${userId}`);
-    
-    // Add a note about the webhook URL
-    if (projectId) {
-      log.info(`Note: Make sure webhook is configured at https://${projectId}.functions.supabase.co/stripe-webhook`);
-    }
-    
     return new Response(
       JSON.stringify({
         active: false,
