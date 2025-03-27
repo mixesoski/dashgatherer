@@ -3,6 +3,25 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
+// Enhanced logging for debugging
+const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
+
+const log = {
+  debug: (...args: any[]) => {
+    if (LOG_LEVEL === 'debug') {
+      console.log('[DEBUG]', ...args);
+    }
+  },
+  info: (...args: any[]) => {
+    if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info') {
+      console.log('[INFO]', ...args);
+    }
+  },
+  error: (...args: any[]) => {
+    console.error('[ERROR]', ...args);
+  }
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -17,6 +36,9 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Get the project ID for correct URL construction
+const projectId = Deno.env.get('SUPABASE_PROJECT_REF') || '';
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -26,112 +48,73 @@ serve(async (req) => {
   try {
     // Parse request body
     const { subscriptionId, userId } = await req.json();
-    
-    console.log(`Canceling subscription: ${subscriptionId} for user: ${userId}`);
 
     if (!subscriptionId) {
-      return new Response(
-        JSON.stringify({ error: 'Subscription ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('Subscription ID is required');
     }
 
     if (!userId) {
-      return new Response(
-        JSON.stringify({ error: 'User ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('User ID is required');
     }
 
-    // Verify the subscription belongs to the user
+    log.info(`Canceling subscription ${subscriptionId} for user ${userId}`);
+
+    // Verify that this subscription belongs to the user
     const { data: subscriptionData, error: subscriptionError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('stripe_subscription_id', subscriptionId)
       .eq('user_id', userId)
       .single();
-      
+
     if (subscriptionError || !subscriptionData) {
-      console.error('Error verifying subscription ownership:', subscriptionError);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Could not verify subscription ownership',
-          details: subscriptionError?.message
-        }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      log.error(`Error verifying subscription ownership: ${subscriptionError?.message || 'No subscription found'}`);
+      throw new Error('Subscription not found or does not belong to this user');
     }
 
-    try {
-      // Cancel the subscription in Stripe
-      const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
-      
-      console.log(`Stripe subscription canceled: ${subscriptionId}, status: ${canceledSubscription.status}`);
-      
-      // Update our database
-      const { error: updateError } = await supabase
-        .from('subscriptions')
-        .update({ 
-          status: 'canceled',
-          updated_at: new Date().toISOString()
-        })
-        .eq('stripe_subscription_id', subscriptionId)
-        .eq('user_id', userId);
-        
-      if (updateError) {
-        console.error('Error updating subscription in database:', updateError);
-        // Still return success since the Stripe cancellation worked
-      }
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Subscription canceled successfully',
-          stripeStatus: canceledSubscription.status
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } catch (stripeError) {
-      console.error('Error canceling Stripe subscription:', stripeError);
-      
-      // If it's already canceled or doesn't exist in Stripe, we'll still update our database
-      if (stripeError.code === 'resource_missing') {
-        const { error: updateError } = await supabase
-          .from('subscriptions')
-          .update({ 
-            status: 'canceled',
-            updated_at: new Date().toISOString()
-          })
-          .eq('stripe_subscription_id', subscriptionId)
-          .eq('user_id', userId);
-          
-        if (updateError) {
-          console.error('Error updating subscription in database:', updateError);
-        }
-        
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            message: 'Subscription marked as canceled in our system',
-            warning: 'Subscription was not found in Stripe, possibly already canceled'
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to cancel subscription in Stripe',
-          details: stripeError.message
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Cancel the subscription in Stripe
+    log.info(`Canceling Stripe subscription: ${subscriptionId}`);
+    const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
+
+    // Update the subscription status in our database
+    const { error: updateError } = await supabase
+      .from('subscriptions')
+      .update({
+        status: 'canceled',
+        updated_at: new Date().toISOString()
+      })
+      .eq('stripe_subscription_id', subscriptionId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      log.error(`Error updating subscription status in database: ${updateError.message}`);
+      // We'll still return success as the subscription was canceled in Stripe
     }
-  } catch (error) {
-    console.error('Error in cancel-subscription function:', error);
+
+    // Note that subscription cancellations should also be processed by the webhook
+    if (projectId) {
+      log.info(`Ensure webhook is properly configured at https://${projectId}.functions.supabase.co/stripe-webhook`);
+    }
+
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        success: true,
+        message: 'Subscription canceled successfully',
+        status: canceledSubscription.status
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    log.error(`Error in cancel-subscription function: ${error.message}`);
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        success: false 
+      }),
+      { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
   }
 });

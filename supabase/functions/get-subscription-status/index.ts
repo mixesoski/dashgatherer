@@ -4,7 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
 // Enhanced logging for debugging
-const LOG_LEVEL = 'debug'; // 'debug' | 'info' | 'error'
+const LOG_LEVEL = 'debug';
 
 const log = {
   debug: (...args: any[]) => {
@@ -35,6 +35,9 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Get the project ID for correct URL construction
+const projectId = Deno.env.get('SUPABASE_PROJECT_REF') || '';
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -74,6 +77,7 @@ serve(async (req) => {
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
+      .eq('status', 'active')
       .maybeSingle();
 
     if (subscriptionError) {
@@ -99,31 +103,90 @@ serve(async (req) => {
       throw subscriptionError;
     }
 
-    log.debug(`Subscription data: ${JSON.stringify(subscriptionData)}`);
+    // Check for pending subscriptions
+    if (!subscriptionData) {
+      const { data: pendingSubscriptionData, error: pendingError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .maybeSingle();
+      
+      if (pendingSubscriptionData && !pendingError) {
+        log.info(`Found pending subscription for user ${userId}`);
 
-    // If we have a pending subscription (created during checkout but not completed yet)
-    if (subscriptionData?.status === 'pending') {
-      log.info(`Found pending subscription for user ${userId}`);
-      return new Response(
-        JSON.stringify({
-          active: false,
-          plan: subscriptionData.plan_id,
-          status: 'pending',
-          role: userRole,
-          trialEnd: null,
-          cancelAt: null,
-          renewsAt: null,
-          pendingCheckout: true,
-          stripeSubscriptionId: null // Don't include the pending ID
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+        // Special handling for subscriptions that should be active but are still marked pending
+        // If the stripe_subscription_id doesn't start with 'pending_', it means the webhook didn't update it properly
+        if (pendingSubscriptionData.stripe_subscription_id && 
+            !pendingSubscriptionData.stripe_subscription_id.startsWith('pending_')) {
+          
+          try {
+            // Try to check the subscription status directly with Stripe
+            const subscription = await stripe.subscriptions.retrieve(
+              pendingSubscriptionData.stripe_subscription_id
+            );
+            
+            if (subscription.status === 'active' || subscription.status === 'trialing') {
+              // Update the subscription to active since we confirmed it with Stripe
+              const { error: updateError } = await supabase
+                .from('subscriptions')
+                .update({
+                  status: subscription.status,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', pendingSubscriptionData.id);
+              
+              if (updateError) {
+                log.error(`Error updating pending subscription to active: ${updateError.message}`);
+              } else {
+                log.info(`Successfully updated subscription to ${subscription.status} from pending`);
+                
+                // Note that correct webhook URL should be used for automatic updates
+                if (projectId) {
+                  log.info(`Make sure webhook is configured at https://${projectId}.functions.supabase.co/stripe-webhook`);
+                }
+                
+                return new Response(
+                  JSON.stringify({
+                    active: true,
+                    plan: pendingSubscriptionData.plan_id,
+                    status: subscription.status,
+                    role: userRole,
+                    trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+                    cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
+                    renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+                    stripeSubscriptionId: pendingSubscriptionData.stripe_subscription_id
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+            }
+          } catch (stripeError) {
+            // If we can't reach Stripe or the subscription doesn't exist, continue with the pending status
+            log.error(`Error retrieving Stripe subscription: ${stripeError.message}`);
+          }
+        }
+        
+        return new Response(
+          JSON.stringify({
+            active: false,
+            plan: pendingSubscriptionData.plan_id,
+            status: 'pending',
+            role: userRole,
+            trialEnd: null,
+            cancelAt: null,
+            renewsAt: null,
+            pendingCheckout: true
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
+    log.debug(`Subscription data: ${JSON.stringify(subscriptionData)}`);
+
     // If we have a subscription in the database and it's connected to Stripe
-    // Only try to fetch from Stripe if the subscription ID doesn't start with 'pending_'
-    if (subscriptionData?.stripe_subscription_id && 
-        !subscriptionData.stripe_subscription_id.startsWith('pending_')) {
+    if (subscriptionData?.stripe_subscription_id) {
       try {
         // Fetch the latest subscription status from Stripe
         log.debug(`Fetching subscription from Stripe: ${subscriptionData.stripe_subscription_id}`);
@@ -132,6 +195,24 @@ serve(async (req) => {
         );
         
         log.debug(`Stripe subscription data: ${JSON.stringify(subscription)}`);
+
+        // Update our local database if the status has changed
+        if (subscription.status !== subscriptionData.status) {
+          log.info(`Updating subscription status from ${subscriptionData.status} to ${subscription.status}`);
+          const { error: updateError } = await supabase
+            .from('subscriptions')
+            .update({
+              status: subscription.status,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', subscriptionData.id);
+            
+          if (updateError) {
+            log.error(`Error updating subscription status: ${updateError.message}`);
+          } else {
+            log.info(`Note: This update should normally happen via webhook at https://${projectId}.functions.supabase.co/stripe-webhook`);
+          }
+        }
 
         return new Response(
           JSON.stringify({
@@ -142,30 +223,14 @@ serve(async (req) => {
             trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
             cancelAt: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
             renewsAt: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
-            stripeSubscriptionId: subscription.id
+            stripeSubscriptionId: subscriptionData.stripe_subscription_id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (stripeError) {
         log.error(`Error retrieving Stripe subscription: ${stripeError.message}`);
         
-        // If the subscription wasn't found in Stripe, but we have it in our database
-        if (stripeError.code === 'resource_missing') {
-          log.info(`Subscription ${subscriptionData.stripe_subscription_id} not found in Stripe, using local data`);
-          
-          // If the status is 'active' in our database but not in Stripe, we should update our database
-          if (subscriptionData.status === 'active') {
-            log.info(`Updating subscription status to 'inactive' in database`);
-            await supabase
-              .from('subscriptions')
-              .update({ status: 'inactive', updated_at: new Date().toISOString() })
-              .eq('id', subscriptionData.id);
-            
-            subscriptionData.status = 'inactive';
-          }
-        }
-        
-        // Return based on our database status
+        // If we can't reach Stripe, use the local data
         return new Response(
           JSON.stringify({
             active: subscriptionData.status === 'active' || subscriptionData.status === 'trialing',
@@ -180,19 +245,20 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-    } else if (subscriptionData) {
-      // We have subscription data in our database but no valid Stripe subscription ID
-      log.info(`Using local subscription data for user ${userId}`);
+    }
+
+    // Check if user has coach role (which gets premium access)
+    if (userRole === 'coach') {
+      log.info(`User ${userId} has coach role with premium access`);
       return new Response(
         JSON.stringify({
-          active: subscriptionData.status === 'active' || subscriptionData.status === 'trialing',
-          plan: subscriptionData.plan_id,
-          status: subscriptionData.status,
-          role: userRole,
+          active: true,
+          plan: 'coach',
+          status: 'active',
+          role: 'coach',
           trialEnd: null,
           cancelAt: null,
-          renewsAt: null,
-          stripeSubscriptionId: subscriptionData.stripe_subscription_id?.startsWith('pending_') ? null : subscriptionData.stripe_subscription_id
+          renewsAt: null
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -200,6 +266,12 @@ serve(async (req) => {
 
     // Default response for users without a subscription
     log.info(`No subscription found for user ${userId}`);
+    
+    // Add a note about the webhook URL
+    if (projectId) {
+      log.info(`Note: Make sure webhook is configured at https://${projectId}.functions.supabase.co/stripe-webhook`);
+    }
+    
     return new Response(
       JSON.stringify({
         active: false,
@@ -222,4 +294,4 @@ serve(async (req) => {
       }
     );
   }
-}); 
+});

@@ -43,6 +43,9 @@ const planPriceIds = {
   organization: 'custom' // Organizations need to contact sales
 };
 
+// Get the project ID for correct URL construction
+const projectId = Deno.env.get('SUPABASE_PROJECT_REF') || '';
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -50,24 +53,8 @@ serve(async (req) => {
   }
 
   try {
-    // Check if this is the webhook endpoint accidentally being called
-    const url = new URL(req.url);
-    if (url.pathname.includes('webhook')) {
-      log.error('Webhook request sent to checkout endpoint');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Incorrect endpoint',
-          message: 'This appears to be a webhook request sent to the checkout endpoint'
-        }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
     // Parse request body
-    const { planId, userId, successUrl, cancelUrl, metadata = {} } = await req.json();
+    const { planId, userId, successUrl, cancelUrl } = await req.json();
 
     log.info(`Creating checkout session for plan: ${planId}, user: ${userId}`);
     log.debug(`Using price ID for athlete plan: ${planPriceIds.athlete}`);
@@ -80,8 +67,8 @@ serve(async (req) => {
         .from('profiles')
         .upsert({ 
           user_id: userId, 
-          role: 'coach',
-          updated_at: new Date().toISOString()
+          role: 'coach'
+          // updated_at will be set automatically by the trigger
         });
 
       if (error) {
@@ -117,26 +104,38 @@ serve(async (req) => {
 
     // Get user email from Supabase
     const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
-    if (userError || !userData?.user?.email) {
+    if (userError || !userData.user?.email) {
       log.error('Error fetching user email:', userError);
       throw new Error('Unable to fetch user email');
     }
 
     log.debug(`Creating checkout session for user: ${userId}, email: ${userData.user.email}`);
 
-    // Merge metadata with required fields to ensure we have userId and planId
-    const sessionMetadata = {
-      ...metadata,
-      userId: userId,
-      planId: planId
-    };
+    // Create a pending subscription entry first
+    const { error: pendingError } = await supabase
+      .from('subscriptions')
+      .upsert({
+        user_id: userId,
+        stripe_subscription_id: 'pending_' + Date.now(), // Placeholder until webhook updates it
+        plan_id: planId,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
 
-    // Create Stripe checkout session for athlete
+    if (pendingError) {
+      log.error(`Error creating pending subscription: ${pendingError.message}`);
+      // Continue anyway as this is not critical
+    } else {
+      log.info('Created pending subscription record');
+    }
+
+    // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
-          price: planPriceIds.athlete,
+          price: planPriceIds[planId as keyof typeof planPriceIds],
           quantity: 1,
         },
       ],
@@ -145,30 +144,18 @@ serve(async (req) => {
       cancel_url: cancelUrl,
       client_reference_id: userId, // This is crucial - webhook uses this to identify the user
       customer_email: userData.user.email,
-      metadata: sessionMetadata,
+      metadata: {
+        userId: userId, // Add userId to metadata as a backup
+        planId: planId  // Add planId to metadata for webhook processing
+      },
     });
 
     log.info(`Checkout session created: ${session.id}, URL: ${session.url}`);
     log.debug(`Session details: client_reference_id=${session.client_reference_id}, metadata=${JSON.stringify(session.metadata)}`);
 
-    // Pre-create a subscription record with pending status
-    // This helps ensure we have a record even if webhook fails
-    const { error: subscriptionError } = await supabase
-      .from('subscriptions')
-      .upsert({
-        user_id: userId,
-        stripe_subscription_id: `pending_${session.id}`, // This will be updated by webhook
-        status: 'pending',
-        plan_id: planId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-      
-    if (subscriptionError) {
-      log.error(`Error creating pending subscription: ${subscriptionError.message}`);
-      // Continue anyway as this is just a precaution
-    } else {
-      log.info('Created pending subscription record');
+    // Note: Make sure the webhook URL is correct at https://[project-id].functions.supabase.co/stripe-webhook
+    if (projectId) {
+      log.debug(`Expected webhook URL: https://${projectId}.functions.supabase.co/stripe-webhook`);
     }
 
     return new Response(
