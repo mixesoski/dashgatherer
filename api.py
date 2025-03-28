@@ -15,28 +15,14 @@ load_dotenv()
 app = Flask(__name__)
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# Configure CORS
-if os.environ.get('FLASK_ENV') == 'development':
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": "*",
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
-        }
-    })
-else:
-    # In production, accept requests from specific domains without port numbers
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": [
-                "https://b517f268-2dee-41b5-963d-5ba7555908cb.lovableproject.com",
-                "https://id-preview--b517f268-2dee-41b5-963d-5ba7555908cb.lovable.app",
-                "https://eeaebxnbcxhzafzpzqsu.supabase.co"
-            ],
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
-        }
-    })
+# Configure CORS - allow all origins in both dev and prod for now
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 def log_error(error_message, exception=None):
     """Funkcja do szczegółowego logowania błędów w terminalu"""
@@ -57,14 +43,14 @@ def root():
         'message': 'DashGatherer API is running',
         'version': '1.0.0',
         'endpoints': {
-            'health': '/api/health',
-            'sync_garmin': '/api/sync-garmin',
-            'update_chart': '/api/update-chart'
+            'health': '/health',
+            'sync_garmin': '/sync-garmin',
+            'update_chart': '/update-chart'
         },
         'timestamp': datetime.utcnow().isoformat()
     })
 
-@app.route('/api/sync-garmin', methods=['POST'])
+@app.route('/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
         data = request.json
@@ -96,7 +82,7 @@ def sync_garmin():
         print(traceback_str)
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/api/update-chart', methods=['POST'])
+@app.route('/update-chart', methods=['POST'])
 def update_chart():
     try:
         data = request.json
@@ -123,7 +109,7 @@ def update_chart():
             'error': str(e)
         }), 500
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint for Render"""
     try:
