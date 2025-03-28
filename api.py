@@ -49,6 +49,21 @@ def log_error(error_message, exception=None):
         traceback.print_exc(file=sys.stdout)
     print("="*50 + "\n")
 
+@app.route('/')
+def root():
+    """Root endpoint that shows API status"""
+    return jsonify({
+        'status': 'online',
+        'message': 'DashGatherer API is running',
+        'version': '1.0.0',
+        'endpoints': {
+            'health': '/api/health',
+            'sync_garmin': '/api/sync-garmin',
+            'update_chart': '/api/update-chart'
+        },
+        'timestamp': datetime.utcnow().isoformat()
+    })
+
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
