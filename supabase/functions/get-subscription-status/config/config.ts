@@ -3,6 +3,7 @@
 export const config = {
   stripe: {
     secretKey: Deno.env.get('STRIPE_SECRET_KEY') || '',
+    webhookSecret: Deno.env.get('STRIPE_WEBHOOK_SECRET') || '',
     apiVersion: '2023-10-16' as const,
   },
   supabase: {
