@@ -13,6 +13,9 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         );
         
         const { data: { user } } = await supabase.auth.getUser();
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData.session?.access_token;
+        
         console.log('Current user:', user);
         console.log('Using userId:', userId);
         console.log('Start date:', startDate);
@@ -36,6 +39,7 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({ 
                 user_id: user.id,
@@ -73,10 +77,14 @@ export const updateGarminData = async (userId: string) => {
             duration: Infinity
         });
         
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData.session?.access_token;
+        
         const response = await fetch(`${API_URL}/api/update-chart`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({ userId })
         });

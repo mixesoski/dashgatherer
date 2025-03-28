@@ -3,7 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 
 export async function verifyStripeWebhookConfig() {
   try {
-    const { data, error } = await supabase.functions.invoke('check-webhook-config');
+    const { data, error } = await supabase.functions.invoke('check-webhook-config', {
+      headers: {
+        Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+      }
+    });
     
     if (error) {
       console.error('Error verifying Stripe webhook config:', error);
@@ -25,12 +29,16 @@ export async function createCheckoutSession(planId: string, successUrl: string, 
       throw new Error('User not authenticated');
     }
     
+    const { data: sessionData } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
       body: {
         planId,
         userId: user.id,
         successUrl,
         cancelUrl
+      },
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token}`
       }
     });
     
@@ -54,9 +62,13 @@ export async function cancelSubscription() {
       throw new Error('User not authenticated');
     }
     
+    const { data: sessionData } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('cancel-subscription', {
       body: {
         userId: user.id,
+      },
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token}`
       }
     });
     
@@ -80,8 +92,12 @@ export async function getSubscriptionStatus() {
       throw new Error('User not authenticated');
     }
     
+    const { data: sessionData } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('get-subscription-status', {
-      body: { userId: user.id }
+      body: { userId: user.id },
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token}`
+      }
     });
     
     if (error) {

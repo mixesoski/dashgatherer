@@ -29,8 +29,12 @@ export function useSubscription() {
         throw new Error('User not authenticated');
       }
       
+      const { data: sessionData } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke('get-subscription-status', {
-        body: { userId: user.id }
+        body: { userId: user.id },
+        headers: {
+          Authorization: `Bearer ${sessionData.session?.access_token}`
+        }
       });
       
       if (error) {
