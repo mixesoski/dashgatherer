@@ -108,6 +108,22 @@ def update_chart():
             'error': str(e)
         }), 500
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Render"""
+    try:
+        # Check if we can connect to Supabase
+        supabase.table('health_check').select('*').limit(1).execute()
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     print(f"\n{'='*50}")

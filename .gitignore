@@ -21,16 +21,21 @@ lib64/
 parts/
 sdist/
 var/
+wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Virtual Environment
+venv/
+ENV/
 
 # Generated files
 trimp_chart.png
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 
@@ -42,4 +47,7 @@ cursorTrimp/
 
 # Operating System
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Logs
+*.log 
