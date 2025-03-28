@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from garmin_sync import sync_garmin_data
 from sync_metrics_calculator import calculate_sync_metrics
@@ -37,7 +37,12 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def root():
-    """Root endpoint that shows API status"""
+    """Root endpoint that shows API status or redirects to frontend"""
+    # Check if the request is from a browser
+    if request.headers.get('Accept', '').find('text/html') != -1:
+        return redirect('https://dashgatherer.lovable.app')
+    
+    # Return API status for non-browser requests
     return jsonify({
         'status': 'online',
         'message': 'DashGatherer API is running',
