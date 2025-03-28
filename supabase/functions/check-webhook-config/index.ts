@@ -1,5 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,138 +15,155 @@ serve(async (req) => {
   }
 
   try {
-    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
+    // Get environment variables
+    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY') || '';
     const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
-    const projectId = Deno.env.get('SUPABASE_PROJECT_REF') || '';
     const athletePriceId = Deno.env.get('STRIPE_ATHLETE_PRICE_ID') || '';
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const projectRef = Deno.env.get('SUPABASE_PROJECT_REF') || '';
+
+    // Determine if there's a request to fetch logs
+    const { fetchLogs } = await req.json().catch(() => ({ fetchLogs: false }));
     
-    // Check that the necessary environment variables are configured
-    const stripeKeyConfigured = stripeKey !== '';
-    const webhookSecretConfigured = webhookSecret !== '';
-    const projectIdConfigured = projectId !== '';
+    // Create Supabase client
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    // Check for required environment variables
+    const stripeKeyConfigured = stripeSecretKey !== '';
+    const webhookConfigured = webhookSecret !== '';
     const athletePriceConfigured = athletePriceId !== '';
     
-    // Construct the correct webhook URL - FIXED FORMAT
-    let webhookUrl = null;
-    if (projectIdConfigured) {
-      webhookUrl = `https://${projectId}.functions.supabase.co/stripe-webhook`;
-    }
-    
-    // Check if the current webhook endpoint in Stripe is correctly formatted
-    let webhookUrlFormatCorrect = false;
+    // Format information about the configuration
+    const stripeInfo = stripeKeyConfigured ? 
+      'Stripe API key is configured' : 
+      'Stripe API key is missing';
+      
+    const webhookInfo = webhookConfigured ? 
+      'Webhook secret is configured' : 
+      'Webhook secret is missing';
+      
+    const athletePriceInfo = athletePriceConfigured ? 
+      'Athlete price ID is configured' : 
+      'Athlete price ID is missing';
+
     let webhookEndpoint = null;
+    let webhookUrlFormatCorrect = false;
     
+    // Check Stripe webhook configuration if Stripe is configured
     if (stripeKeyConfigured) {
       try {
-        // Fetch webhook endpoint from Stripe API if possible
-        const headers = {
-          'Authorization': `Bearer ${stripeKey}`,
-          'Content-Type': 'application/json'
-        };
-        
-        const response = await fetch('https://api.stripe.com/v1/webhook_endpoints', {
-          method: 'GET',
-          headers: headers
+        const stripe = new Stripe(stripeSecretKey, {
+          httpClient: Stripe.createFetchHttpClient(),
+          apiVersion: '2023-10-16',
         });
+
+        // Get webhook endpoints from Stripe
+        const endpoints = await stripe.webhookEndpoints.list();
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.data && data.data.length > 0) {
-            // Find the first webhook endpoint that looks like it's for our Supabase function
-            const webhooks = data.data.filter((webhook: any) => 
-              webhook.url && webhook.url.includes('supabase') && 
-              webhook.url.includes(projectId)
-            );
+        if (endpoints.data.length > 0) {
+          webhookEndpoint = endpoints.data[0].url;
+          
+          // Check if webhook URL is in the correct format
+          // It should be https://{projectRef}.functions.supabase.co/stripe-webhook
+          // NOT https://{projectRef}.supabase.co/functions/v1/stripe-webhook (wrong)
+          if (projectRef && webhookEndpoint) {
+            const correctUrlFormat = `https://${projectRef}.functions.supabase.co/stripe-webhook`;
+            webhookUrlFormatCorrect = webhookEndpoint === correctUrlFormat;
             
-            if (webhooks.length > 0) {
-              webhookEndpoint = webhooks[0].url;
-              // Check if it's using the correct format (.functions.supabase.co)
-              // And ensure it doesn't have /v1/ in the URL
-              webhookUrlFormatCorrect = webhookEndpoint.includes('.functions.supabase.co') && 
-                                       !webhookEndpoint.includes('/functions/v1/') &&
-                                       !webhookEndpoint.includes('/v1/');
+            if (!webhookUrlFormatCorrect) {
+              console.warn(`Webhook URL is in incorrect format. Current: ${webhookEndpoint}, Should be: ${correctUrlFormat}`);
             }
           }
         }
-      } catch (error) {
-        console.error('Error checking Stripe webhook endpoints:', error);
+      } catch (stripeError) {
+        console.error('Error checking Stripe webhook:', stripeError);
       }
     }
-    
+
     // Check database tables
-    let database = {
+    let database = { 
       tablesExist: false,
       error: null
     };
     
     try {
-      // Create a supabase client with the service role key
-      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.7.1');
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-      
-      if (supabaseUrl && supabaseKey) {
-        const supabase = createClient(supabaseUrl, supabaseKey);
+      // Try to query from profiles table - it should always exist
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('count(*)')
+        .limit(1);
         
-        // Check if subscriptions table exists
-        const { error } = await supabase.from('subscriptions').select('id', { count: 'exact', head: true });
-        database.tablesExist = !error;
-        database.error = error ? error.message : null;
+      if (profilesError) {
+        database.error = `Error querying profiles: ${profilesError.message}`;
+      }
+      
+      // Try to access subscriptions table
+      const { error: subscriptionsError } = await supabase
+        .from('subscriptions')
+        .select('count(*)')
+        .limit(1);
+        
+      // Tables exist if there are no errors
+      database.tablesExist = !profilesError && !subscriptionsError;
+      
+      if (subscriptionsError && subscriptionsError.code === '42P01') {
+        database.error = 'Subscriptions table does not exist yet';
+      } else if (subscriptionsError) {
+        database.error = `Error querying subscriptions: ${subscriptionsError.message}`;
       }
     } catch (dbError) {
-      database.error = dbError.message;
+      database.error = `Database error: ${dbError.message}`;
     }
     
-    // Build detailed info messages
-    const stripeInfo = stripeKeyConfigured ? 
-      'Stripe API key is properly configured.' : 
-      'Stripe API key is missing. Set STRIPE_SECRET_KEY in Edge Function secrets.';
-      
-    const webhookInfo = webhookSecretConfigured ? 
-      'Webhook secret is properly configured.' : 
-      'Webhook secret is missing. Set STRIPE_WEBHOOK_SECRET in Edge Function secrets.';
-      
-    const athletePriceInfo = athletePriceConfigured ? 
-      'Athlete price ID is properly configured.' : 
-      'Athlete price ID is missing. Set STRIPE_ATHLETE_PRICE_ID in Edge Function secrets.';
-    
-    // Create a structured response about environment variables
-    const environmentVariables = {
-      'STRIPE_SECRET_KEY': stripeKeyConfigured ? '✓ configured' : '✗ missing',
-      'STRIPE_WEBHOOK_SECRET': webhookSecretConfigured ? '✓ configured' : '✗ missing',
-      'STRIPE_ATHLETE_PRICE_ID': athletePriceConfigured ? '✓ configured' : '✗ missing',
-      'SUPABASE_PROJECT_REF': projectIdConfigured ? '✓ configured' : '✗ missing',
-      'SUPABASE_URL': Deno.env.get('SUPABASE_URL') ? '✓ configured' : '✗ missing',
-      'SUPABASE_SERVICE_ROLE_KEY': Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ? '✓ configured' : '✗ missing'
+    // Get webhook logs if requested
+    let logs = [];
+    if (fetchLogs) {
+      try {
+        // This would be a placeholder for actual log retrieval
+        // In a real implementation, you might query a logs table or use a logging service
+        logs = [
+          {
+            timestamp: new Date().toISOString(),
+            message: "Log fetching not implemented in this version",
+            level: "info"
+          }
+        ];
+      } catch (logError) {
+        console.error('Error fetching logs:', logError);
+      }
+    }
+
+    // Prepare response
+    const response = {
+      stripeKeyConfigured,
+      webhookConfigured,
+      athletePriceConfigured,
+      webhookUrlFormatCorrect: webhookUrlFormatCorrect,
+      stripeInfo,
+      webhookInfo,
+      athletePriceInfo,
+      webhookEndpoint,
+      database,
+      environmentVariables: {
+        STRIPE_SECRET_KEY: stripeSecretKey ? '✓ Configured' : '✗ Missing',
+        STRIPE_WEBHOOK_SECRET: webhookSecret ? '✓ Configured' : '✗ Missing',
+        STRIPE_ATHLETE_PRICE_ID: athletePriceId ? '✓ Configured' : '✗ Missing',
+        SUPABASE_URL: supabaseUrl ? '✓ Configured' : '✗ Missing',
+        SUPABASE_SERVICE_ROLE_KEY: supabaseKey ? '✓ Configured' : '✗ Missing',
+        SUPABASE_PROJECT_REF: projectRef ? '✓ Configured' : '✗ Missing',
+      },
+      logs: fetchLogs ? logs : undefined
     };
-    
-    // Return configuration status
+
     return new Response(
-      JSON.stringify({ 
-        status: 'success',
-        stripeKeyConfigured,
-        webhookSecretConfigured,
-        athletePriceConfigured,
-        projectIdConfigured,
-        webhookConfigured: stripeKeyConfigured && webhookSecretConfigured && projectIdConfigured,
-        webhookUrl, // Correct URL format
-        webhookEndpoint, // Current URL in Stripe (if available)
-        webhookUrlFormatCorrect,
-        stripeInfo,
-        webhookInfo,
-        athletePriceInfo,
-        database,
-        environmentVariables
-      }),
+      JSON.stringify(response),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error in check-webhook-config function:', error);
     return new Response(
-      JSON.stringify({ 
-        error: error.message, 
-        status: 'error'
-      }),
+      JSON.stringify({ error: error.message }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 

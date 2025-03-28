@@ -1,259 +1,73 @@
 
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/integrations/supabase/client';
 
-/**
- * Creates a checkout session for subscribing to a plan
- */
-export const createCheckoutSession = async (
-  planId: string,
-  successUrl: string,
-  cancelUrl: string
-) => {
+export async function verifyStripeWebhookConfig() {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('check-webhook-config');
     
-    if (!session?.user) {
-      throw new Error("User must be logged in to subscribe");
-    }
-
-    console.log(`Creating checkout session for user: ${session.user.id}, plan: ${planId}`);
-
-    // First check that webhook configuration is correct
-    try {
-      const { data: webhookConfig } = await supabase.functions.invoke("check-webhook-config");
-      console.log("Webhook configuration:", webhookConfig);
-      
-      if (!webhookConfig.webhookConfigured || !webhookConfig.stripeKeyConfigured) {
-        console.warn("Stripe not fully configured:", webhookConfig);
-      }
-    } catch (configError) {
-      console.warn("Could not check webhook configuration:", configError);
-      // Continue anyway - don't block checkout process due to config check
-    }
-
-    const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-      body: {
-        planId,
-        userId: session.user.id,
-        successUrl,
-        cancelUrl,
-        metadata: {
-          userId: session.user.id,
-          planId: planId
-        }
-      }
-    });
-
     if (error) {
-      console.error("Error creating checkout session:", error);
-      throw new Error(error.message || "Failed to create checkout session");
+      console.error('Error verifying Stripe webhook config:', error);
+      throw error;
     }
-
-    console.log("Checkout session created:", data);
-
-    // For organization plan, we return a special response to handle contact sales
-    if (data.contactSales) {
-      return { contactSales: true, message: data.message };
-    }
-
-    // For athlete plan, we redirect to the Stripe checkout URL
-    return { url: data.url };
-  } catch (error) {
-    console.error("Error in createCheckoutSession:", error);
-    throw error;
-  }
-};
-
-/**
- * Gets subscription status for the current user
- */
-export const getSubscriptionStatus = async () => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
     
-    if (!session?.user) {
-      throw new Error("User must be logged in to check subscription");
-    }
-
-    console.log(`Checking subscription status for user: ${session.user.id}`);
-
-    // First check directly in the database for an active subscription
-    const { data: directSubscriptionData, error: directSubscriptionError } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .eq('status', 'active')
-      .maybeSingle();
-    
-    if (directSubscriptionData && !directSubscriptionError) {
-      console.log('Found active subscription directly in database:', directSubscriptionData);
-      return {
-        active: true,
-        plan: directSubscriptionData.plan_id,
-        status: 'active',
-        role: 'athlete', // Default role, will be overridden if profile check succeeds
-        trialEnd: null,
-        cancelAt: null,
-        renewsAt: null,
-        stripeSubscriptionId: directSubscriptionData.stripe_subscription_id
-      };
-    }
-
-    // Check for coach role in profiles
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('user_id', session.user.id)
-      .maybeSingle();
-    
-    if (profileData?.role === 'coach' && !profileError) {
-      console.log('User is a coach with premium access:', profileData);
-      return {
-        active: true,
-        plan: 'coach',
-        status: 'active',
-        role: 'coach',
-        trialEnd: null,
-        cancelAt: null,
-        renewsAt: null
-      };
-    }
-
-    // Also check pending subscriptions - if we just initiated checkout
-    const { data: pendingSubscriptionData, error: pendingSubError } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .eq('status', 'pending')
-      .maybeSingle();
-    
-    if (pendingSubscriptionData && !pendingSubError) {
-      console.log('Found pending subscription in database:', pendingSubscriptionData);
-      return {
-        active: false,
-        plan: pendingSubscriptionData.plan_id,
-        status: 'pending',
-        role: 'athlete',
-        trialEnd: null,
-        cancelAt: null,
-        renewsAt: null,
-        pendingCheckout: true
-      };
-    }
-
-    // If no direct entry found, try the edge function
-    try {
-      const { data: webhookConfig } = await supabase.functions.invoke("check-webhook-config");
-      console.log("Webhook configuration status:", webhookConfig.status);
-    } catch (configError) {
-      console.log("Webhook config check failed, continuing with subscription check:", configError);
-      // We'll continue with the subscription check even if the config check fails
-    }
-
-    const { data, error } = await supabase.functions.invoke("get-subscription-status", {
-      body: {
-        userId: session.user.id
-      }
-    });
-
-    if (error) {
-      console.error("Error fetching subscription status:", error);
-      throw new Error(error.message || "Failed to fetch subscription status");
-    }
-
     return data;
   } catch (error) {
-    console.error("Error in getSubscriptionStatus:", error);
-    
-    // If the edge function fails, try to get the basic role information from profiles
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return null;
-      
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .single();
-        
-      if (data) {
-        return {
-          role: data.role,
-          active: data.role !== 'athlete', // Assuming non-athlete roles are active
-          plan: data.role
-        };
-      }
-    } catch (fallbackError) {
-      console.error("Fallback profile check also failed:", fallbackError);
-    }
-    
+    console.error('Error in verifyStripeWebhookConfig:', error);
     throw error;
   }
-};
+}
 
-/**
- * Cancels a user's subscription
- */
-export const cancelSubscription = async (subscriptionId: string) => {
+export async function createCheckoutSession(planId: string, successUrl: string, cancelUrl: string) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user } } = await supabase.auth.getUser();
     
-    if (!session?.user) {
-      throw new Error("User must be logged in to cancel subscription");
+    if (!user) {
+      throw new Error('User not authenticated');
     }
-
-    console.log(`Canceling subscription: ${subscriptionId} for user: ${session.user.id}`);
-
-    // Call the cancel-subscription edge function
-    const { data, error } = await supabase.functions.invoke("cancel-subscription", {
+    
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
       body: {
-        subscriptionId,
-        userId: session.user.id
+        planId,
+        userId: user.id,
+        successUrl,
+        cancelUrl
       }
     });
-
+    
     if (error) {
-      console.error("Error calling cancel-subscription function:", error);
-      throw new Error(error.message || "Failed to cancel subscription");
+      console.error('Error creating checkout session:', error);
+      throw error;
     }
-
-    console.log("Subscription cancellation result:", data);
     
-    // Also update the subscription status in our database for immediate feedback
-    const { error: updateError } = await supabase
-      .from('subscriptions')
-      .update({ 
-        status: 'canceled',
-        updated_at: new Date().toISOString()
-      })
-      .eq('stripe_subscription_id', subscriptionId)
-      .eq('user_id', session.user.id);
-    
-    if (updateError) {
-      console.error("Error updating subscription status in database:", updateError);
-      // Still return success since we attempted cancellation via the edge function
-    }
-
-    return { 
-      success: true, 
-      message: data.message || "Subscription canceled successfully"
-    };
-  } catch (error: any) {
-    console.error("Error in cancelSubscription:", error);
-    throw error;
-  }
-};
-
-/**
- * Debug function to manually verify Stripe webhook configuration
- */
-export const verifyStripeWebhookConfig = async () => {
-  try {
-    const response = await supabase.functions.invoke("check-webhook-config");
-    return response.data;
+    return data;
   } catch (error) {
-    console.error("Error verifying Stripe webhook configuration:", error);
+    console.error('Error in createCheckoutSession:', error);
     throw error;
   }
-};
+}
+
+export async function cancelSubscription() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { data, error } = await supabase.functions.invoke('cancel-subscription', {
+      body: {
+        userId: user.id,
+      }
+    });
+    
+    if (error) {
+      console.error('Error canceling subscription:', error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in cancelSubscription:', error);
+    throw error;
+  }
+}
