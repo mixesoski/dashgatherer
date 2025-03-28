@@ -71,3 +71,27 @@ export async function cancelSubscription() {
     throw error;
   }
 }
+
+export async function getSubscriptionStatus() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    
+    const { data, error } = await supabase.functions.invoke('get-subscription-status', {
+      body: { userId: user.id }
+    });
+    
+    if (error) {
+      console.error('Error fetching subscription status:', error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error in getSubscriptionStatus:', error);
+    throw error;
+  }
+}

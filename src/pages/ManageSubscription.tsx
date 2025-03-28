@@ -1,8 +1,6 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { getSubscriptionStatus } from "@/services/stripe";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -169,7 +167,6 @@ const ManageSubscription = () => {
             Back to Account
           </Button>
           
-          {/* This CancelSubscriptionButton will only be visible for active subscriptions */}
           <CancelSubscriptionButton 
             variant="outline" 
             className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
