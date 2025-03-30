@@ -133,18 +133,8 @@ class ChartUpdater:
                 start_date = datetime.date.today() - datetime.timedelta(days=180)
                 print(f"No existing data found, starting from {start_date}")
             else:
+                start_date = last_date
                 print(f"Found existing data, checking for new activities on {last_date}")
-                # First check if there are new activities for the last existing date
-                try:
-                    activities = self.garmin.get_activities_by_date(
-                        last_date.isoformat(),
-                        last_date.isoformat()
-                    )
-                    print(f"Found {len(activities)} activities for {last_date}")
-                    start_date = last_date
-                except Exception as e:
-                    print(f"Error fetching activities: {e}")
-                    raise
             
             end_date = datetime.date.today()
             
@@ -202,20 +192,25 @@ class ChartUpdater:
                             new_activities.add(activity_id)
                             self.processed_activity_ids.add(activity_id)
                 
-                # Always calculate new metrics, even for rest days
-                if existing_data:
-                    # If we have existing data but no new activities, use 0 as current_trimp
-                    current_trimp = trimp_total if new_activities else 0
-                    new_metrics = self.calculate_new_metrics(current_trimp, previous_metrics)
+                # If we have existing data and no new activities, preserve the existing metrics
+                if existing_data and not new_activities:
+                    print(f"No new activities for {date_str}, preserving existing metrics")
+                    new_metrics = {
+                        'atl': existing_data['atl'],
+                        'ctl': existing_data['ctl'],
+                        'tsb': existing_data['tsb']
+                    }
+                    activity_str = existing_data['activity']
+                    trimp_total = existing_data['trimp']
                 else:
-                    # For new dates, use the total TRIMP (which might be 0 for rest days)
+                    # Calculate new metrics
                     new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                    activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
                 
                 # Store the metrics we just calculated as they'll be needed for the next day
                 previous_metrics = new_metrics
                 
                 # Update the database
-                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
                 self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
                 
                 logging.info(f"Updated metrics for {date_str}: TRIMP={trimp_total}, ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
