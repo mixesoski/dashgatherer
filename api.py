@@ -134,14 +134,20 @@ def update_chart():
     try:
         # Verify authentication
         auth_header = request.headers.get('Authorization')
+        print(f"\nReceived request to /api/update-chart")
+        print(f"Auth header: {auth_header}")
+        
         user = verify_auth_token(auth_header)
         if not user:
+            print("Authentication failed")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
         data = request.json
-        user_id = data.get('userId')
+        print(f"Request data: {data}")
         
+        user_id = data.get('userId')
         if not user_id or user_id != user.id:
+            print(f"Invalid user ID. Expected: {user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         print(f"\nReceived chart update request for user: {user_id}")
@@ -152,7 +158,11 @@ def update_chart():
         return jsonify(result)
         
     except Exception as e:
-        log_error("Error in update chart endpoint", e)
+        print(f"\nError in update chart endpoint:")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)

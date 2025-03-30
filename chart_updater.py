@@ -90,100 +90,35 @@ class ChartUpdater:
 
     def update_chart_data(self):
         try:
+            print(f"\nStarting chart update for user {self.user_id}")
+            
+            # Initialize Garmin connection
+            print("Initializing Garmin connection...")
             self.initialize_garmin()
+            print("Garmin connection initialized successfully")
             
             # Find the last existing date and its metrics
+            print("Finding last existing date...")
             last_date, previous_metrics = self.find_last_existing_date()
+            print(f"Last date: {last_date}")
+            print(f"Previous metrics: {previous_metrics}")
+            
             if not last_date:
                 # If no data exists, start from 180 days ago
                 start_date = datetime.date.today() - datetime.timedelta(days=180)
+                print(f"No existing data found, starting from {start_date}")
             else:
+                print(f"Found existing data, checking for new activities on {last_date}")
                 # First check if there are new activities for the last existing date
-                activities = self.garmin.get_activities_by_date(
-                    last_date.isoformat(),
-                    last_date.isoformat()
-                )
-                
-                trimp_total = 0.0
-                activity_names = []
-                
-                for activity in activities:
-                    activity_id = activity['activityId']
-                    try:
-                        details = self.garmin.get_activity(activity_id)
-                        trimp = 0.0
-                        if 'connectIQMeasurements' in details:
-                            for item in details['connectIQMeasurements']:
-                                if item['developerFieldNumber'] == 4:
-                                    trimp = round(float(item['value']), 1)
-                                    break
-                        activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
-                        if activity_type in ['strength_training', 'Siła']:
-                            trimp *= 2
-                        trimp_total += trimp
-                        activity_names.append(activity.get('activityName', 'Unknown Activity'))
-                    except Exception as e:
-                        print(f"Error processing activity {activity_id}: {e}")
-                        continue
-                
-                # Get current values for last date
-                response = self.client.table('garmin_data') \
-                    .select('trimp, activity') \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', last_date.isoformat()) \
-                    .execute()
-                
-                current_data = response.data[0] if isinstance(response.data, list) else response.data
-                
-                if trimp_total > 0:
-                    current_activities = set(current_data['activity'].split(', ')) if current_data['activity'] else set()
-                    new_activities = set(activity_names)
-                    if current_activities.issuperset(new_activities):
-                        print(f"Duplicate activity detected for last date {last_date}; skipping TRIMP update.")
-                    else:
-                        new_trimp = current_data['trimp'] + trimp_total
-                        all_activities = current_activities.union(new_activities)
-                        activity_str = ', '.join(sorted(all_activities))
-
-                        print(f"\n=== Updating last existing date: {last_date} ===")
-                        print(f"Current TRIMP: {current_data['trimp']} + New TRIMP: {trimp_total} = {new_trimp}")
-                        print(f"Current activities: {current_data['activity']}")
-                        print(f"New activities: {', '.join(activity_names)}")
-                        print(f"Combined activities: {activity_str}")
-
-                        self.client.table('garmin_data').update({
-                            'trimp': new_trimp,
-                            'activity': activity_str
-                        }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
-
-                        previous_response = self.client.table('garmin_data') \
-                            .select('atl, ctl, tsb') \
-                            .eq('user_id', self.user_id) \
-                            .lt('date', last_date.isoformat()) \
-                            .order('date', desc=True) \
-                            .limit(1) \
-                            .execute()
-
-                        if previous_response.data:
-                            data = previous_response.data[0] if isinstance(previous_response.data, list) else previous_response.data
-                            prev_metrics = {
-                                'atl': float(data['atl']),
-                                'ctl': float(data['ctl']),
-                                'tsb': float(data['tsb'])
-                            }
-                        else:
-                            prev_metrics = {'atl': 0, 'ctl': 0, 'tsb': 0}
-
-                        new_metrics = self.calculate_new_metrics(trimp_total, prev_metrics)
-
-                        self.client.table('garmin_data').update({
-                            **new_metrics
-                        }).eq('user_id', self.user_id).eq('date', last_date.isoformat()).execute()
-
-                        previous_metrics = new_metrics
-                
-                # Start from the day after the last existing date
-                start_date = last_date + datetime.timedelta(days=1)
+                try:
+                    activities = self.garmin.get_activities_by_date(
+                        last_date.isoformat(),
+                        last_date.isoformat()
+                    )
+                    print(f"Found {len(activities)} activities for {last_date}")
+                except Exception as e:
+                    print(f"Error fetching activities: {e}")
+                    raise
             
             end_date = datetime.date.today()
             
