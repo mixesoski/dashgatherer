@@ -94,14 +94,22 @@ class ChartUpdater:
             
             # Initialize Garmin connection
             print("Initializing Garmin connection...")
-            self.initialize_garmin()
-            print("Garmin connection initialized successfully")
+            try:
+                self.initialize_garmin()
+                print("Garmin connection initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize Garmin connection: {e}")
+                raise
             
             # Find the last existing date and its metrics
             print("Finding last existing date...")
-            last_date, previous_metrics = self.find_last_existing_date()
-            print(f"Last date: {last_date}")
-            print(f"Previous metrics: {previous_metrics}")
+            try:
+                last_date, previous_metrics = self.find_last_existing_date()
+                print(f"Last date: {last_date}")
+                print(f"Previous metrics: {previous_metrics}")
+            except Exception as e:
+                print(f"Failed to find last existing date: {e}")
+                raise
             
             if not last_date:
                 # If no data exists, start from 180 days ago
@@ -116,6 +124,7 @@ class ChartUpdater:
                         last_date.isoformat()
                     )
                     print(f"Found {len(activities)} activities for {last_date}")
+                    start_date = last_date
                 except Exception as e:
                     print(f"Error fetching activities: {e}")
                     raise

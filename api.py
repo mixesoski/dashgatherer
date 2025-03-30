@@ -147,8 +147,12 @@ def update_chart():
         print(f"Request data: {data}")
         
         user_id = data.get('userId')
-        if not user_id or user_id != user.user.id:
-            print(f"Invalid user ID. Expected: {user.user.id}, Got: {user_id}")
+        if not user_id:
+            print("No user ID provided in request")
+            return jsonify({'success': False, 'error': 'No user ID provided'}), 400
+            
+        if user_id != user.user.id:
+            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         print(f"\nReceived chart update request for user: {user_id}")
