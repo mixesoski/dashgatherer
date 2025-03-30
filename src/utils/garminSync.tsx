@@ -1,9 +1,17 @@
-
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
 
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
+
+// Debug logging
+console.log('Environment variables:', {
+    VITE_API_URL: import.meta.env.VITE_API_URL,
+    API_URL: API_URL,
+    NODE_ENV: import.meta.env.MODE,
+    PROD: import.meta.env.PROD,
+    DEV: import.meta.env.DEV
+});
 
 export const syncGarminData = async (userId: string, startDate: Date) => {
     try {
@@ -20,6 +28,7 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         console.log('Using userId:', userId);
         console.log('Start date:', startDate);
         console.log('API URL:', `${API_URL}/api/sync-garmin`);
+        console.log('Full request URL:', `${API_URL}/api/sync-garmin`);
         
         if (!user || user.id !== userId) {
             toast.error('User authentication error', { id: toastId });
