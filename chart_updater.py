@@ -4,6 +4,7 @@ import datetime
 from garminconnect import Garmin
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import traceback
 
 load_dotenv()
 
@@ -191,8 +192,15 @@ class ChartUpdater:
                 
                 existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
                 
+                # Track processed activity IDs to prevent duplicates
+                processed_activity_ids = set()
+                
                 for activity in activities_for_date:
                     activity_id = activity['activityId']
+                    # Skip if we've already processed this activity
+                    if activity_id in processed_activity_ids:
+                        continue
+                        
                     try:
                         details = self.garmin.get_activity(activity_id)
                         trimp = 0.0
@@ -205,6 +213,7 @@ class ChartUpdater:
                         if activity_type in ['strength_training', 'Siła']:
                             trimp *= 2
                         trimp_total += trimp
+                        processed_activity_ids.add(activity_id)
                     except Exception as e:
                         print(f"Error processing activity {activity_id}: {e}")
                         continue
@@ -213,7 +222,8 @@ class ChartUpdater:
                     activity_str = "Rest Day"
                 else:
                     activity_names = [activity.get('activityName', 'Unknown Activity') 
-                                    for activity in activities_for_date]
+                                    for activity in activities_for_date
+                                    if activity['activityId'] in processed_activity_ids]
                     all_activities = existing_activities.union(set(activity_names))
                     activity_str = ', '.join(sorted(all_activities)) if all_activities else "Unknown Activity"
                 
@@ -257,8 +267,11 @@ class ChartUpdater:
             return {'success': True, 'updated': updated_count}
             
         except Exception as e:
-            print(f"\n=== Error occurred ===")
-            print(f"Error in update_chart_data: {e}")
+            print(f"\nError in update_chart_data:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print("Traceback:")
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
 def update_chart_data(user_id):
