@@ -5,6 +5,7 @@ from garminconnect import Garmin
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import traceback
+import logging
 
 load_dotenv()
 
@@ -13,6 +14,7 @@ class ChartUpdater:
         self.client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
         self.user_id = user_id
         self.garmin = None
+        self.processed_activity_ids = set()
 
     def get_garmin_credentials(self):
         try:
@@ -71,7 +73,7 @@ class ChartUpdater:
             return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
 
     def calculate_new_metrics(self, current_trimp, previous_metrics):
-        current_trimp = float(current_trimp)
+        current_trimp = float(current_trimp)  # This might be 0 for rest days
         
         if not previous_metrics:
             return {'atl': current_trimp, 'ctl': current_trimp, 'tsb': 0}
@@ -79,9 +81,11 @@ class ChartUpdater:
         previous_atl = float(previous_metrics['atl'])
         previous_ctl = float(previous_metrics['ctl'])
         
+        # For rest days (current_trimp = 0), metrics will naturally decay
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
-        # TSB should be calculated using previous day's values
+        
+        # Calculate TSB using previous day's values
         new_tsb = previous_ctl - previous_atl
         
         return {
@@ -90,7 +94,7 @@ class ChartUpdater:
             'tsb': round(new_tsb, 2)
         }
 
-    def update_chart_data(self):
+    def update_chart_data(self, start_date=None, end_date=None):
         try:
             print(f"\nStarting chart update for user {self.user_id}")
             
@@ -150,136 +154,53 @@ class ChartUpdater:
             print(f"\n=== Initial metrics from {start_date} ===")
             print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
-            # Get activities for the entire date range
-            activities = self.garmin.get_activities_by_date(
-                start_date.isoformat(), 
-                end_date.isoformat()
-            )
-            
-            activities_by_date = {}
-            for activity in activities:
-                start_time = activity.get('startTimeLocal')
-                if not start_time:
-                    continue
-                try:
-                    activity_date = datetime.datetime.fromisoformat(start_time).date()
-                    date_str = activity_date.isoformat()
-                    activities_by_date.setdefault(date_str, []).append(activity)
-                except ValueError as e:
-                    print(f"Error parsing activity date: {e}")
-                    continue
-            
             updated_count = 0
             
             for date in date_range:
-                date_str = date.isoformat()
-                date_obj = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
-                date_iso = date_obj.isoformat()
+                date_str = date.strftime('%Y-%m-%d')
+                logging.info(f"Processing date: {date_str}")
                 
-                # Get existing data for this date if any
-                existing_response = self.client.table('garmin_data') \
-                    .select('trimp, activity, atl, ctl, tsb') \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', date_str) \
-                    .execute()
+                # Get existing data for this date
+                existing_data = self.get_existing_data(date_str)
                 
-                if existing_response.data and ((isinstance(existing_response.data, list) and len(existing_response.data) > 0) or (not isinstance(existing_response.data, list))):
-                    existing_data = existing_response.data[0] if isinstance(existing_response.data, list) else existing_response.data
-                else:
-                    existing_data = {'trimp': 0.0, 'activity': '', 'atl': previous_metrics['atl'], 'ctl': previous_metrics['ctl'], 'tsb': previous_metrics['tsb']}
+                # Initialize metrics from previous day or default values
+                previous_metrics = self.get_previous_day_metrics(date_str) if date != start_date else None
                 
-                # If this is today's date and we already have data, skip processing
-                if date == end_date and existing_data['trimp'] > 0:
-                    print(f"\nSkipping today's date {date_str} - already processed")
-                    continue
+                # Get activities for this date
+                activities = self.get_activities_for_date(date)
                 
-                activities_for_date = activities_by_date.get(date_str, [])
-                existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
-                
-                # Track processed activity IDs to prevent duplicates
-                processed_activity_ids = set()
-                trimp_total = 0.0
+                # Calculate total TRIMP for new activities
+                trimp_total = 0
+                activity_names = []
                 new_activities = set()
                 
-                for activity in activities_for_date:
-                    activity_id = activity['activityId']
-                    activity_name = activity.get('activityName', 'Unknown Activity')
-                    
-                    # Skip if we've already processed this activity
-                    if activity_id in processed_activity_ids:
-                        continue
-                        
-                    try:
-                        details = self.garmin.get_activity(activity_id)
-                        trimp = 0.0
-                        if 'connectIQMeasurements' in details:
-                            for item in details['connectIQMeasurements']:
-                                if item['developerFieldNumber'] == 4:
-                                    trimp = round(float(item['value']), 1)
-                                    break
-                        activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
-                        if activity_type in ['strength_training', 'Siła']:
-                            trimp *= 2
-                            
-                        # Only add TRIMP if this is a new activity
-                        if activity_name not in existing_activities:
+                if activities:
+                    for activity in activities:
+                        activity_id = activity.get('activityId')
+                        if activity_id not in self.processed_activity_ids:
+                            trimp = float(activity.get('trimp', 0))
                             trimp_total += trimp
-                            new_activities.add(activity_name)
-                            processed_activity_ids.add(activity_id)
-                    except Exception as e:
-                        print(f"Error processing activity {activity_id}: {e}")
-                        continue
+                            activity_name = activity.get('activityName', 'Unknown Activity')
+                            activity_names.append(activity_name)
+                            new_activities.add(activity_id)
+                            self.processed_activity_ids.add(activity_id)
                 
-                if trimp_total == 0 and existing_data['trimp'] == 0:
-                    activity_str = "Rest Day"
+                # Always calculate new metrics, even for rest days
+                if existing_data:
+                    # If we have existing data but no new activities, use 0 as current_trimp
+                    current_trimp = trimp_total if new_activities else 0
+                    new_metrics = self.calculate_new_metrics(current_trimp, previous_metrics)
                 else:
-                    # Combine existing activities with new activities
-                    all_activities = existing_activities.union(new_activities)
-                    activity_str = ', '.join(sorted(all_activities)) if all_activities else "Unknown Activity"
+                    # For new dates, use the total TRIMP (which might be 0 for rest days)
+                    new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
                 
-                # Only add new TRIMP to existing TRIMP if we have new activities
-                total_trimp = existing_data['trimp']
-                if new_activities:
-                    total_trimp += trimp_total
+                # Update the database
+                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
+                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
                 
-                # Only recalculate metrics if we have new activities
-                if new_activities:
-                    new_metrics = self.calculate_new_metrics(total_trimp, previous_metrics)
-                    previous_metrics = new_metrics
-                else:
-                    new_metrics = {
-                        'atl': existing_data['atl'],
-                        'ctl': existing_data['ctl'],
-                        'tsb': existing_data['tsb']
-                    }
+                logging.info(f"Updated metrics for {date_str}: TRIMP={trimp_total}, ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
                 
-                print(f"\n=== Processing {date_str} ===")
-                print(f"Existing TRIMP: {existing_data['trimp']}")
-                print(f"New TRIMP: {trimp_total}")
-                print(f"Total TRIMP: {total_trimp}")
-                print(f"Activity: {activity_str}")
-                print(f"Metrics update:")
-                print(f"ATL: {existing_data['atl']} -> {new_metrics['atl']}")
-                print(f"CTL: {existing_data['ctl']} -> {new_metrics['ctl']}")
-                print(f"TSB: {existing_data['tsb']} -> {new_metrics['tsb']}")
-                
-                try:
-                    # Use upsert to handle existing entries
-                    print(f"Upserting data for {date_str}:")
-                    print(f"TRIMP: {total_trimp} | ATL: {new_metrics['atl']} | "
-                          f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
-                    
-                    self.client.table('garmin_data').upsert({
-                        'date': date_iso,
-                        'trimp': total_trimp,
-                        'activity': activity_str,
-                        'user_id': self.user_id,
-                        **new_metrics
-                    }, on_conflict='user_id,date').execute()
-                    updated_count += 1
-                except Exception as e:
-                    print(f"Error upserting metrics for {date_iso}: {e}")
-                    continue
+                updated_count += 1
             
             print(f"\n=== Update completed ===")
             print(f"Total records processed: {updated_count}")
@@ -292,6 +213,59 @@ class ChartUpdater:
             print("Traceback:")
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
+
+    def get_existing_data(self, date_str):
+        response = self.client.table('garmin_data') \
+            .select('trimp, activity, atl, ctl, tsb') \
+            .eq('user_id', self.user_id) \
+            .eq('date', date_str) \
+            .execute()
+        if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
+            return response.data[0] if isinstance(response.data, list) else response.data
+        else:
+            return None
+
+    def get_previous_day_metrics(self, date_str):
+        response = self.client.table('garmin_data') \
+            .select('trimp, atl, ctl, tsb') \
+            .eq('user_id', self.user_id) \
+            .eq('date', date_str) \
+            .execute()
+        if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
+            data = response.data[0] if isinstance(response.data, list) else response.data
+            return {
+                'atl': float(data['atl']),
+                'ctl': float(data['ctl']),
+                'tsb': float(data['tsb'])
+            }
+        else:
+            return None
+
+    def get_activities_for_date(self, date):
+        activities = self.garmin.get_activities_by_date(
+            date.isoformat(),
+            date.isoformat()
+        )
+        return activities
+
+    def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
+        try:
+            date_obj = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
+            date_iso = date_obj.isoformat()
+            
+            print(f"Upserting data for {date_str}:")
+            print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
+                  f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            
+            self.client.table('garmin_data').upsert({
+                'date': date_iso,
+                'trimp': trimp_total,
+                'activity': activity_str,
+                'user_id': self.user_id,
+                **new_metrics
+            }, on_conflict='user_id,date').execute()
+        except Exception as e:
+            print(f"Error upserting metrics for {date_iso}: {e}")
 
 def update_chart_data(user_id):
     updater = ChartUpdater(user_id)
