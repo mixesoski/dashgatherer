@@ -250,8 +250,9 @@ class ChartUpdater:
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
         try:
-            date_obj = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
-            date_iso = date_obj.isoformat()
+            # Convert date_str to datetime object
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
             print(f"Upserting data for {date_str}:")
             print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
@@ -265,7 +266,7 @@ class ChartUpdater:
                 **new_metrics
             }, on_conflict='user_id,date').execute()
         except Exception as e:
-            print(f"Error upserting metrics for {date_iso}: {e}")
+            print(f"Error upserting metrics for {date_str}: {e}")
 
 def update_chart_data(user_id):
     updater = ChartUpdater(user_id)
