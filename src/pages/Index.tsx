@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
@@ -256,9 +255,20 @@ const Index = () => {
                     
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-gray-500">Start from:</span>
-                      <DatePicker selected={startDate} onChange={(date: Date) => setStartDate(startOfDay(date))} maxDate={new Date()} minDate={subMonths(new Date(), 5)} className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" dateFormat="yyyy-MM-dd" placeholderText="Select start date" popperPlacement="bottom-end" popperProps={{
-                strategy: "fixed"
-              }} calendarClassName="translate-y-2" disabled={isUpdating} />
+                      <DatePicker 
+                        selected={startDate} 
+                        onChange={(date: Date) => setStartDate(startOfDay(date))} 
+                        maxDate={new Date()} 
+                        className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                        dateFormat="yyyy-MM-dd" 
+                        placeholderText="Select start date" 
+                        popperPlacement="bottom-end" 
+                        popperProps={{
+                          strategy: "fixed"
+                        }} 
+                        calendarClassName="translate-y-2" 
+                        disabled={isUpdating} 
+                      />
                     </div>
                   </div>}
               </div> : <>
