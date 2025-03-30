@@ -154,6 +154,9 @@ class ChartUpdater:
             print(f"\n=== Initial metrics from {start_date} ===")
             print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
+            # Store initial metrics to use for the first day
+            self.initial_metrics = previous_metrics
+            
             updated_count = 0
             
             for date in date_range:
@@ -163,8 +166,11 @@ class ChartUpdater:
                 # Get existing data for this date
                 existing_data = self.get_existing_data(date_str)
                 
-                # Initialize metrics from previous day or default values
-                previous_metrics = self.get_previous_day_metrics(date_str) if date != start_date else None
+                # Initialize metrics from previous day or initial metrics for first day
+                if date == start_date:
+                    previous_metrics = self.initial_metrics
+                else:
+                    previous_metrics = self.get_previous_day_metrics(date_str)
                 
                 # Get activities for this date
                 activities = self.get_activities_for_date(date)
@@ -193,6 +199,9 @@ class ChartUpdater:
                 else:
                     # For new dates, use the total TRIMP (which might be 0 for rest days)
                     new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                
+                # Store the metrics we just calculated as they'll be needed for the next day
+                previous_metrics = new_metrics
                 
                 # Update the database
                 activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
@@ -226,11 +235,17 @@ class ChartUpdater:
             return None
 
     def get_previous_day_metrics(self, date_str):
+        # Convert date_str to datetime and get previous day
+        current_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+        previous_date = current_date - datetime.timedelta(days=1)
+        previous_date_str = previous_date.strftime('%Y-%m-%d')
+        
         response = self.client.table('garmin_data') \
             .select('trimp, atl, ctl, tsb') \
             .eq('user_id', self.user_id) \
-            .eq('date', date_str) \
+            .eq('date', previous_date_str) \
             .execute()
+            
         if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
             data = response.data[0] if isinstance(response.data, list) else response.data
             return {
@@ -239,7 +254,9 @@ class ChartUpdater:
                 'tsb': float(data['tsb'])
             }
         else:
-            return None
+            # If no previous day data, use the initial metrics from find_last_existing_date
+            _, initial_metrics = self.find_last_existing_date()
+            return initial_metrics
 
     def get_activities_for_date(self, date):
         activities = self.garmin.get_activities_by_date(
