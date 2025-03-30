@@ -198,9 +198,12 @@ class ChartUpdater:
                 # Track processed activity IDs to prevent duplicates
                 processed_activity_ids = set()
                 trimp_total = 0.0
+                new_activities = set()
                 
                 for activity in activities_for_date:
                     activity_id = activity['activityId']
+                    activity_name = activity.get('activityName', 'Unknown Activity')
+                    
                     # Skip if we've already processed this activity
                     if activity_id in processed_activity_ids:
                         continue
@@ -216,8 +219,12 @@ class ChartUpdater:
                         activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
                         if activity_type in ['strength_training', 'Siła']:
                             trimp *= 2
-                        trimp_total += trimp
-                        processed_activity_ids.add(activity_id)
+                            
+                        # Only add TRIMP if this is a new activity
+                        if activity_name not in existing_activities:
+                            trimp_total += trimp
+                            new_activities.add(activity_name)
+                            processed_activity_ids.add(activity_id)
                     except Exception as e:
                         print(f"Error processing activity {activity_id}: {e}")
                         continue
@@ -225,14 +232,14 @@ class ChartUpdater:
                 if trimp_total == 0 and existing_data['trimp'] == 0:
                     activity_str = "Rest Day"
                 else:
-                    activity_names = [activity.get('activityName', 'Unknown Activity') 
-                                    for activity in activities_for_date
-                                    if activity['activityId'] in processed_activity_ids]
-                    all_activities = existing_activities.union(set(activity_names))
+                    # Combine existing activities with new activities
+                    all_activities = existing_activities.union(new_activities)
                     activity_str = ', '.join(sorted(all_activities)) if all_activities else "Unknown Activity"
                 
-                # Add new TRIMP to existing TRIMP
-                total_trimp = existing_data['trimp'] + trimp_total
+                # Only add new TRIMP to existing TRIMP if we have new activities
+                total_trimp = existing_data['trimp']
+                if new_activities:
+                    total_trimp += trimp_total
                 
                 new_metrics = self.calculate_new_metrics(total_trimp, previous_metrics)
                 
