@@ -85,7 +85,7 @@ class ChartUpdater:
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
         
-        # TSB is calculated using the previous day's values
+        # TSB is ALWAYS calculated using previous day's values
         # TSB = previous day's CTL - previous day's ATL
         new_tsb = previous_ctl - previous_atl
         
@@ -96,12 +96,11 @@ class ChartUpdater:
             'tsb': round(new_tsb, 2)
         }
         
-        print(f"\nMetrics calculation:")
-        print(f"Previous ATL: {previous_atl}, Previous CTL: {previous_ctl}")
-        print(f"Current TRIMP: {current_trimp}")
+        print(f"\nMetrics calculation for TRIMP {current_trimp}:")
+        print(f"Previous day's metrics - ATL: {previous_atl}, CTL: {previous_ctl}")
         print(f"New ATL: {metrics['atl']}")
         print(f"New CTL: {metrics['ctl']}")
-        print(f"New TSB: {metrics['tsb']} (using previous CTL: {previous_ctl} - previous ATL: {previous_atl})")
+        print(f"TSB: {metrics['tsb']} (previous CTL {previous_ctl} - previous ATL {previous_atl})")
         
         return metrics
 
