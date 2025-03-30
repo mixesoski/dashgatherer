@@ -132,8 +132,9 @@ class ChartUpdater:
                 start_date = datetime.date.today() - datetime.timedelta(days=180)
                 print(f"No existing data found, starting from {start_date}")
             else:
-                start_date = last_date
-                print(f"Found existing data, checking for new activities on {last_date}")
+                # Start from the day AFTER the last date
+                start_date = last_date + datetime.timedelta(days=1)
+                print(f"Found existing data for {last_date}, starting from {start_date}")
             
             end_date = datetime.date.today()
             
@@ -151,11 +152,8 @@ class ChartUpdater:
                 return {'success': True, 'updated': 0}
             
             print(f"\nProcessing dates from {start_date} to {end_date}")
-            print(f"\n=== Initial metrics from {start_date} ===")
+            print(f"\n=== Initial metrics from {last_date} ===")
             print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
-            
-            # Store initial metrics to use for the first day
-            self.initial_metrics = previous_metrics
             
             updated_count = 0
             
@@ -166,11 +164,8 @@ class ChartUpdater:
                 # Get existing data for this date
                 existing_data = self.get_existing_data(date_str)
                 
-                # Initialize metrics from previous day or initial metrics for first day
-                if date == start_date:
-                    previous_metrics = self.initial_metrics
-                else:
-                    previous_metrics = self.get_previous_day_metrics(date_str)
+                # Get previous day's metrics
+                previous_metrics = self.get_previous_day_metrics(date_str)
                 
                 # Get activities for this date
                 activities = self.get_activities_for_date(date)
