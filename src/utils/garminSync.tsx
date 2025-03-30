@@ -2,7 +2,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
 
-const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:5001';
+// Ensure we're using the correct API URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+console.log('API URL from environment:', API_URL);
 
 // Debug logging
 console.log('Environment variables:', {

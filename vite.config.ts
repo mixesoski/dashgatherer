@@ -9,6 +9,13 @@ export default defineConfig(({ mode }) => {
   // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
   
+  // Debug logging
+  console.log('Vite config environment variables:', {
+    mode,
+    VITE_API_URL: env.VITE_API_URL,
+    NODE_ENV: process.env.NODE_ENV
+  });
+  
   return {
     server: {
       host: "::",
