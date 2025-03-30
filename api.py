@@ -48,14 +48,14 @@ def root():
         'message': 'DashGatherer API is running',
         'version': '1.0.0',
         'endpoints': {
-            'health': '/health',
-            'sync_garmin': '/sync-garmin',
-            'update_chart': '/update-chart'
+            'health': '/api/health',
+            'sync_garmin': '/api/sync-garmin',
+            'update_chart': '/api/update-chart'
         },
         'timestamp': datetime.utcnow().isoformat()
     })
 
-@app.route('/sync-garmin', methods=['POST'])
+@app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
         data = request.json
@@ -87,7 +87,7 @@ def sync_garmin():
         print(traceback_str)
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/update-chart', methods=['POST'])
+@app.route('/api/update-chart', methods=['POST'])
 def update_chart():
     try:
         data = request.json
@@ -114,7 +114,7 @@ def update_chart():
             'error': str(e)
         }), 500
 
-@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint for Render"""
     try:
