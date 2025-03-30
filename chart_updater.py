@@ -177,7 +177,7 @@ class ChartUpdater:
                 
                 # Get existing data for this date if any
                 existing_response = self.client.table('garmin_data') \
-                    .select('trimp, activity') \
+                    .select('trimp, activity, atl, ctl, tsb') \
                     .eq('user_id', self.user_id) \
                     .eq('date', date_str) \
                     .execute()
@@ -185,7 +185,7 @@ class ChartUpdater:
                 if existing_response.data and ((isinstance(existing_response.data, list) and len(existing_response.data) > 0) or (not isinstance(existing_response.data, list))):
                     existing_data = existing_response.data[0] if isinstance(existing_response.data, list) else existing_response.data
                 else:
-                    existing_data = {'trimp': 0.0, 'activity': ''}
+                    existing_data = {'trimp': 0.0, 'activity': '', 'atl': previous_metrics['atl'], 'ctl': previous_metrics['ctl'], 'tsb': previous_metrics['tsb']}
                 
                 # If this is today's date and we already have data, skip processing
                 if date == end_date and existing_data['trimp'] > 0:
@@ -241,7 +241,16 @@ class ChartUpdater:
                 if new_activities:
                     total_trimp += trimp_total
                 
-                new_metrics = self.calculate_new_metrics(total_trimp, previous_metrics)
+                # Only recalculate metrics if we have new activities
+                if new_activities:
+                    new_metrics = self.calculate_new_metrics(total_trimp, previous_metrics)
+                    previous_metrics = new_metrics
+                else:
+                    new_metrics = {
+                        'atl': existing_data['atl'],
+                        'ctl': existing_data['ctl'],
+                        'tsb': existing_data['tsb']
+                    }
                 
                 print(f"\n=== Processing {date_str} ===")
                 print(f"Existing TRIMP: {existing_data['trimp']}")
@@ -249,11 +258,9 @@ class ChartUpdater:
                 print(f"Total TRIMP: {total_trimp}")
                 print(f"Activity: {activity_str}")
                 print(f"Metrics update:")
-                print(f"ATL: {previous_metrics['atl']} -> {new_metrics['atl']}")
-                print(f"CTL: {previous_metrics['ctl']} -> {new_metrics['ctl']}")
-                print(f"TSB: {previous_metrics['tsb']} -> {new_metrics['tsb']}")
-                
-                previous_metrics = new_metrics
+                print(f"ATL: {existing_data['atl']} -> {new_metrics['atl']}")
+                print(f"CTL: {existing_data['ctl']} -> {new_metrics['ctl']}")
+                print(f"TSB: {existing_data['tsb']} -> {new_metrics['tsb']}")
                 
                 try:
                     # Use upsert to handle existing entries
