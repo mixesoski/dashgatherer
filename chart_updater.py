@@ -175,9 +175,6 @@ class ChartUpdater:
                 date_obj = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=datetime.timezone.utc)
                 date_iso = date_obj.isoformat()
                 
-                trimp_total = 0.0
-                activities_for_date = activities_by_date.get(date_str, [])
-                
                 # Get existing data for this date if any
                 existing_response = self.client.table('garmin_data') \
                     .select('trimp, activity') \
@@ -190,10 +187,17 @@ class ChartUpdater:
                 else:
                     existing_data = {'trimp': 0.0, 'activity': ''}
                 
+                # If this is today's date and we already have data, skip processing
+                if date == end_date and existing_data['trimp'] > 0:
+                    print(f"\nSkipping today's date {date_str} - already processed")
+                    continue
+                
+                activities_for_date = activities_by_date.get(date_str, [])
                 existing_activities = set(existing_data['activity'].split(', ')) if existing_data['activity'] and existing_data['activity'] != 'Rest Day' else set()
                 
                 # Track processed activity IDs to prevent duplicates
                 processed_activity_ids = set()
+                trimp_total = 0.0
                 
                 for activity in activities_for_date:
                     activity_id = activity['activityId']
