@@ -270,11 +270,41 @@ class ChartUpdater:
             return initial_metrics
 
     def get_activities_for_date(self, date):
-        activities = self.garmin.get_activities_by_date(
-            date.isoformat(),
-            date.isoformat()
-        )
-        return activities
+        try:
+            activities = self.garmin.get_activities_by_date(
+                date.isoformat(),
+                date.isoformat()
+            )
+            
+            # Fetch TRIMP values for each activity
+            activities_with_trimp = []
+            for activity in activities:
+                activity_id = activity['activityId']
+                try:
+                    details = self.garmin.get_activity(activity_id)
+                    trimp = 0.0
+                    if 'connectIQMeasurements' in details:
+                        for item in details['connectIQMeasurements']:
+                            if item['developerFieldNumber'] == 4:
+                                trimp = round(float(item['value']), 1)
+                                break
+                    
+                    # Double TRIMP for strength training activities
+                    activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
+                    if activity_type in ['strength_training', 'Siła']:
+                        trimp *= 2
+                    
+                    activity['trimp'] = trimp
+                    activities_with_trimp.append(activity)
+                    print(f"Activity {activity.get('activityName', 'Unknown')}: TRIMP = {trimp}")
+                except Exception as e:
+                    print(f"Error getting details for activity {activity_id}: {e}")
+                    continue
+            
+            return activities_with_trimp
+        except Exception as e:
+            print(f"Error fetching activities for {date}: {e}")
+            return []
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
         try:
