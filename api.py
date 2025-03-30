@@ -55,6 +55,7 @@ def verify_auth_token(auth_header):
     try:
         # Verify the token with Supabase
         user = supabase.auth.get_user(token)
+        print(f"Verified user: {user}")
         return user
     except Exception as e:
         print(f"Auth error: {e}")
@@ -146,8 +147,8 @@ def update_chart():
         print(f"Request data: {data}")
         
         user_id = data.get('userId')
-        if not user_id or user_id != user.id:
-            print(f"Invalid user ID. Expected: {user.id}, Got: {user_id}")
+        if not user_id or user_id != user.user.id:
+            print(f"Invalid user ID. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         print(f"\nReceived chart update request for user: {user_id}")
