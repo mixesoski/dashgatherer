@@ -15,14 +15,50 @@ load_dotenv()
 app = Flask(__name__)
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-# Configure CORS - allow all origins in both dev and prod for now
+# Configure CORS with specific origins
 CORS(app, resources={
     r"/*": {
-        "origins": "*",
+        "origins": [
+            "https://dashgatherer.lovable.app",
+            "http://localhost:5173",  # For local development
+            "http://localhost:3000"   # For local development
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+@app.before_request
+def log_request_info():
+    """Log request information for debugging"""
+    print(f"\n{'='*50}")
+    print(f"Request: {request.method} {request.url}")
+    print(f"Origin: {request.headers.get('Origin', 'No Origin')}")
+    print(f"Headers: {dict(request.headers)}")
+    print(f"{'='*50}\n")
+
+@app.after_request
+def after_request(response):
+    """Log response information for debugging"""
+    print(f"\n{'='*50}")
+    print(f"Response: {response.status}")
+    print(f"Headers: {dict(response.headers)}")
+    print(f"{'='*50}\n")
+    return response
+
+def verify_auth_token(auth_header):
+    """Verify the authentication token from the request header"""
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return None
+    
+    token = auth_header.split(' ')[1]
+    try:
+        # Verify the token with Supabase
+        user = supabase.auth.get_user(token)
+        return user
+    except Exception as e:
+        print(f"Auth error: {e}")
+        return None
 
 def log_error(error_message, exception=None):
     """Funkcja do szczegółowego logowania błędów w terminalu"""
@@ -58,12 +94,18 @@ def root():
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        user = verify_auth_token(auth_header)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+
         data = request.json
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
-        if not user_id:
-            return jsonify({'success': False, 'error': 'User ID is required'})
+        if not user_id or user_id != user.id:
+            return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         start_date = datetime.now() - timedelta(days=days)
         is_first_sync = data.get('is_first_sync', False)
@@ -90,18 +132,20 @@ def sync_garmin():
 @app.route('/api/update-chart', methods=['POST'])
 def update_chart():
     try:
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        user = verify_auth_token(auth_header)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+
         data = request.json
         user_id = data.get('userId')
         
+        if not user_id or user_id != user.id:
+            return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
+        
         print(f"\nReceived chart update request for user: {user_id}")
         
-        if not user_id:
-            log_error("Missing userId in request")
-            return jsonify({
-                'success': False,
-                'error': 'userId is required'
-            }), 400
-
         result = update_chart_data(user_id)
         print(f"Chart update completed with result: {result}")
         
@@ -118,13 +162,14 @@ def update_chart():
 def health_check():
     """Health check endpoint for Render"""
     try:
-        # Check if we can connect to Supabase
-        supabase.table('health_check').select('*').limit(1).execute()
+        # Just verify we can connect to Supabase without requiring a specific table
+        supabase.auth.get_session()
         return jsonify({
             'status': 'healthy',
             'timestamp': datetime.utcnow().isoformat()
         })
     except Exception as e:
+        print(f"Health check error: {e}")
         return jsonify({
             'status': 'unhealthy',
             'error': str(e)
