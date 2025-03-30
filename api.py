@@ -3,7 +3,7 @@ from flask_cors import CORS
 from garmin_sync import sync_garmin_data
 from sync_metrics_calculator import calculate_sync_metrics
 from chart_updater import update_chart_data
-from supabase import create_client
+from supabase import create_client, Client
 import os
 import traceback
 import sys
@@ -13,20 +13,19 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 app = Flask(__name__)
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-
-# Configure CORS with specific origins
 CORS(app, resources={
-    r"/*": {
-        "origins": [
-            "https://dashgatherer.lovable.app",
-            "http://localhost:5173",  # For local development
-            "http://localhost:3000"   # For local development
-        ],
+    r"/api/*": {
+        "origins": ["https://dashgatherer.lovable.app", "http://localhost:5173"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+# Initialize Supabase client
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL", ""),
+    os.getenv("SUPABASE_KEY", "")
+)
 
 @app.before_request
 def log_request_info():
