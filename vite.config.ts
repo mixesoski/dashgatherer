@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
     NODE_ENV: process.env.NODE_ENV
   });
   
+  // Production API URL
+  const productionApiUrl = 'https://trimpbara.onrender.com';
+  
   return {
     server: {
       host: "::",
@@ -33,8 +36,16 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Ensure environment variables are available in the client
-      'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:5001'),
+      'import.meta.env.VITE_API_URL': JSON.stringify(mode === 'production' ? productionApiUrl : (env.VITE_API_URL || 'http://localhost:5001')),
       'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(env.VITE_SUPABASE_PROJECT_ID || 'eeaebxnbcxhzafzpzqsu'),
+    },
+    build: {
+      // Ensure environment variables are properly replaced in production build
+      rollupOptions: {
+        output: {
+          manualChunks: undefined
+        }
+      }
     }
   };
 });

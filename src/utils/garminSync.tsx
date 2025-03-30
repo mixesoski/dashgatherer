@@ -3,8 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
 
 // Ensure we're using the correct API URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_URL = import.meta.env.PROD 
+  ? 'https://trimpbara.onrender.com'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:5001');
+
 console.log('API URL from environment:', API_URL);
+console.log('Is production:', import.meta.env.PROD);
 
 // Debug logging
 console.log('Environment variables:', {
