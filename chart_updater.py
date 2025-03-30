@@ -81,18 +81,29 @@ class ChartUpdater:
         previous_atl = float(previous_metrics['atl'])
         previous_ctl = float(previous_metrics['ctl'])
         
-        # For rest days (current_trimp = 0), metrics will naturally decay
+        # Calculate new ATL and CTL
         new_atl = previous_atl + (current_trimp - previous_atl) / 7
         new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
         
-        # Calculate TSB using previous day's values
+        # TSB is calculated using the previous day's values
+        # TSB = previous day's CTL - previous day's ATL
         new_tsb = previous_ctl - previous_atl
         
-        return {
+        # Round to 2 decimal places
+        metrics = {
             'atl': round(new_atl, 2),
             'ctl': round(new_ctl, 2),
             'tsb': round(new_tsb, 2)
         }
+        
+        print(f"\nMetrics calculation:")
+        print(f"Previous ATL: {previous_atl}, Previous CTL: {previous_ctl}")
+        print(f"Current TRIMP: {current_trimp}")
+        print(f"New ATL: {metrics['atl']}")
+        print(f"New CTL: {metrics['ctl']}")
+        print(f"New TSB: {metrics['tsb']} (using previous CTL: {previous_ctl} - previous ATL: {previous_atl})")
+        
+        return metrics
 
     def update_chart_data(self, start_date=None, end_date=None):
         try:
