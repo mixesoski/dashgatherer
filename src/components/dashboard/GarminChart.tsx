@@ -1,7 +1,7 @@
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, InteractionMode } from 'chart.js';
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Loader2, Edit, Trash, List, Plus } from "lucide-react";
+import { RefreshCw, Loader2, Edit, Trash, List, Plus, Calculator } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { useState, useEffect } from "react";
@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PremiumUpdateButton } from "./PremiumUpdateButton";
+import { TRIMPCalculator } from "./TRIMPCalculator";
+
 const logError = (message: string, error: any, additionalInfo?: any) => {
   console.error("\n" + "=".repeat(50));
   console.error(`ERROR: ${message}`);
@@ -37,7 +39,9 @@ const logError = (message: string, error: any, additionalInfo?: any) => {
   }
   console.error("=".repeat(50) + "\n");
 };
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
+
 interface GarminData {
   date: string;
   trimp: number;
@@ -46,6 +50,7 @@ interface GarminData {
   ctl: number | null;
   tsb: number | null;
 }
+
 interface ManualData {
   id: number;
   user_id: string;
@@ -54,12 +59,14 @@ interface ManualData {
   activity_name: string;
   created_at: string;
 }
+
 interface Props {
   data: GarminData[];
   email: string;
   onUpdate: () => Promise<void>;
   isUpdating?: boolean;
 }
+
 export const GarminChart = ({
   data,
   email,
@@ -80,17 +87,20 @@ export const GarminChart = ({
   const [editActivityName, setEditActivityName] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState("recent");
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsInitialLoading(false);
     }, 500);
     return () => clearTimeout(timer);
   }, []);
+
   useEffect(() => {
     if (activeTab === "manual") {
       fetchManualData();
     }
   }, [activeTab]);
+
   const fetchManualData = async () => {
     try {
       setIsLoadingManual(true);
@@ -122,6 +132,7 @@ export const GarminChart = ({
       setIsLoadingManual(false);
     }
   };
+
   const handleEditEntry = (entry: ManualData) => {
     setEditData(entry);
     setEditDate(new Date(entry.date));
@@ -129,17 +140,15 @@ export const GarminChart = ({
     setEditActivityName(entry.activity_name);
     setIsEditing(true);
   };
+
   console.log('GarminChart data:', data);
-  
-  // Deduplicate data by date (in case duplicates still exist in the database)
-  // We'll keep the entry with the higher TRIMP value
+
   const uniqueDataMap = new Map();
-  
+
   data.forEach(item => {
     const date = item.date;
     if (uniqueDataMap.has(date)) {
       const existing = uniqueDataMap.get(date);
-      // Keep the entry with higher TRIMP value or non-Rest day activity
       if (item.trimp > existing.trimp || 
           (item.activity !== 'Rest day' && existing.activity === 'Rest day')) {
         uniqueDataMap.set(date, item);
@@ -148,27 +157,27 @@ export const GarminChart = ({
       uniqueDataMap.set(date, item);
     }
   });
-  
-  // Convert back to array
+
   const uniqueData = Array.from(uniqueDataMap.values());
-  
-  // Sort the data by date
+
   const sortedData = [...uniqueData].sort((a, b) => {
     return new Date(a.date).getTime() - new Date(b.date).getTime()
   });
-  
+
   console.log('Sorted unique data:', sortedData);
   const reverseSortedData = [...sortedData].reverse();
   const latestData = reverseSortedData[0];
   console.log('Latest data:', latestData);
-  
+
   const visibleDays = reverseSortedData.slice(0, visibleActivities);
   const hasMoreActivities = visibleActivities < reverseSortedData.length;
   const handleLoadMore = () => {
     setVisibleActivities(prev => prev + 10);
   };
+
   const tsb = latestData?.tsb;
   const status = tsb !== undefined && tsb !== null ? tsb < 0 ? 'Zmęczenie' : 'Wypoczęty' : 'No data';
+
   const getTsbStatus = (tsb: number | null | undefined) => {
     if (tsb === undefined || tsb === null) return {
       text: 'No data',
@@ -191,13 +200,13 @@ export const GarminChart = ({
       color: 'text-blue-600'
     };
   };
+
   const chartData = {
     labels: sortedData.map(d => format(new Date(d.date), 'dd/MM/yyyy')),
     datasets: [{
       label: 'Acute Load (ATL)',
       data: sortedData.map(d => d.atl ?? 0),
       borderColor: 'rgb(59, 130, 246)',
-      // Blue
       backgroundColor: 'rgba(59, 130, 246, 0.1)',
       fill: true,
       tension: 0.4
@@ -205,7 +214,6 @@ export const GarminChart = ({
       label: 'Stress Balance (TSB)',
       data: sortedData.map(d => d.tsb ?? 0),
       borderColor: 'rgb(239, 68, 68)',
-      // Red
       backgroundColor: 'rgba(239, 68, 68, 0.1)',
       fill: true,
       tension: 0.4
@@ -213,12 +221,12 @@ export const GarminChart = ({
       label: 'Chronic Load (CTL)',
       data: sortedData.map(d => d.ctl ?? 0),
       borderColor: 'rgb(234, 179, 8)',
-      // Yellow
       backgroundColor: 'rgba(234, 179, 8, 0.1)',
       fill: true,
       tension: 0.4
     }]
   };
+
   const options = {
     responsive: true,
     maintainAspectRatio: false,
@@ -287,6 +295,7 @@ export const GarminChart = ({
       mode: 'index' as InteractionMode
     }
   };
+
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('\n' + '='.repeat(50));
@@ -511,6 +520,7 @@ export const GarminChart = ({
       setIsSubmitting(false);
     }
   };
+
   const handleUpdateEntry = async () => {
     if (!editData || !editDate) return;
     try {
@@ -590,6 +600,7 @@ export const GarminChart = ({
       setIsEditing(false);
     }
   };
+
   const handleDeleteEntry = async (entryId: number, entryDate: string) => {
     try {
       const {
@@ -705,10 +716,16 @@ export const GarminChart = ({
       toast.error("An error occurred while deleting the activity");
     }
   };
+
   const LoadingOverlay = () => <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-50">
       <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
       <p className="text-lg font-medium text-gray-700">Loading training data...</p>
     </div>;
+
+  const handleTRIMPCalculated = (value: number) => {
+    setTrimp(value.toString());
+  };
+
   return <div className="space-y-4 relative">
       {isInitialLoading && <LoadingOverlay />}
       
@@ -783,9 +800,10 @@ export const GarminChart = ({
               </Popover>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Label htmlFor="trimp">TRIMP</Label>
               <Input id="trimp" type="number" min="0" step="1" value={trimp} onChange={e => setTrimp(e.target.value)} placeholder="e.g. 50" />
+              <TRIMPCalculator onTRIMPCalculated={handleTRIMPCalculated} />
             </div>
 
             <div className="space-y-2">
