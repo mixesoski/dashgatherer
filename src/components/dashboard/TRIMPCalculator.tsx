@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +24,6 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
   const [restingHR, setRestingHR] = useState<string>('');
   const [maxHR, setMaxHR] = useState<string>('');
   const [avgHR, setAvgHR] = useState<string>('');
-  const [lthr, setLthr] = useState<string>('');
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [calculatedTrimp, setCalculatedTrimp] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
@@ -72,11 +72,11 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
         <Button 
           variant="outline" 
           size="sm" 
-          className="absolute right-2 top-8 flex gap-1"
+          className="absolute top-1/2 right-2 transform -translate-y-1/2 flex gap-1"
           title="Calculate TRIMP"
         >
           <Calculator className="h-4 w-4" />
-          <span className="hidden sm:inline">Calculate TRIMP</span>
+          <span className="hidden sm:inline">Calculate</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -122,27 +122,15 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="avgHR">Average Heart Rate (bpm)</Label>
-              <Input 
-                id="avgHR" 
-                type="number" 
-                value={avgHR} 
-                onChange={(e) => setAvgHR(e.target.value)}
-                placeholder="e.g. 124"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lthr">LTHR (optional)</Label>
-              <Input 
-                id="lthr" 
-                type="number" 
-                value={lthr} 
-                onChange={(e) => setLthr(e.target.value)}
-                placeholder="e.g. 164"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="avgHR">Average Heart Rate (bpm)</Label>
+            <Input 
+              id="avgHR" 
+              type="number" 
+              value={avgHR} 
+              onChange={(e) => setAvgHR(e.target.value)}
+              placeholder="e.g. 124"
+            />
           </div>
           
           <div className="space-y-2">
