@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,14 +28,14 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
   const [calculatedTrimp, setCalculatedTrimp] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
 
+  console.log('TRIMPCalculator rendered');
+
   const calculateTrimp = () => {
-    // Parse inputs
     const durationMinutes = parseFloat(duration);
     const restingHeartRate = parseFloat(restingHR);
     const maxHeartRate = parseFloat(maxHR);
     const averageHeartRate = parseFloat(avgHR);
     
-    // Validate inputs
     if (
       isNaN(durationMinutes) || 
       isNaN(restingHeartRate) || 
@@ -46,14 +45,10 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
       return;
     }
 
-    // Calculate Heart Rate Reserve (HRR)
     const hRR = (averageHeartRate - restingHeartRate) / (maxHeartRate - restingHeartRate);
     
-    // Factor depending on gender
     const factor = gender === 'male' ? 1.92 : 1.67;
     
-    // Calculate TRIMP using the formula
-    // TRIMP = Duration × HRR × 0.64 × e^(Factor × HRR)
     const eFactor = Math.exp(factor * hRR);
     const trimp = Math.round(durationMinutes * hRR * 0.64 * eFactor);
     
