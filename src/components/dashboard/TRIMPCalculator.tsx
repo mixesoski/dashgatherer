@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,17 +67,19 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="absolute top-1/2 right-2 transform -translate-y-1/2 flex gap-1"
-          title="Calculate TRIMP"
-        >
-          <Calculator className="h-4 w-4" />
-          <span className="hidden sm:inline">Calculate</span>
-        </Button>
-      </DialogTrigger>
+      <div className="relative flex items-center">
+        <DialogTrigger asChild>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            className="ml-2"
+            title="Calculate TRIMP"
+          >
+            <Calculator className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      </div>
+      
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>TRIMP Calculator</DialogTitle>
