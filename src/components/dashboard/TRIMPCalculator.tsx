@@ -125,13 +125,26 @@ export const TRIMPCalculator = ({ onTRIMPCalculated }: TRIMPCalculatorProps) => 
           
           <div className="space-y-2">
             <Label htmlFor="avgHR">Average Heart Rate (bpm)</Label>
-            <Input 
-              id="avgHR" 
-              type="number" 
-              value={avgHR} 
-              onChange={(e) => setAvgHR(e.target.value)}
-              placeholder="e.g. 124"
-            />
+            <div className="relative">
+              <Input 
+                id="avgHR" 
+                type="number" 
+                value={avgHR} 
+                onChange={(e) => setAvgHR(e.target.value)}
+                placeholder="e.g. 124"
+                className="pr-10" // Add right padding for the icon
+              />
+              <DialogTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  title="Calculate TRIMP"
+                >
+                  <Calculator className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+            </div>
           </div>
           
           <div className="space-y-2">
