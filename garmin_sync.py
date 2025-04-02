@@ -5,6 +5,7 @@ import time
 from requests.exceptions import HTTPError
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
+import traceback
 
 def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
@@ -35,9 +36,21 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             print(f"\nStarting data sync for user ID: {user_id}")
 
             # Get credentials and initialize client
+            print("Fetching Garmin credentials...")
             email, password = get_garmin_credentials(user_id)
+            print(f"Found credentials for email: {email}")
+            
+            print("Initializing Garmin client...")
             client = Garmin(email, password)
-            client.login()
+            
+            print("Attempting to login to Garmin...")
+            try:
+                client.login()
+                print("Successfully logged into Garmin")
+            except Exception as e:
+                print(f"Failed to login to Garmin: {str(e)}")
+                print(f"Full error: {traceback.format_exc()}")
+                raise Exception(f"Error logging into Garmin: {str(e)}")
 
             # Get activities and save them
             if isinstance(start_date, str):
