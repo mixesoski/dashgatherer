@@ -190,6 +190,28 @@ const Login = () => {
           console.error('Error signing up:', signUpError);
           setError(signUpError.message);
         } else {
+          // Add profile entry directly from the client side
+          if (data.user) {
+            try {
+              const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({
+                  user_id: data.user.id,
+                  email: formData.email,
+                  role: role,
+                  updated_at: new Date().toISOString()
+                });
+
+              if (profileError) {
+                console.error('Error creating profile:', profileError);
+                // Continue anyway as authentication succeeded
+              }
+            } catch (profileCreationError) {
+              console.error('Exception creating profile:', profileCreationError);
+              // Continue anyway as authentication succeeded
+            }
+          }
+
           toast({
             title: "Success!",
             description: "Please check your email to confirm your account."
