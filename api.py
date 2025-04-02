@@ -104,8 +104,9 @@ def sync_garmin():
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
-        # The user object from Supabase has the ID in the 'id' field
-        if not user_id or user_id != user['id']:
+        # Access user ID correctly from UserResponse object
+        if not user_id or user_id != user.user.id:
+            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         start_date = datetime.now() - timedelta(days=days)
