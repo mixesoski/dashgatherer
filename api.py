@@ -104,7 +104,8 @@ def sync_garmin():
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
-        if not user_id or user_id != user.id:
+        # The user object from Supabase has the ID in the 'id' field
+        if not user_id or user_id != user['id']:
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         start_date = datetime.now() - timedelta(days=days)
