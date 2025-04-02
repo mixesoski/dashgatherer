@@ -3,7 +3,7 @@ import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, ArrowDownCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
@@ -238,38 +238,48 @@ const Index = () => {
             {garminCredentials ? <div className="space-y-4">
                 <p className="text-xl text-gray-600">Your Garmin account is connected</p>
                 <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-                {showButtons && <div className="flex justify-center gap-4 items-center">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button id="syncButton" variant="outline" className="gap-2" onClick={handleSync} disabled={isUpdating}>
-                            <RefreshCw className="h-4 w-4" />
-                            Sync Garmin
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Sync Garmin activities and TRIMP data</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Start from:</span>
-                      <DatePicker 
-                        selected={startDate} 
-                        onChange={(date: Date) => setStartDate(startOfDay(date))} 
-                        maxDate={new Date()} 
-                        className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                        dateFormat="yyyy-MM-dd" 
-                        placeholderText="Select start date" 
-                        popperPlacement="bottom-end" 
-                        popperProps={{
-                          strategy: "fixed"
-                        }} 
-                        calendarClassName="translate-y-2" 
-                        disabled={isUpdating} 
-                      />
+                {showButtons && <div className="relative flex flex-col items-center">
+                    <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 animate-bounce text-primary">
+                      <ArrowDownCircle className="h-8 w-8" />
                     </div>
+                    
+                    <div className="flex justify-center gap-4 items-center p-6 rounded-lg border-2 border-primary bg-primary/5 shadow-md mb-4 w-full max-w-2xl mx-auto">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button id="syncButton" variant="default" className="gap-2 font-semibold text-white bg-primary hover:bg-primary/90 px-6" onClick={handleSync} disabled={isUpdating}>
+                              <RefreshCw className="h-4 w-4" />
+                              Sync Garmin
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Sync Garmin activities and TRIMP data</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700">Start from:</span>
+                        <DatePicker 
+                          selected={startDate} 
+                          onChange={(date: Date) => setStartDate(startOfDay(date))} 
+                          maxDate={new Date()} 
+                          className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                          dateFormat="yyyy-MM-dd" 
+                          placeholderText="Select start date" 
+                          popperPlacement="bottom-end" 
+                          popperProps={{
+                            strategy: "fixed"
+                          }} 
+                          calendarClassName="translate-y-2" 
+                          disabled={isUpdating} 
+                        />
+                      </div>
+                    </div>
+                    
+                    <p className="text-center text-gray-600 text-sm mb-6">
+                      👆 Start here! Sync your Garmin data to see your training metrics
+                    </p>
                   </div>}
               </div> : <>
                 <p className="text-xl text-gray-600">Connect your Garmin account below</p>
