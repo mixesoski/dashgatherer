@@ -7,6 +7,24 @@ from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
 import traceback
 
+def get_garmin_credentials(supabase_client, user_id):
+    print(f"Fetching Garmin credentials for user {user_id}")
+    try:
+        response = supabase_client.table('garmin_credentials').select('*').eq('user_id', user_id).execute()
+        print(f"Credential response: {response}")
+        
+        if not response.data or len(response.data) == 0:
+            print("No Garmin credentials found for user")
+            return None, None
+            
+        credentials = response.data[0]
+        print(f"Found credentials with email: {credentials.get('email')}")
+        return credentials.get('email'), credentials.get('password')
+    except Exception as e:
+        print(f"Error fetching Garmin credentials: {str(e)}")
+        print(f"Full error: {traceback.format_exc()}")
+        return None, None
+
 def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
         # Check for existing sync
@@ -37,7 +55,7 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
 
             # Get credentials and initialize client
             print("Fetching Garmin credentials...")
-            email, password = get_garmin_credentials(user_id)
+            email, password = get_garmin_credentials(supabase, user_id)
             print(f"Found credentials for email: {email}")
             
             print("Initializing Garmin client...")
