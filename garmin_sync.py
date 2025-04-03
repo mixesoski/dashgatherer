@@ -1,4 +1,4 @@
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError, GarminConnectConnectionError, GarminConnectTooManyRequestsError
 import pandas as pd
 from datetime import datetime, timedelta
 import time
@@ -11,19 +11,55 @@ def get_garmin_credentials(supabase_client, user_id):
     print(f"Fetching Garmin credentials for user {user_id}")
     try:
         response = supabase_client.table('garmin_credentials').select('*').eq('user_id', user_id).execute()
-        print(f"Credential response: {response}")
+        print(f"Credential response data length: {len(response.data) if response.data else 0}")
         
         if not response.data or len(response.data) == 0:
             print("No Garmin credentials found for user")
             return None, None
             
         credentials = response.data[0]
-        print(f"Found credentials with email: {credentials.get('email')}")
-        return credentials.get('email'), credentials.get('password')
+        email = credentials.get('email')
+        password = credentials.get('password')
+        
+        if not email or not password:
+            print("Invalid credentials format - missing email or password")
+            return None, None
+            
+        print(f"Found credentials with email: {email}")
+        return email, password
     except Exception as e:
         print(f"Error fetching Garmin credentials: {str(e)}")
         print(f"Full error: {traceback.format_exc()}")
         return None, None
+
+def initialize_garmin_client(email, password):
+    print(f"\nInitializing Garmin client for {email}")
+    try:
+        # Create API client
+        client = Garmin(email, password)
+        
+        # Try to login
+        print("Attempting Garmin login...")
+        client.login()
+        print("Successfully logged into Garmin")
+        return client
+        
+    except GarminConnectAuthenticationError as err:
+        print(f"Authentication failed for {email}")
+        print(f"Error details: {str(err)}")
+        raise Exception(f"Garmin authentication failed: {str(err)}")
+    except GarminConnectTooManyRequestsError as err:
+        print(f"Too many requests error for {email}")
+        print(f"Error details: {str(err)}")
+        raise Exception(f"Too many requests to Garmin API: {str(err)}")
+    except GarminConnectConnectionError as err:
+        print(f"Connection error for {email}")
+        print(f"Error details: {str(err)}")
+        raise Exception(f"Garmin connection error: {str(err)}")
+    except Exception as err:
+        print(f"Unknown error during Garmin login: {str(err)}")
+        print(f"Full error: {traceback.format_exc()}")
+        raise Exception(f"Error logging into Garmin: {str(err)}")
 
 def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
     try:
@@ -54,22 +90,13 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             print(f"\nStarting data sync for user ID: {user_id}")
 
             # Get credentials and initialize client
-            print("Fetching Garmin credentials...")
             email, password = get_garmin_credentials(supabase, user_id)
-            print(f"Found credentials for email: {email}")
+            if not email or not password:
+                raise Exception("Missing or invalid Garmin credentials")
+                
+            # Initialize client with new method
+            client = initialize_garmin_client(email, password)
             
-            print("Initializing Garmin client...")
-            client = Garmin(email, password)
-            
-            print("Attempting to login to Garmin...")
-            try:
-                client.login()
-                print("Successfully logged into Garmin")
-            except Exception as e:
-                print(f"Failed to login to Garmin: {str(e)}")
-                print(f"Full error: {traceback.format_exc()}")
-                raise Exception(f"Error logging into Garmin: {str(e)}")
-
             # Get activities and save them
             if isinstance(start_date, str):
                 start_date = datetime.fromisoformat(start_date.replace('Z', ''))
