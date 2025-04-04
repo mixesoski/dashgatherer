@@ -36,23 +36,35 @@ def get_garmin_credentials(supabase_client, user_id):
 def initialize_garmin_client(email, password):
     print(f"\nInitializing Garmin client for {email}")
     try:
-        # Initialize garth client
+        # Initialize garth client with specific settings
         print("Initializing garth client...")
-        garth.configure(domain="garmin.com")
+        garth.configure(
+            domain="garmin.com",
+            initial_token_domain="sso.garmin.com"
+        )
         
         # Try to login using garth first
         print("Attempting Garmin login via garth...")
         try:
-            client = garth.login(email, password)
+            client = garth.Client()
+            client.login(email, password)
             print("Successfully authenticated with garth")
         except Exception as e:
             print(f"Garth login failed: {str(e)}")
+            print(f"Full error: {traceback.format_exc()}")
             raise
             
-        # Now initialize GarminConnect client with the session
-        print("Initializing GarminConnect client with authenticated session...")
+        # Now initialize GarminConnect client
+        print("Initializing GarminConnect client...")
         garmin_client = Garmin(email, password)
+        
+        # Transfer the authenticated session
+        print("Transferring authenticated session...")
         garmin_client.session = client.session
+        garmin_client.session.headers.update({
+            'nk': 'NT',
+            'Di-Backend': client.display_name
+        })
         print("Successfully initialized GarminConnect client")
         
         return garmin_client
