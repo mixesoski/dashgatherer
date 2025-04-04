@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import time
 from requests.exceptions import HTTPError
+import garth
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
 import traceback
@@ -35,14 +36,26 @@ def get_garmin_credentials(supabase_client, user_id):
 def initialize_garmin_client(email, password):
     print(f"\nInitializing Garmin client for {email}")
     try:
-        # Create API client
-        client = Garmin(email, password)
+        # Initialize garth client
+        print("Initializing garth client...")
+        garth.configure(domain="garmin.com")
         
-        # Try to login
-        print("Attempting Garmin login...")
-        client.login()
-        print("Successfully logged into Garmin")
-        return client
+        # Try to login using garth first
+        print("Attempting Garmin login via garth...")
+        try:
+            client = garth.login(email, password)
+            print("Successfully authenticated with garth")
+        except Exception as e:
+            print(f"Garth login failed: {str(e)}")
+            raise
+            
+        # Now initialize GarminConnect client with the session
+        print("Initializing GarminConnect client with authenticated session...")
+        garmin_client = Garmin(email, password)
+        garmin_client.session = client.session
+        print("Successfully initialized GarminConnect client")
+        
+        return garmin_client
         
     except GarminConnectAuthenticationError as err:
         print(f"Authentication failed for {email}")
