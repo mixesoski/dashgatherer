@@ -36,9 +36,14 @@ def get_garmin_credentials(supabase_client, user_id):
 def initialize_garmin_client(email, password):
     print(f"\nInitializing Garmin client for {email}")
     try:
-        # Create API client and login directly
+        # Create API client with modern configuration
         print("Initializing GarminConnect client...")
-        garmin_client = Garmin(email, password)
+        garmin_client = Garmin(
+            email=email,
+            password=password,
+            base_url="https://connect.garmin.com",
+            locale="en_US"
+        )
         
         print("Attempting Garmin login...")
         garmin_client.login()
@@ -49,6 +54,7 @@ def initialize_garmin_client(email, password):
     except GarminConnectAuthenticationError as err:
         print(f"Authentication failed for {email}")
         print(f"Error details: {str(err)}")
+        print(f"Please verify your Garmin credentials at https://connect.garmin.com")
         raise Exception(f"Garmin authentication failed: {str(err)}")
     except GarminConnectTooManyRequestsError as err:
         print(f"Too many requests error for {email}")
