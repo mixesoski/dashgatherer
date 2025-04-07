@@ -36,14 +36,9 @@ def get_garmin_credentials(supabase_client, user_id):
 def initialize_garmin_client(email, password):
     print(f"\nInitializing Garmin client for {email}")
     try:
-        # Create API client with modern configuration
+        # Create API client with basic initialization
         print("Initializing GarminConnect client...")
-        garmin_client = Garmin(
-            email=email,
-            password=password,
-            base_url="https://connect.garmin.com",
-            locale="en_US"
-        )
+        garmin_client = Garmin(email, password)
         
         print("Attempting Garmin login...")
         garmin_client.login()
