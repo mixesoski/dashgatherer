@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
@@ -248,8 +249,17 @@ const Index = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button id="syncButton" variant="default" className="gap-2 font-semibold text-white bg-primary hover:bg-primary/90 px-6" onClick={handleSync} disabled={isUpdating}>
-                              <RefreshCw className="h-4 w-4" />
-                              Sync Garmin
+                              {isUpdating ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Syncing...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-4 w-4" />
+                                  Sync Garmin
+                                </>
+                              )}
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>

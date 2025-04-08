@@ -2,6 +2,7 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
+import { Loader2 } from "lucide-react";
 
 // Ensure we're using the correct API URL
 const API_URL = import.meta.env.PROD 
@@ -19,8 +20,12 @@ console.log('Environment variables:', {
 
 export const syncGarminData = async (userId: string, startDate: Date) => {
     try {
+        // Create a persistent toast with loading animation and first sync message
         const toastId = toast.loading(
-            <ProgressToast message="Connecting to Garmin..." />,
+            <div className="flex flex-col space-y-2">
+                <ProgressToast message="Connecting to Garmin..." />
+                <p className="text-xs text-muted-foreground italic">First sync might take a while</p>
+            </div>,
             { duration: Infinity, position: window.innerWidth < 768 ? 'bottom-center' : 'top-right' }
         );
         
@@ -42,7 +47,10 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
 
         // Update toast to show data fetching
         toast.loading(
-            <ProgressToast message="Fetching activities from Garmin..." />,
+            <div className="flex flex-col space-y-2">
+                <ProgressToast message="Fetching activities from Garmin..." />
+                <p className="text-xs text-muted-foreground italic">First sync might take a while</p>
+            </div>,
             { 
                 id: toastId,
                 position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
@@ -102,7 +110,10 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
 export const updateGarminData = async (userId: string) => {
     try {
         const toastId = toast.loading(
-            <ProgressToast message="Checking for new activities..." />,
+            <div className="flex flex-col space-y-2">
+                <ProgressToast message="Checking for new activities..." />
+                <p className="text-xs text-muted-foreground italic">This may take a moment</p>
+            </div>,
             {
                 duration: Infinity,
                 position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
@@ -164,4 +175,4 @@ export const updateGarminData = async (userId: string) => {
         });
         return false;
     }
-}; 
+};
