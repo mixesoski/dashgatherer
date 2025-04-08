@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plane, Edit2 } from "lucide-react";
+import { CalendarIcon, Plane, Edit2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addDays, isBefore } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -330,15 +330,25 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
 
   if (!latestATL || !latestCTL) {
     return (
-      <Card>
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 z-10 bg-black/50 flex flex-col items-center justify-center text-white">
+          <Lock className="h-12 w-12 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Coming Soon</h2>
+          <p className="text-center px-4">
+            TSB Planner is currently in development. Stay tuned for this exciting feature!
+          </p>
+        </div>
         <CardHeader>
-          <CardTitle>TSB Planner</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Plane className="h-5 w-5" />
+            TSB Planner
+          </CardTitle>
           <CardDescription>
             Plan your training to reach a specific form for your event
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center opacity-30">
             <p className="text-muted-foreground">
               Not enough training data available to create a plan.
             </p>
@@ -352,8 +362,17 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="relative w-full">
+      <div className="absolute inset-0 z-10 bg-black/50 flex flex-col items-center justify-center text-white pointer-events-none">
+        <Lock className="h-12 w-12 mb-4" />
+        <h2 className="text-2xl font-bold mb-2">Coming Soon</h2>
+        <p className="text-center px-4">
+          TSB Planner is currently in development. Stay tuned for this exciting feature!
+        </p>
+      </div>
+      
+      {/* Existing content with reduced opacity */}
+      <CardHeader className="opacity-30">
         <CardTitle className="flex items-center gap-2">
           <Plane className="h-5 w-5" />
           TSB Planner
@@ -363,7 +382,8 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         </CardDescription>
       </CardHeader>
       
-      <CardContent>
+      <CardContent className="opacity-30 pointer-events-none">
+        {/* Keep existing content, but make it non-interactive */}
         <div className="grid gap-4 sm:grid-cols-2 mb-6">
           <div className="space-y-2">
             <Label htmlFor="event-date">Event Date</Label>
@@ -376,6 +396,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
                     "w-full justify-start text-left font-normal",
                     !eventDate && "text-muted-foreground"
                   )}
+                  disabled
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {eventDate ? format(eventDate, "PPP") : <span>Pick a date</span>}
