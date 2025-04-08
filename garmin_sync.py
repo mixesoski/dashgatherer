@@ -43,7 +43,7 @@ def initialize_garmin_client(email, password):
         print("Attempting Garmin login...")
         try:
             # Try to get user info first to verify credentials
-            garmin_client.get_user_summary()
+            garmin_client.get_user_summary(datetime.now().strftime("%Y-%m-%d"))
             print("Successfully logged into Garmin")
         except Exception as e:
             print(f"Failed to get user info: {str(e)}")
