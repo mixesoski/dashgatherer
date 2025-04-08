@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +79,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         }
       });
       
+      // Calculate plan for each day leading up to the event
       for (let i = 0; i < daysUntilEvent; i++) {
         const date = addDays(today, i);
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -108,11 +110,32 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         recalculateRemainingDays(results, targetTSB, eventDate);
       }
       
-      const eventDateAtl = results.length > 0 
-        ? results[results.length - 1].projectedTSB 
-        : projectedTSB;
+      // Calculate the final TSB on the event day itself (with a TRIMP of 0)
+      // We need to explicitly calculate this to avoid showing the previous day's TSB
+      let eventDayATL = results.length > 0 ? 
+        results[results.length - 1].projectedATL || 
+        (results[results.length - 1].trimp - results[results.length - 1].projectedTSB) : 
+        currentATL;
+      
+      let eventDayCTL = results.length > 0 ? 
+        results[results.length - 1].projectedCTL || 
+        (results[results.length - 1].trimp + results[results.length - 1].projectedTSB) : 
+        currentCTL;
+      
+      // On event day, we typically assume no training load (TRIMP=0)
+      const eventDayTrimp = 0; 
+      
+      // Update for event day (ATL decays faster than CTL)
+      eventDayATL = eventDayATL + (eventDayTrimp - eventDayATL) / 7;
+      eventDayCTL = eventDayCTL + (eventDayTrimp - eventDayCTL) / 42;
+      
+      // Final TSB on event day
+      const eventDayTSB = eventDayCTL - eventDayATL;
       
       setPlanningResults(results);
+      
+      // Store the event day TSB for display in the UI
+      setEventDayFinalTSB(eventDayTSB);
     } catch (error) {
       console.error("Error calculating plan:", error);
       toast.error("Failed to calculate training plan");
@@ -120,6 +143,9 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
       setIsCalculating(false);
     }
   };
+
+  // Add state to store the event day TSB
+  const [eventDayFinalTSB, setEventDayFinalTSB] = useState<number | null>(null);
 
   const recalculateRemainingDays = (plan: PlanDay[], targetTSB: string, eventDate: Date) => {
     try {
@@ -171,6 +197,23 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         ctl = ctl + (day.trimp - ctl) / 42;
         
         plan[i].projectedTSB = ctl - atl;
+        // Store ATL and CTL in the plan for later use in event day calculation
+        plan[i].projectedATL = atl;
+        plan[i].projectedCTL = ctl;
+      }
+      
+      // Calculate event day TSB with zero TRIMP on event day
+      if (plan.length > 0) {
+        const lastDay = plan[plan.length - 1];
+        let eventDayATL = lastDay.projectedATL;
+        let eventDayCTL = lastDay.projectedCTL;
+        
+        // On event day (zero TRIMP)
+        eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
+        eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
+        
+        // Update the event day TSB
+        setEventDayFinalTSB(eventDayCTL - eventDayATL);
       }
     } catch (error) {
       console.error("Error recalculating plan:", error);
@@ -203,7 +246,14 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
 
   useEffect(() => {
     setPlanningResults([]);
+    setEventDayFinalTSB(null);
   }, [eventDate, targetTSB]);
+
+  // Add missing type for extended PlanDay
+  interface ExtendedPlanDay extends PlanDay {
+    projectedATL?: number;
+    projectedCTL?: number;
+  }
 
   if (!latestATL || !latestCTL) {
     return (
@@ -388,14 +438,14 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
                       <div>
                         <span className={cn(
                           "font-bold text-lg",
-                          planningResults.length > 0 && 
-                          (Math.abs(planningResults[planningResults.length - 1].projectedTSB - parseFloat(targetTSB)) < 2 
+                          eventDayFinalTSB !== null && 
+                          (Math.abs(eventDayFinalTSB - parseFloat(targetTSB)) < 2 
                             ? "text-green-600" 
-                            : planningResults[planningResults.length - 1].projectedTSB < parseFloat(targetTSB)
+                            : eventDayFinalTSB < parseFloat(targetTSB)
                               ? "text-orange-500"
                               : "text-red-500")
                         )}>
-                          {planningResults.length > 0 ? planningResults[planningResults.length - 1].projectedTSB.toFixed(1) : "0.0"}
+                          {eventDayFinalTSB !== null ? eventDayFinalTSB.toFixed(1) : "0.0"}
                         </span>
                         <span className="text-xs block text-muted-foreground">
                           Target: {parseFloat(targetTSB).toFixed(1)}
