@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PremiumUpdateButton } from "./PremiumUpdateButton";
 import { TRIMPCalculator } from "./TRIMPCalculator";
+import { TSBPlanner } from "./TSBPlanner";
 
 const logError = (message: string, error: any, additionalInfo?: any) => {
   console.error("\n" + "=".repeat(50));
@@ -781,50 +782,65 @@ export const GarminChart = ({
         <Line data={chartData} options={options} />
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm p-6 relative">
-        <h3 className="text-lg font-semibold mb-4">Add Training Manually</h3>
-        <form onSubmit={handleManualSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="z-[60] bg-white p-0" align="start">
-                  <Calendar mode="single" selected={date} onSelect={newDate => newDate && setDate(newDate)} initialFocus />
-                </PopoverContent>
-              </Popover>
+      <Tabs defaultValue="add" className="bg-white rounded-lg shadow-sm">
+        <TabsList className="p-2 bg-muted/30">
+          <TabsTrigger value="add">Add Training</TabsTrigger>
+          <TabsTrigger value="planner">TSB Planner</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="add" className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Add Training Manually</h3>
+          <form onSubmit={handleManualSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="date">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? format(date, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="z-[60] bg-white p-0" align="start">
+                    <Calendar mode="single" selected={date} onSelect={newDate => newDate && setDate(newDate)} initialFocus className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2 relative">
+                <Label htmlFor="trimp">TRIMP</Label>
+                <Input id="trimp" type="number" min="0" step="1" value={trimp} onChange={e => setTrimp(e.target.value)} placeholder="e.g. 50" />
+                <TRIMPCalculator onTRIMPCalculated={handleTRIMPCalculated} />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="activity">Activity Name</Label>
+                <Input id="activity" value={activityName} onChange={e => setActivityName(e.target.value)} placeholder="e.g. Running" />
+              </div>
             </div>
 
-            <div className="space-y-2 relative">
-              <Label htmlFor="trimp">TRIMP</Label>
-              <Input id="trimp" type="number" min="0" step="1" value={trimp} onChange={e => setTrimp(e.target.value)} placeholder="e.g. 50" />
-              <TRIMPCalculator onTRIMPCalculated={handleTRIMPCalculated} />
+            <div className="flex justify-end pt-2">
+              <Button type="submit" disabled={isSubmitting} className="gap-2">
+                {isSubmitting ? <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </> : <>
+                    <Plus className="h-4 w-4" />
+                    Add Training
+                  </>}
+              </Button>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="activity">Activity Name</Label>
-              <Input id="activity" value={activityName} onChange={e => setActivityName(e.target.value)} placeholder="e.g. Running" />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={isSubmitting} className="gap-2">
-              {isSubmitting ? <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </> : <>
-                  <Plus className="h-4 w-4" />
-                  Add Training
-                </>}
-            </Button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </TabsContent>
+        
+        <TabsContent value="planner">
+          <TSBPlanner 
+            latestTSB={latestData?.tsb ?? null} 
+            latestATL={latestData?.atl ?? null} 
+            latestCTL={latestData?.ctl ?? null} 
+          />
+        </TabsContent>
+      </Tabs>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="bg-white rounded-lg shadow-sm p-6">
         <TabsList className="mb-4">
