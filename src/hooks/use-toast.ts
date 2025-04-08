@@ -188,4 +188,8 @@ function useToast() {
   }
 }
 
+export function dismissAllToasts() {
+  dispatch({ type: "DISMISS_TOAST" });
+}
+
 export { useToast, toast }
