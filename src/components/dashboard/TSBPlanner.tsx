@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, PlaneDeparture } from "lucide-react";
+import { CalendarIcon, Plane } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addDays, isBefore } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -132,7 +132,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <PlaneDeparture className="h-5 w-5" />
+          <Plane className="h-5 w-5" />
           TSB Planner
         </CardTitle>
         <CardDescription>
