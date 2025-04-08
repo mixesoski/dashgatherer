@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
-from garmin_sync import sync_garmin_data
+from direct_garmin_sync import sync_garmin_data
 from sync_metrics_calculator import calculate_sync_metrics
 from chart_updater import update_chart_data
 from supabase import create_client, Client
@@ -96,32 +96,29 @@ def root():
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
-        # Verify authentication
-        auth_header = request.headers.get('Authorization')
-        user = verify_auth_token(auth_header)
-        if not user:
-            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
-
         data = request.json
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
-        # Access user ID correctly from UserResponse object
-        if not user_id or user_id != user.user.id:
-            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
-            return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
+        if not user_id:
+            print(f"Missing user_id in request: {data}")
+            return jsonify({
+                'success': False,
+                'error': 'User ID is required'
+            }), 400
         
+        print(f"Starting sync for user {user_id}, days={days}")
+        
+        # Calculate start date from days
         start_date = datetime.now() - timedelta(days=days)
         is_first_sync = data.get('is_first_sync', False)
         
-        print(f"Starting sync for user {user_id}, days={days}, is_first_sync={is_first_sync}")
-        
-        # Sync Garmin data - now this function calculates metrics directly
+        # Sync Garmin data using our new direct implementation
         sync_result = sync_garmin_data(user_id, start_date, is_first_sync)
         
         if not sync_result.get('success', False):
             return jsonify(sync_result)
-            
+        
         return jsonify({
             'success': True,
             'newActivities': sync_result.get('newActivities', 0),
