@@ -48,51 +48,19 @@ class ChartUpdater:
         print(f"Password length: {len(password) if password else 0} characters")
         
         try:
-            # Create API client with basic initialization
-            print("Creating Garmin client...")
+            # Initialize client just like in the test script
+            print("Initializing Garmin client...")
             self.garmin = Garmin(email, password)
             
-            print("Attempting Garmin login...")
+            # Login using the direct method that worked in the test
+            print("Logging in to Garmin...")
             try:
-                # Try to get user info first to verify credentials
-                today = datetime.date.today().strftime('%Y-%m-%d')
-                print(f"Calling get_user_summary with date: {today}")
-                self.garmin.get_user_summary(today)
-                print("Successfully logged into Garmin using get_user_summary")
-            except Exception as e:
-                print(f"Failed to get user info: {str(e)}")
-                print(f"Full error from get_user_summary: {traceback.format_exc()}")
-                print("Falling back to regular login method...")
-                try:
-                    self.garmin.login()
-                    print("Successfully logged into Garmin with regular login")
-                except Exception as login_err:
-                    print(f"Regular login also failed: {str(login_err)}")
-                    print(f"Full error from login: {traceback.format_exc()}")
-                    # Try one more time with direct session validation
-                    print("Attempting final authentication check...")
-                    try:
-                        # Check if we can access the user's profile as a final check
-                        user_info = self.garmin.get_user_info()
-                        displayName = user_info.get('displayName', 'Unknown')
-                        print(f"Successfully verified login with user info: {displayName}")
-                    except Exception as profile_err:
-                        print(f"Profile check also failed: {str(profile_err)}")
-                        raise Exception(f"All Garmin authentication methods failed for {email}")
-            
-            # Verify we can access activities API
-            print("Verifying access to activities API...")
-            try:
-                # Try to get a single recent activity to verify API access
-                activities = self.garmin.get_activities(0, 1)
-                if activities:
-                    print(f"Successfully verified access to activities API, found {len(activities)} recent activities")
-                else:
-                    print("Warning: No recent activities found. This might be normal if the user has no activities.")
-            except Exception as api_err:
-                print(f"Warning: Could not verify activities API access: {str(api_err)}")
-                print(f"API access error: {traceback.format_exc()}")
-                print("Continuing anyway, will try again when fetching specific dates")
+                self.garmin.login()
+                print("Login successful!")
+            except Exception as login_err:
+                print(f"Login failed: {str(login_err)}")
+                print(f"Full error from login: {traceback.format_exc()}")
+                raise Exception(f"Failed to login to Garmin: {str(login_err)}")
             
             print("Garmin client initialized and logged in successfully")
             return True
@@ -351,40 +319,14 @@ class ChartUpdater:
                 print("Garmin client not initialized, initializing now...")
                 self.initialize_garmin()
             
-            # Check what URLs we have access to
-            try:
-                print("Verifying Garmin access by fetching user info...")
-                now_date = datetime.datetime.now().strftime('%Y-%m-%d')
-                user_info = self.garmin.get_user_info()
-                print(f"User profile accessible: {user_info.get('displayName', 'Unknown')}")
-            except Exception as e:
-                print(f"Warning: Could not access user profile: {str(e)}")
-                
-            # Try to get activities for the week to see if we have any activities at all
-            try:
-                # Get activities for the week
-                print(f"Attempting to fetch activities for the week...")
-                week_start = date - datetime.timedelta(days=date.weekday())
-                week_end = week_start + datetime.timedelta(days=6)
-                week_start_str = week_start.strftime('%Y-%m-%d')
-                week_end_str = week_end.strftime('%Y-%m-%d')
-                week_activities = self.garmin.get_activities_by_date(
-                    week_start_str, 
-                    week_end_str
-                )
-                print(f"Found {len(week_activities)} activities for the whole week")
-                if week_activities:
-                    print(f"Week activities dates: {[a.get('startTimeLocal', '').split()[0] for a in week_activities[:5]]}")
-            except Exception as week_err:
-                print(f"Failed to get week activities: {str(week_err)}")
-            
-            # Get activities from Garmin for this specific date
+            # Try to get activities for the specific date
             print(f"Calling get_activities_by_date for {date_str}")
             activities = self.garmin.get_activities_by_date(
                 date_str,
                 date_str
             )
             
+            # If no activities found, try to get more recent activities and filter
             if not activities:
                 print(f"No activities found for {date_str}, trying alternative method...")
                 try:
@@ -414,37 +356,43 @@ class ChartUpdater:
                 
             print(f"Found {len(activities)} activities from Garmin Connect")
             
-            # Fetch TRIMP values for each activity
+            # Fetch TRIMP values for each activity exactly as in the test script
             activities_with_trimp = []
             for activity in activities:
                 activity_id = activity.get('activityId')
                 activity_name = activity.get('activityName', 'Unknown Activity')
-                start_time = activity.get('startTimeLocal', 'Unknown Time')
+                activity_date = activity.get('startTimeLocal', '').split()[0]
                 
-                print(f"Processing activity: {activity_name} (ID: {activity_id}, Time: {start_time})")
+                print(f"Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
                 
                 try:
                     # Get detailed activity data to find TRIMP
                     print(f"Fetching details for activity {activity_id}")
                     details = self.garmin.get_activity(activity_id)
                     
-                    # Debug the returned details
+                    # Debug the returned keys
                     detail_keys = list(details.keys())
                     print(f"Activity details keys: {detail_keys}")
                     
                     trimp = 0.0
                     trimp_method = "not found"
                     
-                    # Look for TRIMP in connectIQMeasurements
+                    # Check for connectIQMeasurements - using exact same approach as test script
                     if 'connectIQMeasurements' in details:
                         print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
-                        for item in details['connectIQMeasurements']:
-                            print(f"Measurement item: {item}")
-                            if item.get('developerFieldNumber') == 4:  # TRIMP field
+                        
+                        # Print each measurement to inspect
+                        for i, item in enumerate(details['connectIQMeasurements']):
+                            print(f"Measurement {i+1}: {item}")
+                            
+                            # Look for TRIMP specifically
+                            if item.get('developerFieldNumber') == 4:
                                 trimp = round(float(item.get('value', 0)), 1)
                                 trimp_method = "connectIQMeasurements"
-                                print(f"Found TRIMP in connectIQMeasurements: {trimp}")
+                                print(f"FOUND TRIMP: {trimp}")
                                 break
+                    else:
+                        print("No connectIQMeasurements found in activity details")
                     
                     # If no TRIMP found, we keep it at 0 - no estimation
                     if trimp == 0:
@@ -461,8 +409,8 @@ class ChartUpdater:
                     activities_with_trimp.append(activity)
                     print(f"Added activity {activity_name} with TRIMP = {trimp} (method: {trimp_method})")
                     
-                    # Add a small delay to avoid rate limiting
-                    time.sleep(0.5)
+                    # Add a small delay to avoid rate limiting - same as test script
+                    time.sleep(1)
                     
                 except Exception as e:
                     print(f"Error getting details for activity {activity_id}: {str(e)}")
