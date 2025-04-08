@@ -218,7 +218,7 @@ const Index = () => {
   }
 
   return <div className="min-h-screen bg-gray-100 py-8 relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         <div className="flex justify-between mb-8">
           <Logo variant="dark" />
           <div className="flex gap-2">
