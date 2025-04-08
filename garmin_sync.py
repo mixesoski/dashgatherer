@@ -80,13 +80,120 @@ def initialize_garmin_client(email, password):
         # Create API client with basic initialization
         print("Initializing GarminConnect client...")
         print("Debugging Garmin constructor...")
+        
+        # Add URL encoding for special characters in password
+        import urllib.parse
+        safe_password = password
+        if any(c in password for c in ['@', '!', '#', '$', '%', '^', '&', '*', '(', ')', '+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', "'", '<', '>', ',', '?', '/']):
+            print("Password contains special characters - applying URL encoding")
+            safe_password = urllib.parse.quote_plus(password)
+        
         try:
             # Test raw login first for diagnostic purposes
-            test_raw_garmin_login(email, password)
+            test_raw_garmin_login(email, safe_password)
         except Exception as test_err:
             print(f"Raw login test generated exception: {str(test_err)}")
             # Continue with regular flow
         
+        # Try direct authentication through cookies approach
+        print("\nTrying manual cookie-based authentication...")
+        try:
+            import requests
+            import json
+            from http.cookiejar import LWPCookieJar
+            
+            session = requests.Session()
+            
+            # Setup session with proper headers
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+                'origin': 'https://sso.garmin.com',
+                'nk': 'NT'
+            })
+            
+            # First get the SSO page to collect initial cookies
+            sso_url = "https://sso.garmin.com/sso/signin"
+            print(f"Fetching initial SSO page: {sso_url}")
+            
+            params = {
+                'service': 'https://connect.garmin.com/modern',
+                'webhost': 'https://connect.garmin.com/modern',
+                'source': 'https://connect.garmin.com/signin',
+                'redirectAfterAccountLoginUrl': 'https://connect.garmin.com/modern',
+                'redirectAfterAccountCreationUrl': 'https://connect.garmin.com/modern',
+                'gauthHost': 'https://sso.garmin.com/sso',
+                'locale': 'en_US',
+                'id': 'gauth-widget',
+                'cssUrl': 'https://connect.garmin.com/gauth-custom-v1.2-min.css',
+                'clientId': 'GarminConnect',
+                'rememberMeShown': 'true',
+                'rememberMeChecked': 'false',
+                'createAccountShown': 'true',
+                'openCreateAccount': 'false',
+                'displayNameShown': 'false',
+                'consumeServiceTicket': 'false',
+                'initialFocus': 'true',
+                'embedWidget': 'false',
+                'generateExtraServiceTicket': 'true',
+                'generateTwoExtraServiceTickets': 'false',
+                'generateNoServiceTicket': 'false',
+                'globalOptInShown': 'true',
+                'globalOptInChecked': 'false',
+                'mobile': 'false',
+                'connectLegalTerms': 'true',
+                'locationPromptShown': 'true',
+                'showPassword': 'true'
+            }
+            
+            print("Sending initial request...")
+            response = session.get(sso_url, params=params)
+            print(f"Initial response status: {response.status_code}")
+            
+            if response.status_code != 200:
+                print("Initial SSO page request failed")
+                print(f"Error body: {response.text[:200]}...")
+                raise Exception("Failed to load Garmin login page")
+            
+            # Now attempt the actual login
+            print("Preparing login request...")
+            payload = {
+                'username': email,
+                'password': safe_password,
+                'embed': 'false',
+                'rememberme': 'on'  # Keep the session alive longer
+            }
+            
+            login_url = "https://sso.garmin.com/sso/signin"
+            print(f"Sending login request to: {login_url}")
+            
+            login_response = session.post(login_url, params=params, data=payload)
+            print(f"Login response status: {login_response.status_code}")
+            
+            if login_response.status_code != 200:
+                print("Login request failed")
+                print(f"Error body: {login_response.text[:200]}...")
+                raise Exception("Failed to login to Garmin Connect")
+            
+            # Check if login was successful by looking for ticket in response
+            if "ticket" not in login_response.text:
+                print("No ticket found in response, login likely failed")
+                print(f"Response excerpt: {login_response.text[:200]}...")
+                raise Exception("Login authentication failed - no ticket found")
+            
+            print("Login appears successful, found ticket in response")
+            
+            # Use the existing client but with our authenticated session
+            garmin_client = Garmin(email, password, session=session)
+            print("Created Garmin client with authenticated session")
+            
+            return garmin_client
+            
+        except Exception as cookie_err:
+            print(f"Cookie-based authentication failed: {str(cookie_err)}")
+            print(f"Full error: {traceback.format_exc()}")
+            print("Falling back to regular client initialization...")
+        
+        # Fall back to regular client creation
         garmin_client = Garmin(email, password)
         
         print("Attempting Garmin login...")
@@ -116,6 +223,7 @@ def initialize_garmin_client(email, password):
         print(f"Error type: {type(err)}")
         print(f"Full authentication error traceback: {traceback.format_exc()}")
         print(f"Please verify your Garmin credentials at https://connect.garmin.com")
+        print(f"Check if your account has 2FA enabled or if you need to sign in to Garmin Connect first manually")
         raise Exception(f"Garmin authentication failed: {str(err)}")
     except GarminConnectTooManyRequestsError as err:
         print(f"Too many requests error for {email}")
