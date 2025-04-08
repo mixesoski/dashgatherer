@@ -108,6 +108,10 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         recalculateRemainingDays(results, targetTSB, eventDate);
       }
       
+      const eventDateAtl = results.length > 0 
+        ? results[results.length - 1].projectedTSB 
+        : projectedTSB;
+      
       setPlanningResults(results);
     } catch (error) {
       console.error("Error calculating plan:", error);
@@ -295,15 +299,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         {planningResults.length > 0 && (
           <div className="mt-4">
             <h3 className="text-lg font-semibold mb-2">Training Plan</h3>
-            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 mb-4">
-              <p className="text-sm font-medium flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-primary" />
-                Event Date: {format(eventDate!, "EEEE, MMMM do, yyyy")}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Follow this plan to reach a TSB of {parseFloat(targetTSB).toFixed(1)} by this date
-              </p>
-            </div>
             
             <div className={isMobile ? "overflow-x-auto" : ""}>
               <Table className={isMobile ? "w-[500px]" : ""}>
