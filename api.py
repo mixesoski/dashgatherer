@@ -17,7 +17,9 @@ CORS(app, resources={
     r"/api/*": {
         "origins": ["https://dashgatherer.lovable.app", "http://localhost:5173"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "Authorization"]
     }
 })
 
@@ -137,26 +139,42 @@ def update_chart():
         # Verify authentication
         auth_header = request.headers.get('Authorization')
         print(f"\nReceived request to /api/update-chart")
-        print(f"Auth header: {auth_header}")
+        print(f"Auth header present: {bool(auth_header)}")
+        print(f"Request method: {request.method}")
+        print(f"Content-Type: {request.headers.get('Content-Type')}")
+        print(f"Request data: {request.get_data(as_text=True)}")
         
         user = verify_auth_token(auth_header)
         if not user:
-            print("Authentication failed")
+            print("Authentication failed - invalid or missing token")
+            print(f"Auth header: {auth_header[:15]}... (truncated)")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
-        data = request.json
-        print(f"Request data: {data}")
+        try:
+            data = request.json
+            print(f"Parsed request JSON data: {data}")
+        except Exception as json_err:
+            print(f"Failed to parse JSON from request: {str(json_err)}")
+            print(f"Raw request data: {request.get_data(as_text=True)}")
+            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
         
+        if not data:
+            print("No data provided in request body")
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
         user_id = data.get('userId')
         if not user_id:
             print("No user ID provided in request")
             return jsonify({'success': False, 'error': 'No user ID provided'}), 400
             
+        print(f"User ID from request: {user_id}")
+        print(f"User ID from token: {user.user.id}")
+        
         if user_id != user.user.id:
             print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
-        print(f"\nReceived chart update request for user: {user_id}")
+        print(f"\nStarting chart update for user: {user_id}")
         
         result = update_chart_data(user_id)
         print(f"Chart update completed with result: {result}")
