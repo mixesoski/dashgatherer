@@ -508,6 +508,9 @@ export const GarminChart = ({
       }
       console.log('✅ MANUAL TRAINING SUBMISSION COMPLETED SUCCESSFULLY');
       console.log('='.repeat(50) + '\n');
+      
+      window.location.reload();
+      
     } catch (error: any) {
       console.log('❌ MANUAL TRAINING SUBMISSION FAILED');
       console.log('='.repeat(50) + '\n');
