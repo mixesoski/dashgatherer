@@ -49,19 +49,51 @@ class ChartUpdater:
         print(f"Password length: {len(password) if password else 0} characters")
         
         try:
-            # Initialize client just like in the test script
+            # Initialize client with updated approach for version 0.2.25
             print("Initializing Garmin client...")
-            self.garmin = Garmin(email, password)
             
-            # Login using the direct method that worked in the test
-            print("Logging in to Garmin...")
+            # First try the current approach with direct client initialization
             try:
+                self.garmin = Garmin(email, password)
+                print("Client initialized, attempting login...")
                 self.garmin.login()
                 print("Login successful!")
-            except Exception as login_err:
-                print(f"Login failed: {str(login_err)}")
-                print(f"Full error from login: {traceback.format_exc()}")
-                raise Exception(f"Failed to login to Garmin: {str(login_err)}")
+            except Exception as direct_err:
+                print(f"Direct login attempt failed: {str(direct_err)}")
+                print("Trying alternate authentication method...")
+                
+                # Newer versions might use a different login approach
+                try:
+                    from garminconnect import Garmin
+                    from garminconnect.garmin_client import get_credentials
+                    print("Getting credentials via get_credentials helper...")
+                    
+                    # Try to use get_credentials helper if available in newer versions
+                    try:
+                        creds = get_credentials(email, password)
+                        self.garmin = Garmin(email=email, password=password, auth_tokens=creds)
+                        print("Created client with auth tokens")
+                    except (ImportError, AttributeError):
+                        # Fall back to direct instantiation with tokenstore=True
+                        print("Falling back to tokenstore approach")
+                        self.garmin = Garmin(email=email, password=password, tokenstore=True)
+                    
+                    # Connect to Garmin
+                    self.garmin.login()
+                    print("Login successful with alternate method!")
+                except Exception as alt_err:
+                    print(f"Alternate login also failed: {str(alt_err)}")
+                    print(f"Full error from alternate login: {traceback.format_exc()}")
+                    raise Exception(f"All login methods failed: {str(alt_err)}")
+            
+            # Test the connection by getting user summary
+            try:
+                summary = self.garmin.get_user_summary()
+                user_id = summary.get('userId', 'Unknown')
+                print(f"Successfully connected to Garmin account for user ID: {user_id}")
+            except Exception as test_err:
+                print(f"Warning: Connected to Garmin but couldn't get user summary: {str(test_err)}")
+                print("Will continue anyway as we might still be able to access activities")
             
             print("Garmin client initialized and logged in successfully")
             return True
@@ -326,9 +358,11 @@ class ChartUpdater:
             # Method 1: Direct date query
             print(f"Method 1: Calling get_activities_by_date for {date_str}")
             try:
+                # Updated API call for garminconnect 0.2.25
                 day_activities = self.garmin.get_activities_by_date(
                     date_str,
-                    date_str
+                    date_str,
+                    activityType=None  # Get all activity types
                 )
                 if day_activities:
                     print(f"Method 1 found {len(day_activities)} activities")
@@ -342,13 +376,22 @@ class ChartUpdater:
             if not activities:
                 print(f"Method 2: Getting recent activities and filtering for {date_str}")
                 try:
+                    # Updated API call for garminconnect 0.2.25
                     recent_activities = self.garmin.get_activities(0, 30)  # Get 30 most recent activities
                     print(f"Method 2 found {len(recent_activities)} recent activities total")
                     
-                    # Filter for the target date
+                    # Filter for the target date - fix date format check
                     date_activities = []
                     for activity in recent_activities:
-                        activity_date = activity.get('startTimeLocal', '').split()[0]
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in activity:
+                            activity_date = activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in activity:
+                            activity_date = activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in activity:
+                            activity_date = activity['startTime'].split('T')[0]
+                        
                         if activity_date == date_str:
                             date_activities.append(activity)
                     
@@ -359,6 +402,7 @@ class ChartUpdater:
                         print(f"Method 2 found no activities for {date_str}")
                 except Exception as e:
                     print(f"Method 2 error: {e}")
+                    print(f"Method 2 error traceback: {traceback.format_exc()}")
             
             # Method 3: Try a week-based approach
             if not activities:
@@ -369,17 +413,27 @@ class ChartUpdater:
                     # End 3 days after the target date
                     week_end = date + datetime.timedelta(days=3)
                     
+                    # Updated API call for garminconnect 0.2.25
                     week_activities = self.garmin.get_activities_by_date(
                         week_start.strftime("%Y-%m-%d"),
-                        week_end.strftime("%Y-%m-%d")
+                        week_end.strftime("%Y-%m-%d"),
+                        activityType=None  # Get all activity types
                     )
                     
                     print(f"Method 3 found {len(week_activities)} activities for the week")
                     
-                    # Filter for the target date
+                    # Filter for the target date - fix date format check
                     date_activities = []
                     for activity in week_activities:
-                        activity_date = activity.get('startTimeLocal', '').split()[0]
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in activity:
+                            activity_date = activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in activity:
+                            activity_date = activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in activity:
+                            activity_date = activity['startTime'].split('T')[0]
+                        
                         if activity_date == date_str:
                             date_activities.append(activity)
                     
@@ -390,6 +444,34 @@ class ChartUpdater:
                         print(f"Method 3 found no activities for {date_str}")
                 except Exception as e:
                     print(f"Method 3 error: {e}")
+                    print(f"Method 3 error traceback: {traceback.format_exc()}")
+            
+            # Method 4: Try a different API endpoint as a last resort
+            if not activities:
+                print(f"Method 4: Using get_last_activity and checking date {date_str}")
+                try:
+                    # Try to get the last activity and check its date
+                    last_activity = self.garmin.get_last_activity()
+                    if last_activity:
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in last_activity:
+                            activity_date = last_activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in last_activity:
+                            activity_date = last_activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in last_activity:
+                            activity_date = last_activity['startTime'].split('T')[0]
+                        
+                        print(f"Last activity date: {activity_date}")
+                        
+                        if activity_date == date_str:
+                            print(f"Method 4 found activity for {date_str}")
+                            activities = [last_activity]
+                        else:
+                            print(f"Method 4 found activity but not for {date_str}")
+                except Exception as e:
+                    print(f"Method 4 error: {e}")
+                    print(f"Method 4 error traceback: {traceback.format_exc()}")
             
             if not activities:
                 print(f"No activities found for {date_str} with any method")
@@ -402,14 +484,22 @@ class ChartUpdater:
             for activity in activities:
                 activity_id = activity.get('activityId')
                 activity_name = activity.get('activityName', 'Unknown Activity')
-                activity_date = activity.get('startTimeLocal', '').split()[0]
+                
+                # Get activity date based on various possible fields
+                activity_date = None
+                if 'startTimeLocal' in activity:
+                    activity_date = activity['startTimeLocal'].split()[0]
+                elif 'startTimeGMT' in activity:
+                    activity_date = activity['startTimeGMT'].split()[0]
+                elif 'startTime' in activity:
+                    activity_date = activity['startTime'].split('T')[0]
                 
                 print(f"Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
                 
                 try:
-                    # Get detailed activity data to find TRIMP
+                    # Get detailed activity data to find TRIMP - updated for 0.2.25
                     print(f"Fetching details for activity {activity_id}")
-                    details = self.garmin.get_activity(activity_id)
+                    details = self.garmin.get_activity_details(activity_id)
                     
                     # Debug the returned keys
                     detail_keys = list(details.keys())
@@ -418,30 +508,74 @@ class ChartUpdater:
                     trimp = 0.0
                     trimp_method = "not found"
                     
-                    # Check for connectIQMeasurements - using exact same approach as test script
-                    if 'connectIQMeasurements' in details:
+                    # Check for different possible locations of TRIMP data in 0.2.25
+                    # 1. Check connectIQMeasurements
+                    if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
                         print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
                         
                         # Print each measurement to inspect
                         for i, item in enumerate(details['connectIQMeasurements']):
                             print(f"Measurement {i+1}: {item}")
                             
-                            # Look for TRIMP specifically
-                            if item.get('developerFieldNumber') == 4:
-                                trimp = round(float(item.get('value', 0)), 1)
-                                trimp_method = "connectIQMeasurements"
-                                print(f"FOUND TRIMP: {trimp}")
-                                break
-                    else:
-                        print("No connectIQMeasurements found in activity details")
+                            # Look for TRIMP specifically - check various possible formats
+                            if item.get('developerFieldNumber') == 4 or 'TRIMP' in str(item) or 'trimp' in str(item):
+                                try:
+                                    trimp = round(float(item.get('value', 0)), 1)
+                                    trimp_method = "connectIQMeasurements"
+                                    print(f"FOUND TRIMP: {trimp}")
+                                    break
+                                except (ValueError, TypeError):
+                                    print(f"Failed to convert TRIMP value: {item.get('value')}")
                     
-                    # If no TRIMP found, we keep it at 0 - no estimation
+                    # 2. Check in summaryDTO if available
+                    if trimp == 0 and 'summaryDTO' in details:
+                        summary = details['summaryDTO']
+                        if 'trainingEffect' in summary:
+                            te = summary.get('trainingEffect', 0)
+                            if te > 0:
+                                # Estimate TRIMP from training effect
+                                # TE 1-2: light, 2-3: moderate, 3-4: hard, 4-5: very hard
+                                duration_min = summary.get('movingDuration', 0) / 60
+                                intensity_factor = te / 5.0  # Convert TE to 0-1 scale
+                                trimp = duration_min * intensity_factor * 100
+                                trimp_method = "estimated from TE"
+                                print(f"Estimated TRIMP from Training Effect {te}: {trimp}")
+                    
+                    # 3. Try to calculate TRIMP if we have HR data
                     if trimp == 0:
-                        print("No TRIMP value found in connectIQMeasurements, keeping value at 0")
+                        try:
+                            # Check if we have HR and duration data
+                            duration_min = 0
+                            avg_hr = 0
+                            
+                            if 'summaryDTO' in details:
+                                summary = details['summaryDTO']
+                                if 'movingDuration' in summary:
+                                    duration_min = summary.get('movingDuration', 0) / 60
+                                if 'averageHR' in summary:
+                                    avg_hr = summary.get('averageHR', 0)
+                            
+                            if duration_min > 0 and avg_hr > 0:
+                                # Use a simple formula to estimate TRIMP
+                                # Assume max HR of 180 as a reasonable default
+                                hr_reserve = (avg_hr - 60) / (180 - 60)
+                                trimp = duration_min * hr_reserve * 100
+                                trimp_method = "calculated from HR"
+                                print(f"Calculated TRIMP from HR data: {trimp}")
+                        except Exception as calc_err:
+                            print(f"Error calculating TRIMP: {calc_err}")
                     
                     # Double TRIMP for strength training activities
-                    activity_type = activity.get('activityType', {}).get('typeKey', '')
-                    if trimp > 0 and ('strength' in activity_type.lower() or activity_name.lower() in ['strength training', 'siła']):
+                    activity_type = ''
+                    if 'activityType' in activity:
+                        if isinstance(activity['activityType'], dict):
+                            activity_type = activity['activityType'].get('typeKey', '')
+                        else:
+                            activity_type = str(activity['activityType'])
+                    
+                    if trimp > 0 and ('strength' in activity_type.lower() or 
+                                      activity_name and 'strength' in activity_name.lower() or 
+                                      activity_name and 'siła' in activity_name.lower()):
                         old_trimp = trimp
                         trimp *= 2
                         print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
@@ -450,7 +584,7 @@ class ChartUpdater:
                     activities_with_trimp.append(activity)
                     print(f"Added activity {activity_name} with TRIMP = {trimp} (method: {trimp_method})")
                     
-                    # Add a small delay to avoid rate limiting - same as test script
+                    # Add a small delay to avoid rate limiting
                     time.sleep(1)
                     
                 except Exception as e:

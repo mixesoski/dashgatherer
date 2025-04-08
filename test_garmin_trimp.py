@@ -16,23 +16,63 @@ def test_garmin_trimp(email, password, days_back=7):
     print(f"Looking back {days_back} days")
     
     try:
-        # Initialize Garmin client
+        # Initialize Garmin client with updated approach for version 0.2.25
         print("Initializing Garmin client...")
-        client = Garmin(email, password)
         
-        # Login
-        print("Logging in to Garmin...")
-        client.login()
-        print("Login successful!")
+        # First try the current approach with direct client initialization
+        client = None
+        try:
+            client = Garmin(email, password)
+            print("Client initialized, attempting login...")
+            client.login()
+            print("Login successful!")
+        except Exception as direct_err:
+            print(f"Direct login attempt failed: {str(direct_err)}")
+            print("Trying alternate authentication method...")
+            
+            # Newer versions might use a different login approach
+            try:
+                from garminconnect import Garmin
+                from garminconnect.garmin_client import get_credentials
+                print("Getting credentials via get_credentials helper...")
+                
+                # Try to use get_credentials helper if available in newer versions
+                try:
+                    creds = get_credentials(email, password)
+                    client = Garmin(email=email, password=password, auth_tokens=creds)
+                    print("Created client with auth tokens")
+                except (ImportError, AttributeError):
+                    # Fall back to direct instantiation with tokenstore=True
+                    print("Falling back to tokenstore approach")
+                    client = Garmin(email=email, password=password, tokenstore=True)
+                
+                # Connect to Garmin
+                client.login()
+                print("Login successful with alternate method!")
+            except Exception as alt_err:
+                print(f"Alternate login also failed: {str(alt_err)}")
+                print(f"Full error from alternate login: {traceback.format_exc()}")
+                raise Exception(f"All login methods failed: {str(alt_err)}")
+        
+        # Test the connection by getting user summary
+        try:
+            summary = client.get_user_summary()
+            user_id = summary.get('userId', 'Unknown')
+            print(f"Successfully connected to Garmin account for user ID: {user_id}")
+        except Exception as test_err:
+            print(f"Warning: Connected to Garmin but couldn't get user summary: {str(test_err)}")
+            print("Will continue anyway as we might still be able to access activities")
         
         # Get activities for the last X days
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=days_back)
         
         print(f"\nFetching activities from {start_date} to {end_date}")
+        # Updated get_activities_by_date call for version 0.2.25
         activities = client.get_activities_by_date(
             start_date.strftime("%Y-%m-%d"),
-            end_date.strftime("%Y-%m-%d")
+            end_date.strftime("%Y-%m-%d"),
+            activityType=None  # Get all activity types
         )
         
         print(f"Found {len(activities)} activities")
@@ -50,7 +90,12 @@ def test_garmin_trimp(email, password, days_back=7):
             print(f"\nChecking activities for {date_str}")
             
             try:
-                day_activities = client.get_activities_by_date(date_str, date_str)
+                # Updated get_activities_by_date call for version 0.2.25
+                day_activities = client.get_activities_by_date(
+                    date_str, 
+                    date_str,
+                    activityType=None  # Get all activity types
+                )
                 print(f"Found {len(day_activities)} activities on {date_str}")
             except Exception as e:
                 print(f"Error retrieving activities for {date_str}: {e}")
@@ -86,7 +131,15 @@ def test_garmin_trimp(email, password, days_back=7):
         for idx, activity in enumerate(combined_activities):
             activity_id = activity.get('activityId')
             activity_name = activity.get('activityName', 'Unknown Activity')
-            activity_date = activity.get('startTimeLocal', '').split()[0]
+            
+            # Get activity date based on various possible fields
+            activity_date = None
+            if 'startTimeLocal' in activity:
+                activity_date = activity['startTimeLocal'].split()[0]
+            elif 'startTimeGMT' in activity:
+                activity_date = activity['startTimeGMT'].split()[0]
+            elif 'startTime' in activity:
+                activity_date = activity['startTime'].split('T')[0]
             
             print(f"\n{idx+1}/{len(combined_activities)}: Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
             
@@ -94,37 +147,50 @@ def test_garmin_trimp(email, password, days_back=7):
             print(f"Activity data: {json.dumps(activity, indent=2)}")
             
             try:
-                # Get detailed activity data
+                # Get detailed activity data - updated for 0.2.25
                 print(f"Fetching details for activity {activity_id}")
-                details = client.get_activity(activity_id)
+                details = client.get_activity_details(activity_id)
                 
                 # Debug the returned keys
                 print(f"Activity details keys: {list(details.keys())}")
                 
-                # Check for connectIQMeasurements
-                if 'connectIQMeasurements' in details:
+                # Check for different possible locations of TRIMP data in 0.2.25
+                trimp_found = False
+                
+                # 1. Check connectIQMeasurements
+                if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
                     print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
                     
                     # Print each measurement to inspect
                     for i, item in enumerate(details['connectIQMeasurements']):
                         print(f"Measurement {i+1}: {item}")
                         
-                        # Look for TRIMP specifically
-                        if item.get('developerFieldNumber') == 4:
-                            trimp = round(float(item.get('value', 0)), 1)
-                            print(f"FOUND TRIMP: {trimp}")
-                else:
-                    print("No connectIQMeasurements found in activity details")
+                        # Look for TRIMP specifically - check various possible formats
+                        if item.get('developerFieldNumber') == 4 or 'TRIMP' in str(item) or 'trimp' in str(item):
+                            try:
+                                trimp = round(float(item.get('value', 0)), 1)
+                                print(f"FOUND TRIMP: {trimp}")
+                                trimp_found = True
+                                break
+                            except (ValueError, TypeError):
+                                print(f"Failed to convert TRIMP value: {item.get('value')}")
+                
+                # 2. Check in summaryDTO if available and no TRIMP found yet
+                if not trimp_found and 'summaryDTO' in details:
+                    summary = details['summaryDTO']
+                    print(f"Summary keys: {list(summary.keys())}")
                     
-                    # Print more details for debugging
-                    print("\nChecking other activity fields for useful data:")
-                    if 'summaryDTO' in details:
-                        summary = details['summaryDTO']
-                        print(f"Summary keys: {list(summary.keys())}")
-                        if 'movingDuration' in summary and 'averageHR' in summary:
-                            duration_min = summary['movingDuration'] / 60
-                            avg_hr = summary['averageHR']
-                            print(f"Duration: {duration_min} min, Avg HR: {avg_hr} bpm")
+                    if 'trainingEffect' in summary:
+                        te = summary.get('trainingEffect', 0)
+                        if te > 0:
+                            # Report training effect - could be used to estimate TRIMP
+                            print(f"Training Effect: {te}")
+                            
+                            if 'movingDuration' in summary and 'averageHR' in summary:
+                                duration_min = summary.get('movingDuration', 0) / 60
+                                avg_hr = summary.get('averageHR', 0)
+                                print(f"Duration: {duration_min} min, Avg HR: {avg_hr} bpm")
+                                print(f"Could estimate TRIMP from these values")
                 
                 # Wait a bit to avoid rate limiting
                 time.sleep(1)

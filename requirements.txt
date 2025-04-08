@@ -1,4 +1,4 @@
-garminconnect==0.1.50
+garminconnect==0.2.25
 garth>=0.1.12
 python-dotenv>=1.0.0
 supabase>=2.0.0
