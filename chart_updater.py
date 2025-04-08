@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import traceback
 import logging
 import time
+import math
 
 load_dotenv()
 
@@ -319,44 +320,84 @@ class ChartUpdater:
                 print("Garmin client not initialized, initializing now...")
                 self.initialize_garmin()
             
-            # Try to get activities for the specific date
-            print(f"Calling get_activities_by_date for {date_str}")
-            activities = self.garmin.get_activities_by_date(
-                date_str,
-                date_str
-            )
+            # Try to get activities with multiple methods
+            activities = []
             
-            # If no activities found, try to get more recent activities and filter
+            # Method 1: Direct date query
+            print(f"Method 1: Calling get_activities_by_date for {date_str}")
+            try:
+                day_activities = self.garmin.get_activities_by_date(
+                    date_str,
+                    date_str
+                )
+                if day_activities:
+                    print(f"Method 1 found {len(day_activities)} activities")
+                    activities = day_activities
+                else:
+                    print("Method 1 found no activities")
+            except Exception as e:
+                print(f"Method 1 error: {e}")
+            
+            # Method 2: Get recent activities and filter
             if not activities:
-                print(f"No activities found for {date_str}, trying alternative method...")
+                print(f"Method 2: Getting recent activities and filtering for {date_str}")
                 try:
-                    # Try an alternative approach by getting all activities and filtering
-                    recent_activities = self.garmin.get_activities(0, 20)  # Get most recent 20 activities
-                    print(f"Fetched {len(recent_activities)} recent activities")
+                    recent_activities = self.garmin.get_activities(0, 30)  # Get 30 most recent activities
+                    print(f"Method 2 found {len(recent_activities)} recent activities total")
                     
-                    # Filter activities for the desired date
-                    filtered_activities = []
+                    # Filter for the target date
+                    date_activities = []
                     for activity in recent_activities:
                         activity_date = activity.get('startTimeLocal', '').split()[0]
                         if activity_date == date_str:
-                            filtered_activities.append(activity)
+                            date_activities.append(activity)
                     
-                    if filtered_activities:
-                        print(f"Found {len(filtered_activities)} activities for {date_str} using alternative method")
-                        activities = filtered_activities
+                    if date_activities:
+                        print(f"Method 2 found {len(date_activities)} activities for {date_str}")
+                        activities = date_activities
                     else:
-                        print(f"No activities found for {date_str} using alternative method either")
-                except Exception as alt_err:
-                    print(f"Alternative method failed: {str(alt_err)}")
-                    print(f"Traceback: {traceback.format_exc()}")
+                        print(f"Method 2 found no activities for {date_str}")
+                except Exception as e:
+                    print(f"Method 2 error: {e}")
+            
+            # Method 3: Try a week-based approach
+            if not activities:
+                print(f"Method 3: Getting a week of activities including {date_str}")
+                try:
+                    # Start from 3 days before the target date
+                    week_start = date - datetime.timedelta(days=3)
+                    # End 3 days after the target date
+                    week_end = date + datetime.timedelta(days=3)
+                    
+                    week_activities = self.garmin.get_activities_by_date(
+                        week_start.strftime("%Y-%m-%d"),
+                        week_end.strftime("%Y-%m-%d")
+                    )
+                    
+                    print(f"Method 3 found {len(week_activities)} activities for the week")
+                    
+                    # Filter for the target date
+                    date_activities = []
+                    for activity in week_activities:
+                        activity_date = activity.get('startTimeLocal', '').split()[0]
+                        if activity_date == date_str:
+                            date_activities.append(activity)
+                    
+                    if date_activities:
+                        print(f"Method 3 found {len(date_activities)} activities for {date_str}")
+                        activities = date_activities
+                    else:
+                        print(f"Method 3 found no activities for {date_str}")
+                except Exception as e:
+                    print(f"Method 3 error: {e}")
             
             if not activities:
-                print(f"No activities found for {date_str}")
+                print(f"No activities found for {date_str} with any method")
                 return []
                 
-            print(f"Found {len(activities)} activities from Garmin Connect")
+            print(f"Found {len(activities)} total activities for {date_str}")
             
-            # Fetch TRIMP values for each activity exactly as in the test script
+            # Fetch TRIMP values for each activity
             activities_with_trimp = []
             for activity in activities:
                 activity_id = activity.get('activityId')
@@ -443,6 +484,172 @@ class ChartUpdater:
             }, on_conflict='user_id,date').execute()
         except Exception as e:
             print(f"Error upserting metrics for {date_str}: {e}")
+
+    def process_activity(self, activity, date_str):
+        """Process a single activity and extract TRIMP data"""
+        try:
+            activity_id = activity.get('activityId')
+            activity_name = activity.get('activityName', 'Unknown')
+            activity_type = activity.get('activityType', {}).get('typeKey', 'unknown')
+            
+            print(f"Processing activity: {activity_name} (ID: {activity_id}, Type: {activity_type})")
+            
+            # For strength training, we'll use a different approach
+            if activity_type == 'strength_training':
+                return self.process_strength_training(activity, date_str)
+            
+            # Try to get detailed activity data to extract TRIMP
+            try:
+                activity_details = self.garmin.get_activity_details(activity_id)
+                
+                # Look for connectIQMeasurements which contains TRIMP data
+                if 'connectIQMeasurements' in activity_details:
+                    measurements = activity_details['connectIQMeasurements']
+                    print(f"Found connectIQMeasurements with {len(measurements)} items")
+                    
+                    # The TRIMP value is typically in the measurement with developerFieldNumber 4
+                    for measurement in measurements:
+                        if measurement.get('developerFieldNumber') == 4:
+                            trimp_value = float(measurement.get('value', 0))
+                            print(f"FOUND TRIMP: {trimp_value}")
+                            
+                            # Update the current date's data
+                            if date_str in self.data:
+                                self.data[date_str]['trimp'] += trimp_value
+                                self.data[date_str]['activity_count'] += 1
+                            else:
+                                self.data[date_str] = {
+                                    'trimp': trimp_value,
+                                    'activity_count': 1
+                                }
+                            
+                            return True
+                
+                # Fallback to calculated TRIMP if no connectIQ measurements found
+                return self.calculate_trimp_from_activity(activity, date_str)
+                
+            except Exception as e:
+                print(f"Error getting activity details: {e}")
+                # Fallback to calculated TRIMP
+                return self.calculate_trimp_from_activity(activity, date_str)
+            
+        except Exception as e:
+            print(f"Error processing activity: {e}")
+            return False
+
+    def calculate_trimp_from_activity(self, activity, date_str):
+        """Calculate TRIMP from activity data as a fallback method"""
+        try:
+            # Extract relevant data
+            duration_minutes = activity.get('duration', 0) / 60  # Convert to minutes
+            avg_hr = activity.get('averageHR', 0)
+            
+            if duration_minutes <= 0 or avg_hr <= 0:
+                print("Activity missing duration or heart rate data, can't calculate TRIMP")
+                return False
+            
+            # Get user profile to determine max HR
+            try:
+                user_profile = self.garmin.get_user_summary()
+                max_hr = user_profile.get('userMetrics', {}).get('maxHeartRate', 220)
+                if not max_hr or max_hr <= 0:
+                    max_hr = 220  # Default max HR if not available
+            except:
+                # Use a default calculation if profile not available
+                max_hr = 220
+            
+            # Calculate heart rate reserve
+            hr_reserve_percent = (avg_hr - 60) / (max_hr - 60)
+            
+            # Calculate TRIMP using Banister's formula
+            gender_factor = 1.92  # For males, use 1.67 for females
+            trimp = duration_minutes * hr_reserve_percent * 0.64 * math.exp(gender_factor * hr_reserve_percent)
+            
+            print(f"Calculated TRIMP: {trimp:.2f} for activity {activity.get('activityName')}")
+            
+            # Update the current date's data
+            if date_str in self.data:
+                self.data[date_str]['trimp'] += trimp
+                self.data[date_str]['activity_count'] += 1
+            else:
+                self.data[date_str] = {
+                    'trimp': trimp,
+                    'activity_count': 1
+                }
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error calculating TRIMP: {e}")
+            return False
+
+    def process_strength_training(self, activity, date_str):
+        """Process strength training activity and estimate TRIMP"""
+        try:
+            activity_id = activity.get('activityId')
+            
+            # First try to get TRIMP from connectIQMeasurements
+            try:
+                activity_details = self.garmin.get_activity_details(activity_id)
+                
+                # Look for connectIQMeasurements which contains TRIMP data
+                if 'connectIQMeasurements' in activity_details:
+                    measurements = activity_details['connectIQMeasurements']
+                    
+                    # The TRIMP value is typically in the measurement with developerFieldNumber 4
+                    for measurement in measurements:
+                        if measurement.get('developerFieldNumber') == 4:
+                            trimp_value = float(measurement.get('value', 0))
+                            print(f"FOUND TRIMP for strength training: {trimp_value}")
+                            
+                            # Update the current date's data
+                            if date_str in self.data:
+                                self.data[date_str]['trimp'] += trimp_value
+                                self.data[date_str]['activity_count'] += 1
+                            else:
+                                self.data[date_str] = {
+                                    'trimp': trimp_value,
+                                    'activity_count': 1
+                                }
+                            
+                            return True
+            except Exception as e:
+                print(f"Error getting strength training details: {e}")
+            
+            # Fallback to estimation based on duration and HR
+            duration_minutes = activity.get('duration', 0) / 60
+            avg_hr = activity.get('averageHR', 0)
+            
+            if duration_minutes <= 0:
+                print("Strength training missing duration data")
+                return False
+            
+            # Apply a simplified formula for strength training
+            # Strength training typically has lower continuous cardiovascular load
+            if avg_hr > 0:
+                # If we have HR data, use a simplified TRIMP calculation
+                estimated_trimp = duration_minutes * (avg_hr / 180) * 1.2
+            else:
+                # Without HR data, estimate based on duration only
+                estimated_trimp = duration_minutes * 0.8  # Conservative estimate
+            
+            print(f"Estimated TRIMP for strength training: {estimated_trimp:.2f}")
+            
+            # Update the current date's data
+            if date_str in self.data:
+                self.data[date_str]['trimp'] += estimated_trimp
+                self.data[date_str]['activity_count'] += 1
+            else:
+                self.data[date_str] = {
+                    'trimp': estimated_trimp,
+                    'activity_count': 1
+                }
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error processing strength training: {e}")
+            return False
 
 def update_chart_data(user_id, force_refresh=False):
     updater = ChartUpdater(user_id)
