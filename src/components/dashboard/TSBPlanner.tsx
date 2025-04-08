@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +23,8 @@ interface PlanDay {
   trimp: number;
   projectedTSB: number;
   isCustom: boolean;
+  projectedATL?: number;
+  projectedCTL?: number;
 }
 
 export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps) {
@@ -79,7 +80,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         }
       });
       
-      // Calculate plan for each day leading up to the event
       for (let i = 0; i < daysUntilEvent; i++) {
         const date = addDays(today, i);
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -110,8 +110,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         recalculateRemainingDays(results, targetTSB, eventDate);
       }
       
-      // Calculate the final TSB on the event day itself (with a TRIMP of 0)
-      // We need to explicitly calculate this to avoid showing the previous day's TSB
       let eventDayATL = results.length > 0 ? 
         results[results.length - 1].projectedATL || 
         (results[results.length - 1].trimp - results[results.length - 1].projectedTSB) : 
@@ -122,19 +120,15 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         (results[results.length - 1].trimp + results[results.length - 1].projectedTSB) : 
         currentCTL;
       
-      // On event day, we typically assume no training load (TRIMP=0)
       const eventDayTrimp = 0; 
       
-      // Update for event day (ATL decays faster than CTL)
       eventDayATL = eventDayATL + (eventDayTrimp - eventDayATL) / 7;
       eventDayCTL = eventDayCTL + (eventDayTrimp - eventDayCTL) / 42;
       
-      // Final TSB on event day
       const eventDayTSB = eventDayCTL - eventDayATL;
       
       setPlanningResults(results);
       
-      // Store the event day TSB for display in the UI
       setEventDayFinalTSB(eventDayTSB);
     } catch (error) {
       console.error("Error calculating plan:", error);
@@ -144,7 +138,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     }
   };
 
-  // Add state to store the event day TSB
   const [eventDayFinalTSB, setEventDayFinalTSB] = useState<number | null>(null);
 
   const recalculateRemainingDays = (plan: PlanDay[], targetTSB: string, eventDate: Date) => {
@@ -197,22 +190,18 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         ctl = ctl + (day.trimp - ctl) / 42;
         
         plan[i].projectedTSB = ctl - atl;
-        // Store ATL and CTL in the plan for later use in event day calculation
         plan[i].projectedATL = atl;
         plan[i].projectedCTL = ctl;
       }
       
-      // Calculate event day TSB with zero TRIMP on event day
       if (plan.length > 0) {
         const lastDay = plan[plan.length - 1];
         let eventDayATL = lastDay.projectedATL;
         let eventDayCTL = lastDay.projectedCTL;
         
-        // On event day (zero TRIMP)
         eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
         eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
         
-        // Update the event day TSB
         setEventDayFinalTSB(eventDayCTL - eventDayATL);
       }
     } catch (error) {
@@ -248,12 +237,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     setPlanningResults([]);
     setEventDayFinalTSB(null);
   }, [eventDate, targetTSB]);
-
-  // Add missing type for extended PlanDay
-  interface ExtendedPlanDay extends PlanDay {
-    projectedATL?: number;
-    projectedCTL?: number;
-  }
 
   if (!latestATL || !latestCTL) {
     return (
