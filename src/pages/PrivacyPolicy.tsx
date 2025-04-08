@@ -1,19 +1,16 @@
-
 import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield, Info } from "lucide-react";
 import { Logo } from "@/components/Logo";
-
 const PrivacyPolicy = () => {
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+  return <div className="min-h-screen bg-[#0A0A0A] text-white">
       <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
         <Link to="/">
           <Logo variant="light" />
         </Link>
         <Link to="/">
-          <Button variant="outline" className="text-white border-white hover:bg-white/10">
+          <Button variant="outline" className="border-white hover:bg-white/10 text-stone-950">
             Back to Home
           </Button>
         </Link>
@@ -164,8 +161,6 @@ const PrivacyPolicy = () => {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default PrivacyPolicy;
