@@ -41,11 +41,16 @@ class ChartUpdater:
         if not credentials:
             raise Exception("No Garmin credentials found for user")
         
-        print(f"Initializing Garmin client for {credentials['email']}")
+        email = credentials.get('email')
+        password = credentials.get('password')
+        
+        print(f"Initializing Garmin client for {email}")
+        print(f"Password length: {len(password) if password else 0} characters")
+        
         try:
             # Create API client with basic initialization
             print("Creating Garmin client...")
-            self.garmin = Garmin(credentials['email'], credentials['password'])
+            self.garmin = Garmin(email, password)
             
             print("Attempting Garmin login...")
             try:
@@ -58,14 +63,43 @@ class ChartUpdater:
                 print(f"Failed to get user info: {str(e)}")
                 print(f"Full error from get_user_summary: {traceback.format_exc()}")
                 print("Falling back to regular login method...")
-                self.garmin.login()
-                print("Successfully logged into Garmin with regular login")
-                
+                try:
+                    self.garmin.login()
+                    print("Successfully logged into Garmin with regular login")
+                except Exception as login_err:
+                    print(f"Regular login also failed: {str(login_err)}")
+                    print(f"Full error from login: {traceback.format_exc()}")
+                    # Try one more time with direct session validation
+                    print("Attempting final authentication check...")
+                    try:
+                        # Check if we can access the user's profile as a final check
+                        user_info = self.garmin.get_user_info()
+                        displayName = user_info.get('displayName', 'Unknown')
+                        print(f"Successfully verified login with user info: {displayName}")
+                    except Exception as profile_err:
+                        print(f"Profile check also failed: {str(profile_err)}")
+                        raise Exception(f"All Garmin authentication methods failed for {email}")
+            
+            # Verify we can access activities API
+            print("Verifying access to activities API...")
+            try:
+                # Try to get a single recent activity to verify API access
+                activities = self.garmin.get_activities(0, 1)
+                if activities:
+                    print(f"Successfully verified access to activities API, found {len(activities)} recent activities")
+                else:
+                    print("Warning: No recent activities found. This might be normal if the user has no activities.")
+            except Exception as api_err:
+                print(f"Warning: Could not verify activities API access: {str(api_err)}")
+                print(f"API access error: {traceback.format_exc()}")
+                print("Continuing anyway, will try again when fetching specific dates")
+            
             print("Garmin client initialized and logged in successfully")
+            return True
         except Exception as e:
             print(f"Error initializing Garmin client: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}")
-            raise
+            raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
         try:
@@ -133,9 +167,10 @@ class ChartUpdater:
         
         return metrics
 
-    def update_chart_data(self, start_date=None, end_date=None):
+    def update_chart_data(self, start_date=None, end_date=None, force_refresh=False):
         try:
             print(f"\nStarting chart update for user {self.user_id}")
+            print(f"Force refresh: {force_refresh}")
             
             # Initialize Garmin connection
             print("Initializing Garmin connection...")
@@ -145,27 +180,36 @@ class ChartUpdater:
             except Exception as e:
                 print(f"Failed to initialize Garmin connection: {e}")
                 raise
-            
-            # Find the last existing date and its metrics
-            print("Finding last existing date...")
-            try:
-                last_date, previous_metrics = self.find_last_existing_date()
-                print(f"Last date: {last_date}")
-                print(f"Previous metrics: {previous_metrics}")
-            except Exception as e:
-                print(f"Failed to find last existing date: {e}")
-                raise
-            
-            if not last_date:
-                # If no data exists, start from 180 days ago
-                start_date = datetime.date.today() - datetime.timedelta(days=180)
-                print(f"No existing data found, starting from {start_date}")
+
+            # If force refresh is enabled, we'll reprocess recent days regardless
+            if force_refresh:
+                if not end_date:
+                    end_date = datetime.date.today()
+                if not start_date:
+                    # When force refreshing, just process the last 3 days by default
+                    start_date = end_date - datetime.timedelta(days=3)
+                print(f"Force refresh enabled, processing dates from {start_date} to {end_date}")
             else:
-                # Start from the day AFTER the last date
-                start_date = last_date + datetime.timedelta(days=1)
-                print(f"Found existing data for {last_date}, starting from {start_date}")
-            
-            end_date = datetime.date.today()
+                # Find the last existing date and its metrics
+                print("Finding last existing date...")
+                try:
+                    last_date, previous_metrics = self.find_last_existing_date()
+                    print(f"Last date: {last_date}")
+                    print(f"Previous metrics: {previous_metrics}")
+                except Exception as e:
+                    print(f"Failed to find last existing date: {e}")
+                    raise
+                
+                if not last_date:
+                    # If no data exists, start from 180 days ago
+                    start_date = datetime.date.today() - datetime.timedelta(days=180)
+                    print(f"No existing data found, starting from {start_date}")
+                else:
+                    # Start from the day AFTER the last date
+                    start_date = last_date + datetime.timedelta(days=1)
+                    print(f"Found existing data for {last_date}, starting from {start_date}")
+                
+                end_date = datetime.date.today()
             
             # If start_date is after end_date, there's nothing to update
             if start_date > end_date:
@@ -181,8 +225,18 @@ class ChartUpdater:
                 return {'success': True, 'updated': 0}
             
             print(f"\nProcessing dates from {start_date} to {end_date}")
-            print(f"\n=== Initial metrics from {last_date} ===")
-            print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
+            
+            # If we're not force refreshing, we need the previous metrics
+            if not force_refresh and last_date:
+                print(f"\n=== Initial metrics from {last_date} ===")
+                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
+            else:
+                # If force refreshing, get the metrics from the day before start_date
+                day_before = start_date - datetime.timedelta(days=1)
+                day_before_str = day_before.strftime('%Y-%m-%d')
+                previous_metrics = self.get_previous_day_metrics(start_date.strftime('%Y-%m-%d'))
+                print(f"\n=== Using metrics from {day_before} for calculation ===")
+                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             
             updated_count = 0
             
@@ -297,12 +351,62 @@ class ChartUpdater:
                 print("Garmin client not initialized, initializing now...")
                 self.initialize_garmin()
             
-            # Get activities from Garmin for this date
+            # Check what URLs we have access to
+            try:
+                print("Verifying Garmin access by fetching user info...")
+                now_date = datetime.datetime.now().strftime('%Y-%m-%d')
+                user_info = self.garmin.get_user_info()
+                print(f"User profile accessible: {user_info.get('displayName', 'Unknown')}")
+            except Exception as e:
+                print(f"Warning: Could not access user profile: {str(e)}")
+                
+            # Try to get activities for the week to see if we have any activities at all
+            try:
+                # Get activities for the week
+                print(f"Attempting to fetch activities for the week...")
+                week_start = date - datetime.timedelta(days=date.weekday())
+                week_end = week_start + datetime.timedelta(days=6)
+                week_start_str = week_start.strftime('%Y-%m-%d')
+                week_end_str = week_end.strftime('%Y-%m-%d')
+                week_activities = self.garmin.get_activities_by_date(
+                    week_start_str, 
+                    week_end_str
+                )
+                print(f"Found {len(week_activities)} activities for the whole week")
+                if week_activities:
+                    print(f"Week activities dates: {[a.get('startTimeLocal', '').split()[0] for a in week_activities[:5]]}")
+            except Exception as week_err:
+                print(f"Failed to get week activities: {str(week_err)}")
+            
+            # Get activities from Garmin for this specific date
             print(f"Calling get_activities_by_date for {date_str}")
             activities = self.garmin.get_activities_by_date(
                 date_str,
                 date_str
             )
+            
+            if not activities:
+                print(f"No activities found for {date_str}, trying alternative method...")
+                try:
+                    # Try an alternative approach by getting all activities and filtering
+                    recent_activities = self.garmin.get_activities(0, 20)  # Get most recent 20 activities
+                    print(f"Fetched {len(recent_activities)} recent activities")
+                    
+                    # Filter activities for the desired date
+                    filtered_activities = []
+                    for activity in recent_activities:
+                        activity_date = activity.get('startTimeLocal', '').split()[0]
+                        if activity_date == date_str:
+                            filtered_activities.append(activity)
+                    
+                    if filtered_activities:
+                        print(f"Found {len(filtered_activities)} activities for {date_str} using alternative method")
+                        activities = filtered_activities
+                    else:
+                        print(f"No activities found for {date_str} using alternative method either")
+                except Exception as alt_err:
+                    print(f"Alternative method failed: {str(alt_err)}")
+                    print(f"Traceback: {traceback.format_exc()}")
             
             if not activities:
                 print(f"No activities found for {date_str}")
@@ -315,8 +419,9 @@ class ChartUpdater:
             for activity in activities:
                 activity_id = activity.get('activityId')
                 activity_name = activity.get('activityName', 'Unknown Activity')
+                start_time = activity.get('startTimeLocal', 'Unknown Time')
                 
-                print(f"Processing activity: {activity_name} (ID: {activity_id})")
+                print(f"Processing activity: {activity_name} (ID: {activity_id}, Time: {start_time})")
                 
                 try:
                     # Get detailed activity data to find TRIMP
@@ -324,9 +429,11 @@ class ChartUpdater:
                     details = self.garmin.get_activity(activity_id)
                     
                     # Debug the returned details
-                    print(f"Activity details keys: {list(details.keys())}")
+                    detail_keys = list(details.keys())
+                    print(f"Activity details keys: {detail_keys}")
                     
                     trimp = 0.0
+                    trimp_method = "not found"
                     
                     # Look for TRIMP in connectIQMeasurements
                     if 'connectIQMeasurements' in details:
@@ -335,39 +442,24 @@ class ChartUpdater:
                             print(f"Measurement item: {item}")
                             if item.get('developerFieldNumber') == 4:  # TRIMP field
                                 trimp = round(float(item.get('value', 0)), 1)
+                                trimp_method = "connectIQMeasurements"
                                 print(f"Found TRIMP in connectIQMeasurements: {trimp}")
                                 break
-                    else:
-                        print("No connectIQMeasurements found in activity details")
-                        # Try alternate methods to find TRIMP
-                        if 'summaryDTO' in details and 'trainingEffectLabel' in details['summaryDTO']:
-                            print(f"Found training effect: {details['summaryDTO']['trainingEffectLabel']}")
-                            # Estimate TRIMP from other metrics if available
-                            if 'summaryDTO' in details and 'movingDuration' in details['summaryDTO'] and 'averageHR' in details['summaryDTO']:
-                                # Calculate estimated TRIMP from duration and average HR
-                                moving_minutes = details['summaryDTO']['movingDuration'] / 60
-                                avg_hr = details['summaryDTO']['averageHR']
-                                # Basic TRIMP calculation formula
-                                trimp = round(moving_minutes * (avg_hr / 10), 1)
-                                print(f"Estimated TRIMP from HR and duration: {trimp}")
-                        elif 'measurements' in details:
-                            print("Looking for TRIMP in measurements section")
-                            for measurement in details.get('measurements', []):
-                                if measurement.get('key') == 'TRIMP' or 'trimp' in measurement.get('key', '').lower():
-                                    trimp = round(float(measurement.get('value', 0)), 1)
-                                    print(f"Found TRIMP in measurements: {trimp}")
-                                    break
+                    
+                    # If no TRIMP found, we keep it at 0 - no estimation
+                    if trimp == 0:
+                        print("No TRIMP value found in connectIQMeasurements, keeping value at 0")
                     
                     # Double TRIMP for strength training activities
                     activity_type = activity.get('activityType', {}).get('typeKey', '')
-                    if 'strength' in activity_type.lower() or activity_name.lower() in ['strength training', 'siła']:
+                    if trimp > 0 and ('strength' in activity_type.lower() or activity_name.lower() in ['strength training', 'siła']):
                         old_trimp = trimp
                         trimp *= 2
                         print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
                     
                     activity['trimp'] = trimp
                     activities_with_trimp.append(activity)
-                    print(f"Added activity {activity_name} with TRIMP = {trimp}")
+                    print(f"Added activity {activity_name} with TRIMP = {trimp} (method: {trimp_method})")
                     
                     # Add a small delay to avoid rate limiting
                     time.sleep(0.5)
@@ -404,6 +496,6 @@ class ChartUpdater:
         except Exception as e:
             print(f"Error upserting metrics for {date_str}: {e}")
 
-def update_chart_data(user_id):
+def update_chart_data(user_id, force_refresh=False):
     updater = ChartUpdater(user_id)
-    return updater.update_chart_data()
+    return updater.update_chart_data(force_refresh=force_refresh)
