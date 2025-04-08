@@ -174,14 +174,10 @@ def update_chart():
             print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
-        # Check if force refresh is requested
-        force_refresh = data.get('forceRefresh', True)  # Default to True for now
-        print(f"Force refresh requested: {force_refresh}")
-        
         print(f"\nStarting chart update for user: {user_id}")
         
-        # Pass the force_refresh parameter to the chart updater
-        result = update_chart_data(user_id, force_refresh=force_refresh)
+        # Call chart updater without force_refresh parameter
+        result = update_chart_data(user_id)
         print(f"Chart update completed with result: {result}")
         
         return jsonify(result)

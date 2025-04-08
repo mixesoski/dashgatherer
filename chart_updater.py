@@ -49,42 +49,15 @@ class ChartUpdater:
         print(f"Password length: {len(password) if password else 0} characters")
         
         try:
-            # Initialize client with updated approach for version 0.2.25
-            print("Initializing Garmin client...")
+            # Import here at function scope level
+            import garminconnect
             
-            # First try the current approach with direct client initialization
-            try:
-                self.garmin = Garmin(email, password)
-                print("Client initialized, attempting login...")
-                self.garmin.login()
-                print("Login successful!")
-            except Exception as direct_err:
-                print(f"Direct login attempt failed: {str(direct_err)}")
-                print("Trying alternate authentication method...")
-                
-                # Newer versions might use a different login approach
-                try:
-                    from garminconnect import Garmin
-                    from garminconnect.garmin_client import get_credentials
-                    print("Getting credentials via get_credentials helper...")
-                    
-                    # Try to use get_credentials helper if available in newer versions
-                    try:
-                        creds = get_credentials(email, password)
-                        self.garmin = Garmin(email=email, password=password, auth_tokens=creds)
-                        print("Created client with auth tokens")
-                    except (ImportError, AttributeError):
-                        # Fall back to direct instantiation with tokenstore=True
-                        print("Falling back to tokenstore approach")
-                        self.garmin = Garmin(email=email, password=password, tokenstore=True)
-                    
-                    # Connect to Garmin
-                    self.garmin.login()
-                    print("Login successful with alternate method!")
-                except Exception as alt_err:
-                    print(f"Alternate login also failed: {str(alt_err)}")
-                    print(f"Full error from alternate login: {traceback.format_exc()}")
-                    raise Exception(f"All login methods failed: {str(alt_err)}")
+            print("Initializing Garmin client...")
+            self.garmin = garminconnect.Garmin(email, password)
+            
+            print("Logging in to Garmin...")
+            self.garmin.login()
+            print("Login successful!")
             
             # Test the connection by getting user summary
             try:
@@ -499,7 +472,18 @@ class ChartUpdater:
                 try:
                     # Get detailed activity data to find TRIMP - updated for 0.2.25
                     print(f"Fetching details for activity {activity_id}")
-                    details = self.garmin.get_activity_details(activity_id)
+                    try:
+                        # First try get_activity_details
+                        details = self.garmin.get_activity_details(activity_id)
+                    except Exception as details_err:
+                        print(f"Error with get_activity_details: {details_err}")
+                        # Fallback to get_activity
+                        try:
+                            details = self.garmin.get_activity(activity_id)
+                            print("Successfully retrieved activity data with get_activity")
+                        except Exception as activity_err:
+                            print(f"Error with get_activity fallback: {activity_err}")
+                            raise
                     
                     # Debug the returned keys
                     detail_keys = list(details.keys())
@@ -785,6 +769,6 @@ class ChartUpdater:
             print(f"Error processing strength training: {e}")
             return False
 
-def update_chart_data(user_id, force_refresh=False):
+def update_chart_data(user_id):
     updater = ChartUpdater(user_id)
-    return updater.update_chart_data(force_refresh=force_refresh)
+    return updater.update_chart_data()
