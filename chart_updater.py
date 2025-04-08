@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 import os
 import datetime
@@ -167,39 +168,38 @@ class ChartUpdater:
                 # Get previous day's metrics
                 previous_metrics = self.get_previous_day_metrics(date_str)
                 
-                # Get activities for this date
+                # Get activities for this date - FIXED: Properly get and process activities
                 activities = self.get_activities_for_date(date)
                 
-                # Calculate total TRIMP for new activities
+                # Calculate total TRIMP for all activities on this date
                 trimp_total = 0
                 activity_names = []
-                new_activities = set()
                 
                 if activities:
+                    print(f"Found {len(activities)} activities for {date_str}")
                     for activity in activities:
                         activity_id = activity.get('activityId')
-                        if activity_id not in self.processed_activity_ids:
-                            trimp = float(activity.get('trimp', 0))
-                            trimp_total += trimp
-                            activity_name = activity.get('activityName', 'Unknown Activity')
-                            activity_names.append(activity_name)
-                            new_activities.add(activity_id)
-                            self.processed_activity_ids.add(activity_id)
-                
-                # If we have existing data and no new activities, preserve the existing metrics
-                if existing_data and not new_activities:
-                    print(f"No new activities for {date_str}, preserving existing metrics")
-                    new_metrics = {
-                        'atl': existing_data['atl'],
-                        'ctl': existing_data['ctl'],
-                        'tsb': existing_data['tsb']
-                    }
-                    activity_str = existing_data['activity']
-                    trimp_total = existing_data['trimp']
+                        trimp = activity.get('trimp', 0)
+                        trimp_total += float(trimp)
+                        activity_name = activity.get('activityName', 'Unknown Activity')
+                        activity_names.append(activity_name)
+                        print(f"Activity {activity_name} (ID: {activity_id}): TRIMP = {trimp}")
+                        self.processed_activity_ids.add(activity_id)
                 else:
-                    # Calculate new metrics
-                    new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
-                    activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
+                    print(f"No activities found for {date_str}")
+                
+                # If no new activities but we have existing data with TRIMP > 0, preserve it
+                if trimp_total == 0 and existing_data and existing_data.get('trimp', 0) > 0:
+                    print(f"Preserving existing data for {date_str} with TRIMP {existing_data.get('trimp')}")
+                    trimp_total = existing_data.get('trimp')
+                    if existing_data.get('activity') and existing_data.get('activity') != 'Rest Day':
+                        activity_names = existing_data.get('activity').split(', ')
+                
+                # Calculate new metrics
+                new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                
+                # Determine activity string
+                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
                 
                 # Store the metrics we just calculated as they'll be needed for the next day
                 previous_metrics = new_metrics
@@ -207,7 +207,8 @@ class ChartUpdater:
                 # Update the database
                 self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
                 
-                logging.info(f"Updated metrics for {date_str}: TRIMP={trimp_total}, ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
+                print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
+                print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
                 
                 updated_count += 1
             
@@ -260,39 +261,64 @@ class ChartUpdater:
 
     def get_activities_for_date(self, date):
         try:
+            date_str = date.strftime('%Y-%m-%d')
+            print(f"\nFetching activities for {date_str}")
+            
+            # Get activities from Garmin for this date
             activities = self.garmin.get_activities_by_date(
-                date.isoformat(),
-                date.isoformat()
+                date_str,
+                date_str
             )
+            
+            if not activities:
+                print(f"No activities found for {date_str}")
+                return []
+                
+            print(f"Found {len(activities)} activities from Garmin Connect")
             
             # Fetch TRIMP values for each activity
             activities_with_trimp = []
             for activity in activities:
-                activity_id = activity['activityId']
+                activity_id = activity.get('activityId')
+                activity_name = activity.get('activityName', 'Unknown Activity')
+                
+                print(f"Processing activity: {activity_name} (ID: {activity_id})")
+                
                 try:
+                    # Get detailed activity data to find TRIMP
                     details = self.garmin.get_activity(activity_id)
                     trimp = 0.0
+                    
+                    # Look for TRIMP in connectIQMeasurements
                     if 'connectIQMeasurements' in details:
                         for item in details['connectIQMeasurements']:
-                            if item['developerFieldNumber'] == 4:
-                                trimp = round(float(item['value']), 1)
+                            if item.get('developerFieldNumber') == 4:  # TRIMP field
+                                trimp = round(float(item.get('value', 0)), 1)
+                                print(f"Found TRIMP in connectIQMeasurements: {trimp}")
                                 break
                     
                     # Double TRIMP for strength training activities
-                    activity_type = details.get('activityTypeDTO', {}).get('typeKey', '')
-                    if activity_type in ['strength_training', 'Siła']:
+                    activity_type = activity.get('activityType', {}).get('typeKey', '')
+                    if 'strength' in activity_type.lower() or activity_name.lower() in ['strength training', 'siła']:
+                        old_trimp = trimp
                         trimp *= 2
+                        print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
                     
                     activity['trimp'] = trimp
                     activities_with_trimp.append(activity)
-                    print(f"Activity {activity.get('activityName', 'Unknown')}: TRIMP = {trimp}")
+                    print(f"Added activity {activity_name} with TRIMP = {trimp}")
+                    
                 except Exception as e:
-                    print(f"Error getting details for activity {activity_id}: {e}")
-                    continue
+                    print(f"Error getting details for activity {activity_id}: {str(e)}")
+                    print(f"Traceback: {traceback.format_exc()}")
+                    # Still include the activity but with 0 TRIMP
+                    activity['trimp'] = 0
+                    activities_with_trimp.append(activity)
             
             return activities_with_trimp
         except Exception as e:
-            print(f"Error fetching activities for {date}: {e}")
+            print(f"Error fetching activities for {date}: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
             return []
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
@@ -302,8 +328,7 @@ class ChartUpdater:
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
             print(f"Upserting data for {date_str}:")
-            print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | "
-                  f"CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
             
             self.client.table('garmin_data').upsert({
                 'date': date_iso,

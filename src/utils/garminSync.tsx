@@ -1,3 +1,4 @@
+
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
@@ -95,6 +96,9 @@ export const updateGarminData = async (userId: string) => {
         const { data: sessionData } = await supabase.auth.getSession();
         const authToken = sessionData.session?.access_token;
         
+        console.log('Updating Garmin data for user:', userId);
+        console.log('Using API URL:', `${API_URL}/api/update-chart`);
+        
         const response = await fetch(`${API_URL}/api/update-chart`, {
             method: 'POST',
             headers: {
@@ -104,7 +108,9 @@ export const updateGarminData = async (userId: string) => {
             body: JSON.stringify({ userId })
         });
         
+        console.log('Raw update response:', response);
         const data = await response.json();
+        console.log('Update response data:', data);
         
         if (data.success) {
             if (data.updated > 0) {
@@ -126,7 +132,7 @@ export const updateGarminData = async (userId: string) => {
         }
     } catch (error) {
         console.error('Error updating:', error);
-        toast.error('Error updating data');
+        toast.error('Error syncing data');
         return false;
     }
 }; 
