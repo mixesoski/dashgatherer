@@ -5,6 +5,7 @@ import "@/styles/squares-background.css";
 import { Logo } from "@/components/Logo";
 import { PricingTier } from "@/components/PricingTier";
 import { Menu, X } from "lucide-react";
+import FooterSection from "@/components/pricing/FooterSection";
 
 const Landing = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -220,17 +221,8 @@ const Landing = () => {
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="container mx-auto px-4 py-6 md:py-8 border-t border-white/10">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-gray-400">© 2024 Trimpbara. All rights reserved.</p>
-            <div className="flex flex-wrap justify-center gap-4 md:space-x-4">
-              <Link to="/pricing" className="text-gray-400 hover:text-white">Pricing</Link>
-              <a href="#" className="text-gray-400 hover:text-white">Privacy Policy</a>
-              <a href="#" className="text-gray-400 hover:text-white">Terms of Service</a>
-            </div>
-          </div>
-        </footer>
+        {/* Replace the old footer with the FooterSection component */}
+        <FooterSection />
       </div>
     </div>
   );
