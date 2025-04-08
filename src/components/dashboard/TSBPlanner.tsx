@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Plane } from "lucide-react";
+import { CalendarIcon, Plane, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addDays, isBefore } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,11 +19,20 @@ interface TSBPlannerProps {
   latestCTL: number | null;
 }
 
+interface PlanDay {
+  date: Date;
+  trimp: number;
+  projectedTSB: number;
+  isCustom: boolean;
+}
+
 export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps) {
   const [eventDate, setEventDate] = useState<Date | undefined>(addDays(new Date(), 14));
   const [targetTSB, setTargetTSB] = useState<string>(latestTSB ? Math.round(latestTSB + 20).toString() : "10");
-  const [planningResults, setPlanningResults] = useState<Array<{ date: Date; trimp: number; projectedTSB: number }>>([]);
+  const [planningResults, setPlanningResults] = useState<PlanDay[]>([]);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [customTrimpValue, setCustomTrimpValue] = useState<string>("");
   const isMobile = useIsMobile();
 
   // Calculate the plan when inputs change
@@ -63,21 +72,40 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
       // Calculate baseline TRIMP that would maintain both ATL and CTL
       const dailyAvgTrimp = maintenanceTrimp + (atlChange / (1 - Math.pow(0.87, daysUntilEvent))) * 7;
       
-      const results: Array<{ date: Date; trimp: number; projectedTSB: number }> = [];
+      const results: PlanDay[] = [];
       
       // Initialize with today's values
       let projectedATL = currentATL;
       let projectedCTL = currentCTL;
       let projectedTSB = projectedCTL - projectedATL;
       
+      // Preserve any custom values from the previous calculation
+      const customDays = new Map<string, number>();
+      planningResults.forEach(day => {
+        if (day.isCustom) {
+          const dateStr = format(day.date, 'yyyy-MM-dd');
+          customDays.set(dateStr, day.trimp);
+        }
+      });
+      
       // Generate the plan for each day
       for (let i = 0; i < daysUntilEvent; i++) {
         const date = addDays(today, i);
+        const dateStr = format(date, 'yyyy-MM-dd');
         
-        // Calculate TRIMP for this day - can be adjusted based on desired distribution
-        // Here we're using a simple approach to gradually increase/decrease
-        const dayFactor = Math.sin((i / daysUntilEvent) * Math.PI);
-        const adjustedTrimp = Math.max(0, Math.round(dailyAvgTrimp * (0.8 + dayFactor * 0.4)));
+        // Check if this date has a custom value
+        const hasCustomValue = customDays.has(dateStr);
+        
+        // Calculate TRIMP for this day
+        let adjustedTrimp;
+        if (hasCustomValue) {
+          // Use the custom value
+          adjustedTrimp = customDays.get(dateStr)!;
+        } else {
+          // Calculate a value based on the plan
+          const dayFactor = Math.sin((i / daysUntilEvent) * Math.PI);
+          adjustedTrimp = Math.max(0, Math.round(dailyAvgTrimp * (0.8 + dayFactor * 0.4)));
+        }
         
         // Project metrics for this day
         projectedATL = projectedATL + (adjustedTrimp - projectedATL) / 7;
@@ -87,8 +115,15 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         results.push({
           date,
           trimp: adjustedTrimp,
-          projectedTSB: projectedTSB
+          projectedTSB: projectedTSB,
+          isCustom: hasCustomValue
         });
+      }
+      
+      // Now that we have the plan with custom values, redistribute the remaining needed load
+      // We need to recalculate to ensure we hit the target
+      if (customDays.size > 0) {
+        recalculateRemainingDays(results, targetTSB, eventDate);
       }
       
       setPlanningResults(results);
@@ -98,6 +133,114 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     } finally {
       setIsCalculating(false);
     }
+  };
+
+  // Recalculate the non-custom days to ensure we hit the target TSB
+  const recalculateRemainingDays = (plan: PlanDay[], targetTSB: string, eventDate: Date) => {
+    try {
+      // Get only non-custom days that can be adjusted
+      const adjustableDays = plan.filter(day => !day.isCustom);
+      
+      if (adjustableDays.length === 0) {
+        // All days are custom, nothing to redistribute
+        return;
+      }
+      
+      // Calculate what the final TSB would be with current plan
+      const finalDay = plan[plan.length - 1];
+      const currentFinalTSB = finalDay.projectedTSB;
+      const targetTSBValue = parseFloat(targetTSB);
+      
+      // Calculate the gap we need to close
+      const tsbGap = targetTSBValue - currentFinalTSB;
+      
+      if (Math.abs(tsbGap) < 0.5) {
+        // Close enough to target, no need to adjust
+        return;
+      }
+      
+      // To adjust TSB, we need to modify ATL since TSB = CTL - ATL
+      // Lower ATL = higher TSB, and vice versa
+      // Changing a day's TRIMP affects all future days
+      
+      // Calculate a scaling factor for each adjustable day
+      // Days closer to the event have more impact
+      const totalDays = adjustableDays.length;
+      let totalAdjustment = 0;
+      
+      // Adjust each non-custom day
+      for (let i = 0; i < plan.length; i++) {
+        const day = plan[i];
+        
+        if (!day.isCustom) {
+          // Calculate a scaling factor (days closer to start have less impact, days closer to event have more)
+          const daysFromStart = i;
+          const daysToEvent = plan.length - i - 1;
+          
+          // This formula gives more weight to days closer to the event
+          const weight = 0.5 + (daysToEvent / totalDays) * 0.5;
+          
+          // Calculate TRIMP adjustment needed
+          // If tsbGap is positive, we need to decrease TRIMP
+          // If tsbGap is negative, we need to increase TRIMP
+          const adjustment = -tsbGap * weight * 0.5; // Scale the adjustment
+          
+          // Adjust the TRIMP value (ensuring it stays positive)
+          const newTrimp = Math.max(0, Math.round(day.trimp + adjustment));
+          
+          // Update the plan
+          plan[i].trimp = newTrimp;
+          
+          totalAdjustment += adjustment;
+        }
+      }
+      
+      // Now recalculate ATL, CTL and TSB for all days to see the new projection
+      // Start with the last known values
+      let atl = latestATL!;
+      let ctl = latestCTL!;
+      
+      for (let i = 0; i < plan.length; i++) {
+        const day = plan[i];
+        
+        // Update ATL and CTL
+        atl = atl + (day.trimp - atl) / 7;
+        ctl = ctl + (day.trimp - ctl) / 42;
+        
+        // Update TSB
+        plan[i].projectedTSB = ctl - atl;
+      }
+    } catch (error) {
+      console.error("Error recalculating plan:", error);
+    }
+  };
+
+  // Handle user custom input for a specific day
+  const handleCustomTrimp = (index: number) => {
+    const trimpValue = parseInt(customTrimpValue);
+    
+    if (isNaN(trimpValue) || trimpValue < 0) {
+      toast.error("Please enter a valid TRIMP value (positive number)");
+      return;
+    }
+    
+    const updatedResults = [...planningResults];
+    updatedResults[index].trimp = trimpValue;
+    updatedResults[index].isCustom = true;
+    
+    // Recalculate the plan with this custom value
+    setPlanningResults(updatedResults);
+    
+    // Close the editing mode
+    setEditingDay(null);
+    setCustomTrimpValue("");
+    
+    // Trigger a recalculation with the new custom value
+    setTimeout(() => {
+      calculatePlan();
+    }, 100);
+    
+    toast.success("Custom training value set");
   };
 
   // Reset the calculation if inputs change
@@ -208,18 +351,67 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
                 <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Recommended TRIMP</TableHead>
+                    <TableHead>TRIMP</TableHead>
                     <TableHead className="text-right">Projected TSB</TableHead>
+                    <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {planningResults.map((day, index) => (
-                    <TableRow key={index}>
+                    <TableRow key={index} className={day.isCustom ? "bg-primary/5" : ""}>
                       <TableCell className="font-medium">
                         {format(day.date, "EEE, MMM d")}
                       </TableCell>
-                      <TableCell className="text-right">{day.trimp}</TableCell>
+                      <TableCell>
+                        {editingDay === index ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={customTrimpValue}
+                              onChange={(e) => setCustomTrimpValue(e.target.value)}
+                              className="w-20 h-8"
+                              autoFocus
+                              min="0"
+                            />
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleCustomTrimp(index)}
+                              className="h-8 px-2"
+                            >
+                              Set
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              onClick={() => setEditingDay(null)}
+                              className="h-8 px-2"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className={day.isCustom ? "font-medium text-primary" : ""}>
+                            {day.trimp}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">{day.projectedTSB.toFixed(1)}</TableCell>
+                      <TableCell>
+                        {editingDay !== index && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                            onClick={() => {
+                              setEditingDay(index);
+                              setCustomTrimpValue(day.trimp.toString());
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -230,10 +422,15 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
       </CardContent>
       
       <CardFooter className="border-t pt-4 text-xs text-muted-foreground">
-        <p>
-          The TSB Planner calculates recommended daily training load (TRIMP) to reach your 
-          target form (TSB) by your event date. Adjust your actual training based on how you feel.
-        </p>
+        <div className="space-y-2 w-full">
+          <p>
+            The TSB Planner calculates recommended daily training load (TRIMP) to reach your 
+            target form (TSB) by your event date.
+          </p>
+          <p className="text-xs">
+            <span className="font-medium">Pro tip:</span> Click the edit button to customize TRIMP values for specific days. The planner will automatically recalculate the remaining days to help you reach your target TSB.
+          </p>
+        </div>
       </CardFooter>
     </Card>
   );
