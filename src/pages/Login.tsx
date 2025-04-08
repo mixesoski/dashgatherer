@@ -1,4 +1,3 @@
-
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,12 +13,14 @@ import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { createCheckoutSession } from "@/services/stripe";
 import { Loader2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planId = searchParams.get('plan') as 'athlete' | 'coach' | 'organization' | null;
+  const isMobile = useIsMobile();
   
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"sign_in" | "sign_up">("sign_in");
@@ -256,23 +257,26 @@ const Login = () => {
     }
   };
   
-  return <div className="min-h-screen flex bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
-      <div className="w-1/2 p-12 bg-white text-black">
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
+      <div className="w-full md:w-1/2 p-6 md:p-12 bg-white text-black">
         <div className="flex items-center mb-8">
           <Logo variant="dark" className="mr-4" />
         </div>
         
-        <div className="max-w-md">
-          <h1 className="text-4xl font-bold text-black mb-2">
+        <div className="max-w-md mx-auto md:mx-0">
+          <h1 className="text-3xl md:text-4xl font-bold text-black mb-2">
             {view === "sign_in" ? "Hello again," : "Welcome,"}
           </h1>
-          <p className="text-xl text-black mb-8">
+          <p className="text-lg md:text-xl text-black mb-6 md:mb-8">
             {view === "sign_in" ? "Welcome back, you've been missed" : "Create your account"}
           </p>
 
-          {error && <Alert variant="destructive" className="mb-4">
+          {error && (
+            <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
-            </Alert>}
+            </Alert>
+          )}
 
           {isRedirectingToCheckout && (
             <Alert className="mb-4 bg-blue-50 border-blue-200">
@@ -282,14 +286,29 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Input type="email" name="email" placeholder="Email address" value={formData.email} onChange={handleInputChange} className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" />
+              <Input 
+                type="email" 
+                name="email" 
+                placeholder="Email address" 
+                value={formData.email} 
+                onChange={handleInputChange} 
+                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" 
+              />
             </div>
 
             <div>
-              <Input type="password" name="password" placeholder="Password" value={formData.password} onChange={handleInputChange} className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" />
+              <Input 
+                type="password" 
+                name="password" 
+                placeholder="Password" 
+                value={formData.password} 
+                onChange={handleInputChange} 
+                className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" 
+              />
             </div>
 
-            {view === "sign_up" && <div>
+            {view === "sign_up" && (
+              <div>
                 <Label htmlFor="role" className="text-black">I am:</Label>
                 <Select value={role} onValueChange={(value: UserRole) => setRole(value)}>
                   <SelectTrigger className="w-full bg-white text-black border-gray-300">
@@ -300,32 +319,52 @@ const Login = () => {
                     <SelectItem value="coach">Coach</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>}
+              </div>
+            )}
 
-            <Button type="submit" className="w-full bg-black text-white hover:bg-gray-900" disabled={isLoading || isRedirectingToCheckout}>
+            <Button 
+              type="submit" 
+              className="w-full bg-black text-white hover:bg-gray-900" 
+              disabled={isLoading || isRedirectingToCheckout}
+            >
               {isLoading || isRedirectingToCheckout ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {isLoading || isRedirectingToCheckout ? "Please wait..." : view === "sign_in" ? "Login" : "Sign up"}
             </Button>
 
             <div className="text-black text-sm">
-              {view === "sign_in" ? <p>
+              {view === "sign_in" ? (
+                <p>
                   Don't have an account yet?{" "}
-                  <button type="button" onClick={() => setView("sign_up")} className="text-black underline hover:text-gray-700">
+                  <button 
+                    type="button" 
+                    onClick={() => setView("sign_up")} 
+                    className="text-black underline hover:text-gray-700"
+                  >
                     Sign up
                   </button>
-                </p> : <p>
+                </p>
+              ) : (
+                <p>
                   Already have an account?{" "}
-                  <button type="button" onClick={() => setView("sign_in")} className="text-black underline hover:text-gray-700">
+                  <button 
+                    type="button" 
+                    onClick={() => setView("sign_in")} 
+                    className="text-black underline hover:text-gray-700"
+                  >
                     Login
                   </button>
-                </p>}
+                </p>
+              )}
             </div>
           </form>
         </div>
       </div>
-      <div className="w-1/2 flex items-center justify-center">
-        <h1 className="text-6xl font-bold text-white">Trimpbara</h1>
+      
+      <div className="w-full md:w-1/2 p-6 flex items-center justify-center bg-gradient-to-br from-pink-500 via-purple-500 to-yellow-500">
+        <h1 className="text-4xl md:text-6xl font-bold text-white">Trimpbara</h1>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default Login;
