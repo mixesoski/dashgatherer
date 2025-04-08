@@ -101,23 +101,33 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
 
 export const updateGarminData = async (userId: string) => {
     try {
-        const toastId = toast.loading('Checking for new activities...', {
-            duration: Infinity,
-            position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
-        });
+        const toastId = toast.loading(
+            <ProgressToast message="Checking for new activities..." />,
+            {
+                duration: Infinity,
+                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+            }
+        );
         
         const { data: sessionData } = await supabase.auth.getSession();
         const authToken = sessionData.session?.access_token;
         
         console.log('Updating Garmin data for user:', userId);
         
-        const response = await fetch(`${API_URL}/api/update-chart`, {
+        // Add a timestamp to force server to refresh Garmin data instead of using cache
+        const timestamp = new Date().getTime();
+        
+        const response = await fetch(`${API_URL}/api/update-chart?t=${timestamp}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache, no-store'
             },
-            body: JSON.stringify({ userId })
+            body: JSON.stringify({ 
+                userId,
+                forceRefresh: true // Add parameter to indicate we want to force a fresh check
+            })
         });
         
         console.log('Raw update response:', response);
