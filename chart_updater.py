@@ -61,7 +61,8 @@ class ChartUpdater:
             
             # Test the connection by getting user summary
             try:
-                summary = self.garmin.get_user_summary()
+                today = datetime.date.today().strftime("%Y-%m-%d")
+                summary = self.garmin.get_user_summary(cdate=today)
                 user_id = summary.get('userId', 'Unknown')
                 print(f"Successfully connected to Garmin account for user ID: {user_id}")
             except Exception as test_err:
@@ -331,11 +332,10 @@ class ChartUpdater:
             # Method 1: Direct date query
             print(f"Method 1: Calling get_activities_by_date for {date_str}")
             try:
-                # Updated API call for garminconnect 0.2.25
+                # Updated API call for garminconnect 0.2.25 - without activityType parameter
                 day_activities = self.garmin.get_activities_by_date(
                     date_str,
-                    date_str,
-                    activityType=None  # Get all activity types
+                    date_str
                 )
                 if day_activities:
                     print(f"Method 1 found {len(day_activities)} activities")
@@ -386,16 +386,15 @@ class ChartUpdater:
                     # End 3 days after the target date
                     week_end = date + datetime.timedelta(days=3)
                     
-                    # Updated API call for garminconnect 0.2.25
+                    # Updated API call without activityType parameter
                     week_activities = self.garmin.get_activities_by_date(
                         week_start.strftime("%Y-%m-%d"),
-                        week_end.strftime("%Y-%m-%d"),
-                        activityType=None  # Get all activity types
+                        week_end.strftime("%Y-%m-%d")
                     )
                     
                     print(f"Method 3 found {len(week_activities)} activities for the week")
                     
-                    # Filter for the target date - fix date format check
+                    # Filter for the target date
                     date_activities = []
                     for activity in week_activities:
                         # Check for different date formats based on 0.2.25 API
@@ -470,20 +469,15 @@ class ChartUpdater:
                 print(f"Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
                 
                 try:
-                    # Get detailed activity data to find TRIMP - updated for 0.2.25
+                    # Get detailed activity data to find TRIMP
                     print(f"Fetching details for activity {activity_id}")
                     try:
-                        # First try get_activity_details
-                        details = self.garmin.get_activity_details(activity_id)
+                        # Try get_activity to get details
+                        details = self.garmin.get_activity(activity_id)
+                        print("Successfully retrieved activity data with get_activity")
                     except Exception as details_err:
-                        print(f"Error with get_activity_details: {details_err}")
-                        # Fallback to get_activity
-                        try:
-                            details = self.garmin.get_activity(activity_id)
-                            print("Successfully retrieved activity data with get_activity")
-                        except Exception as activity_err:
-                            print(f"Error with get_activity fallback: {activity_err}")
-                            raise
+                        print(f"Error with get_activity: {details_err}")
+                        raise
                     
                     # Debug the returned keys
                     detail_keys = list(details.keys())
@@ -492,8 +486,7 @@ class ChartUpdater:
                     trimp = 0.0
                     trimp_method = "not found"
                     
-                    # Check for different possible locations of TRIMP data in 0.2.25
-                    # 1. Check connectIQMeasurements
+                    # ONLY check connectIQMeasurements for TRIMP - no calculations
                     if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
                         print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
                         
@@ -501,65 +494,25 @@ class ChartUpdater:
                         for i, item in enumerate(details['connectIQMeasurements']):
                             print(f"Measurement {i+1}: {item}")
                             
-                            # Look for TRIMP specifically - check various possible formats
-                            if item.get('developerFieldNumber') == 4 or 'TRIMP' in str(item) or 'trimp' in str(item):
+                            # Look for TRIMP specifically in developer field 4
+                            if 'value' in item and item.get('developerFieldNumber') == 4:
                                 try:
                                     trimp = round(float(item.get('value', 0)), 1)
                                     trimp_method = "connectIQMeasurements"
-                                    print(f"FOUND TRIMP: {trimp}")
+                                    print(f"FOUND TRIMP in measurements: {trimp}")
                                     break
                                 except (ValueError, TypeError):
                                     print(f"Failed to convert TRIMP value: {item.get('value')}")
+                    else:
+                        print("No connectIQMeasurements found, TRIMP remains 0")
                     
-                    # 2. Check in summaryDTO if available
-                    if trimp == 0 and 'summaryDTO' in details:
-                        summary = details['summaryDTO']
-                        if 'trainingEffect' in summary:
-                            te = summary.get('trainingEffect', 0)
-                            if te > 0:
-                                # Estimate TRIMP from training effect
-                                # TE 1-2: light, 2-3: moderate, 3-4: hard, 4-5: very hard
-                                duration_min = summary.get('movingDuration', 0) / 60
-                                intensity_factor = te / 5.0  # Convert TE to 0-1 scale
-                                trimp = duration_min * intensity_factor * 100
-                                trimp_method = "estimated from TE"
-                                print(f"Estimated TRIMP from Training Effect {te}: {trimp}")
+                    # Double TRIMP for strength training activities if TRIMP > 0
+                    activity_type = activity.get('activityType', {})
+                    if isinstance(activity_type, dict):
+                        activity_type = activity_type.get('typeKey', '')
                     
-                    # 3. Try to calculate TRIMP if we have HR data
-                    if trimp == 0:
-                        try:
-                            # Check if we have HR and duration data
-                            duration_min = 0
-                            avg_hr = 0
-                            
-                            if 'summaryDTO' in details:
-                                summary = details['summaryDTO']
-                                if 'movingDuration' in summary:
-                                    duration_min = summary.get('movingDuration', 0) / 60
-                                if 'averageHR' in summary:
-                                    avg_hr = summary.get('averageHR', 0)
-                            
-                            if duration_min > 0 and avg_hr > 0:
-                                # Use a simple formula to estimate TRIMP
-                                # Assume max HR of 180 as a reasonable default
-                                hr_reserve = (avg_hr - 60) / (180 - 60)
-                                trimp = duration_min * hr_reserve * 100
-                                trimp_method = "calculated from HR"
-                                print(f"Calculated TRIMP from HR data: {trimp}")
-                        except Exception as calc_err:
-                            print(f"Error calculating TRIMP: {calc_err}")
-                    
-                    # Double TRIMP for strength training activities
-                    activity_type = ''
-                    if 'activityType' in activity:
-                        if isinstance(activity['activityType'], dict):
-                            activity_type = activity['activityType'].get('typeKey', '')
-                        else:
-                            activity_type = str(activity['activityType'])
-                    
-                    if trimp > 0 and ('strength' in activity_type.lower() or 
-                                      activity_name and 'strength' in activity_name.lower() or 
-                                      activity_name and 'siła' in activity_name.lower()):
+                    if trimp > 0 and ('strength' in str(activity_type).lower() or 
+                                      'siła' in activity_name.lower()):
                         old_trimp = trimp
                         trimp *= 2
                         print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
@@ -668,7 +621,8 @@ class ChartUpdater:
             
             # Get user profile to determine max HR
             try:
-                user_profile = self.garmin.get_user_summary()
+                today = datetime.date.today().strftime("%Y-%m-%d")
+                user_profile = self.garmin.get_user_summary(cdate=today)
                 max_hr = user_profile.get('userMetrics', {}).get('maxHeartRate', 220)
                 if not max_hr or max_hr <= 0:
                     max_hr = 220  # Default max HR if not available
@@ -769,6 +723,6 @@ class ChartUpdater:
             print(f"Error processing strength training: {e}")
             return False
 
-def update_chart_data(user_id):
+def update_chart_data(user_id, force_refresh=False):
     updater = ChartUpdater(user_id)
-    return updater.update_chart_data()
+    return updater.update_chart_data(force_refresh=force_refresh)
