@@ -8,9 +8,6 @@ const API_URL = import.meta.env.PROD
   ? 'https://trimpbara.onrender.com'
   : (import.meta.env.VITE_API_URL || 'http://localhost:5001');
 
-console.log('API URL from environment:', API_URL);
-console.log('Is production:', import.meta.env.PROD);
-
 // Debug logging
 console.log('Environment variables:', {
     VITE_API_URL: import.meta.env.VITE_API_URL,
@@ -24,7 +21,7 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
     try {
         const toastId = toast.loading(
             <ProgressToast message="Connecting to Garmin..." />,
-            { duration: Infinity }
+            { duration: Infinity, position: window.innerWidth < 768 ? 'bottom-center' : 'top-right' }
         );
         
         const { data: { user } } = await supabase.auth.getUser();
@@ -34,18 +31,22 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         console.log('Current user:', user);
         console.log('Using userId:', userId);
         console.log('Start date:', startDate);
-        console.log('API URL:', `${API_URL}/api/sync-garmin`);
-        console.log('Full request URL:', `${API_URL}/api/sync-garmin`);
         
         if (!user || user.id !== userId) {
-            toast.error('User authentication error', { id: toastId });
+            toast.error('User authentication error', { 
+                id: toastId,
+                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+            });
             return false;
         }
 
         // Update toast to show data fetching
         toast.loading(
             <ProgressToast message="Fetching activities from Garmin..." />,
-            { id: toastId }
+            { 
+                id: toastId,
+                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+            }
         );
 
         // Calculate days from start date until now
@@ -71,18 +72,29 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         if (data.success) {
             // Show success message
             if (data.newActivities > 0) {
-                toast.success(`Synced ${data.newActivities} new activities!`, { id: toastId });
+                toast.success(`Synced ${data.newActivities} new activities!`, { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
             } else {
-                toast.success('Everything is up to date!', { id: toastId });
+                toast.success('Everything is up to date!', { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
             }
             return true;
         } else {
-            toast.error(data.error || 'Sync failed', { id: toastId });
+            toast.error(data.error || 'Sync failed', { 
+                id: toastId,
+                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+            });
             return false;
         }
     } catch (error) {
         console.error('Error syncing:', error);
-        toast.error('Error syncing data');
+        toast.error('Error syncing data', {
+            position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+        });
         return false;
     }
 };
@@ -90,14 +102,14 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
 export const updateGarminData = async (userId: string) => {
     try {
         const toastId = toast.loading('Checking for new activities...', {
-            duration: Infinity
+            duration: Infinity,
+            position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
         });
         
         const { data: sessionData } = await supabase.auth.getSession();
         const authToken = sessionData.session?.access_token;
         
         console.log('Updating Garmin data for user:', userId);
-        console.log('Using API URL:', `${API_URL}/api/update-chart`);
         
         const response = await fetch(`${API_URL}/api/update-chart`, {
             method: 'POST',
@@ -116,23 +128,30 @@ export const updateGarminData = async (userId: string) => {
             if (data.updated > 0) {
                 toast.success(`Updated ${data.updated} activities!`, { 
                     id: toastId,
-                    duration: 3000
+                    duration: 3000,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
                 });
                 return true;
             } else {
                 toast.success('No new activities found', { 
                     id: toastId,
-                    duration: 3000
+                    duration: 3000,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
                 });
                 return false;
             }
         } else {
-            toast.error(data.error || 'Update failed', { id: toastId });
+            toast.error(data.error || 'Update failed', { 
+                id: toastId,
+                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+            });
             return false;
         }
     } catch (error) {
         console.error('Error updating:', error);
-        toast.error('Error syncing data');
+        toast.error('Error syncing data', {
+            position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+        });
         return false;
     }
 }; 

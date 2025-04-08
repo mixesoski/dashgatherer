@@ -1,18 +1,34 @@
-
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import "@/styles/squares-background.css";
 import { Logo } from "@/components/Logo";
 import { PricingTier } from "@/components/PricingTier";
+import { Menu, X } from "lucide-react";
 
 const Landing = () => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="relative min-h-screen bg-[#0A0A0A] text-white squares-background">
       <div className="relative z-10">
         {/* Navigation */}
         <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
           <Logo variant="light" />
-          <div className="space-x-4">
+          
+          {/* Mobile Menu Button */}
+          <div className="md:hidden">
+            <Button 
+              variant="ghost" 
+              className="text-white hover:text-white hover:bg-white/10 p-2"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </Button>
+          </div>
+          
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex space-x-4">
             <Link to="/pricing">
               <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
                 Pricing
@@ -30,14 +46,37 @@ const Landing = () => {
             </Link>
           </div>
         </nav>
+        
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-black/90 backdrop-blur-sm absolute z-20 inset-0 p-6">
+            <div className="flex flex-col gap-4 items-center mt-16">
+              <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 w-full justify-center text-lg">
+                  Pricing
+                </Button>
+              </Link>
+              <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 w-full justify-center text-lg">
+                  Sign in
+                </Button>
+              </Link>
+              <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 w-full justify-center text-lg">
+                  Get Started
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Hero Section */}
-        <section className="container mx-auto px-4 py-20">
-          <div className="max-w-4xl mx-auto text-center space-y-8">
-            <h1 className="text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">
+        <section className="container mx-auto px-4 py-12 md:py-20">
+          <div className="max-w-4xl mx-auto text-center space-y-6 md:space-y-8">
+            <h1 className="text-4xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">
               Track Your Training Load Like Never Before
             </h1>
-            <p className="text-xl text-gray-400">
+            <p className="text-lg md:text-xl text-gray-400">
               Advanced analytics and insights for athletes who want to optimize their training and reach peak performance.
             </p>
             <div className="flex justify-center gap-4">
@@ -51,8 +90,8 @@ const Landing = () => {
         </section>
 
         {/* Features Section */}
-        <section className="container mx-auto px-4 py-20">
-          <div className="grid md:grid-cols-3 gap-8">
+        <section className="container mx-auto px-4 py-12 md:py-20">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
             <div className="p-6 rounded-lg bg-white/5 backdrop-blur-xl border border-white/10">
               <h3 className="text-xl font-bold mb-4">Garmin Integration</h3>
               <p className="text-gray-400">
@@ -75,10 +114,10 @@ const Landing = () => {
         </section>
 
         {/* Pricing Section */}
-        <section className="container mx-auto px-4 py-20">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+        <section className="container mx-auto px-4 py-12 md:py-20">
+          <div className="text-center mb-8 md:mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, Transparent Pricing</h2>
+            <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
               Choose the plan that fits your needs and start optimizing your training today.
             </p>
             <div className="mt-6">
@@ -90,7 +129,7 @@ const Landing = () => {
             </div>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 max-w-7xl mx-auto">
             <PricingTier
               title="Trial"
               price="Free"
@@ -165,12 +204,12 @@ const Landing = () => {
         </section>
 
         {/* CTA Section */}
-        <section className="container mx-auto px-4 py-20">
-          <div className="max-w-3xl mx-auto text-center space-y-8">
-            <h2 className="text-4xl font-bold">
+        <section className="container mx-auto px-4 py-12 md:py-20">
+          <div className="max-w-3xl mx-auto text-center space-y-6 md:space-y-8">
+            <h2 className="text-3xl md:text-4xl font-bold">
               Ready to Optimize Your Training?
             </h2>
-            <p className="text-xl text-gray-400">
+            <p className="text-lg md:text-xl text-gray-400">
               Join athletes who are already using Trimpbara to reach their peak performance.
             </p>
             <Link to="/login">
@@ -182,10 +221,10 @@ const Landing = () => {
         </section>
 
         {/* Footer */}
-        <footer className="container mx-auto px-4 py-8 border-t border-white/10">
-          <div className="flex justify-between items-center">
+        <footer className="container mx-auto px-4 py-6 md:py-8 border-t border-white/10">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-gray-400">© 2024 Trimpbara. All rights reserved.</p>
-            <div className="space-x-4">
+            <div className="flex flex-wrap justify-center gap-4 md:space-x-4">
               <Link to="/pricing" className="text-gray-400 hover:text-white">Pricing</Link>
               <a href="#" className="text-gray-400 hover:text-white">Privacy Policy</a>
               <a href="#" className="text-gray-400 hover:text-white">Terms of Service</a>

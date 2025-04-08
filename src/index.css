@@ -6,6 +6,16 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 16px;
+  }
+  
+  @media (max-width: 640px) {
+    html {
+      font-size: 14px;
+    }
+  }
+  
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -100,5 +110,31 @@
 
   body {
     @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+    /* Prevent content shift on mobile when address bar shows/hides */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
+}
+
+/* Fix for iOS height issue */
+html {
+  height: -webkit-fill-available;
+}
+
+/* Better focus styles for touch devices */
+@media (pointer: coarse) {
+  button:focus, 
+  a:focus,
+  input:focus,
+  select:focus,
+  textarea:focus {
+    @apply outline-none ring-2 ring-primary/50;
+  }
+}
+
+/* Improved mobile form elements */
+input, select, textarea {
+  @apply text-base;
+  font-size: max(16px, 1rem);
 }
