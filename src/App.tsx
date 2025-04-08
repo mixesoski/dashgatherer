@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +14,7 @@ import Pricing from "./pages/Pricing";
 import RespondInvitation from "./pages/RespondInvitation";
 import Account from "./pages/Account";
 import ManageSubscription from "./pages/ManageSubscription";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 
 const queryClient = new QueryClient();
 
@@ -22,7 +22,6 @@ const RouteChangeHandler = () => {
   const location = useLocation();
 
   useEffect(() => {
-    // Dismiss all toasts when the route changes
     dismissAllToasts();
   }, [location.pathname]);
 
@@ -59,6 +58,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route
             path="/dashboard"
             element={
