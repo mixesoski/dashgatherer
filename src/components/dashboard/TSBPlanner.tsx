@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
   const [isCalculating, setIsCalculating] = useState(false);
   const [editingDay, setEditingDay] = useState<number | null>(null);
   const [customTrimpValue, setCustomTrimpValue] = useState<string>("");
+  const [eventDayFinalTSB, setEventDayFinalTSB] = useState<number | null>(null);
   const isMobile = useIsMobile();
 
   const calculatePlan = () => {
@@ -58,12 +60,16 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         return;
       }
       
+      // Base maintenance TRIMP (maintains current fitness)
       const maintenanceTrimp = currentCTL;
       
+      // Calculate target ATL for the event day
       const targetATL = currentCTL - target;
       
+      // Calculate change in ATL needed to reach target TSB
       const atlChange = targetATL - currentATL;
       
+      // Calculate daily average TRIMP needed
       const dailyAvgTrimp = maintenanceTrimp + (atlChange / (1 - Math.pow(0.87, daysUntilEvent))) * 7;
       
       const results: PlanDay[] = [];
@@ -72,6 +78,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
       let projectedCTL = currentCTL;
       let projectedTSB = projectedCTL - projectedATL;
       
+      // Preserve any custom TRIMP values from previous calculations
       const customDays = new Map<string, number>();
       planningResults.forEach(day => {
         if (day.isCustom) {
@@ -80,6 +87,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         }
       });
       
+      // Calculate plan for each day leading up to the event
       for (let i = 0; i < daysUntilEvent; i++) {
         const date = addDays(today, i);
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -90,10 +98,12 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         if (hasCustomValue) {
           adjustedTrimp = customDays.get(dateStr)!;
         } else {
+          // Create a sinusoidal pattern for training load
           const dayFactor = Math.sin((i / daysUntilEvent) * Math.PI);
           adjustedTrimp = Math.max(0, Math.round(dailyAvgTrimp * (0.8 + dayFactor * 0.4)));
         }
         
+        // Update ATL and CTL
         projectedATL = projectedATL + (adjustedTrimp - projectedATL) / 7;
         projectedCTL = projectedCTL + (adjustedTrimp - projectedCTL) / 42;
         projectedTSB = projectedCTL - projectedATL;
@@ -102,34 +112,42 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
           date,
           trimp: adjustedTrimp,
           projectedTSB: projectedTSB,
+          projectedATL: projectedATL,
+          projectedCTL: projectedCTL,
           isCustom: hasCustomValue
         });
       }
       
+      // If there are custom days, recalculate the remaining days to hit the target
       if (customDays.size > 0) {
-        recalculateRemainingDays(results, targetTSB, eventDate);
+        recalculateRemainingDays(results, target, eventDate);
+      } else {
+        // Make final adjustments to hit target TSB even without custom days
+        adjustPlanToHitTargetTSB(results, target);
       }
       
-      let eventDayATL = results.length > 0 ? 
-        results[results.length - 1].projectedATL || 
-        (results[results.length - 1].trimp - results[results.length - 1].projectedTSB) : 
-        currentATL;
-      
-      let eventDayCTL = results.length > 0 ? 
-        results[results.length - 1].projectedCTL || 
-        (results[results.length - 1].trimp + results[results.length - 1].projectedTSB) : 
-        currentCTL;
-      
-      const eventDayTrimp = 0; 
-      
-      eventDayATL = eventDayATL + (eventDayTrimp - eventDayATL) / 7;
-      eventDayCTL = eventDayCTL + (eventDayTrimp - eventDayCTL) / 42;
-      
-      const eventDayTSB = eventDayCTL - eventDayATL;
+      // Calculate the final TSB on the event day itself (with a TRIMP of 0)
+      if (results.length > 0) {
+        const lastDay = results[results.length - 1];
+        let eventDayATL = lastDay.projectedATL || currentATL;
+        let eventDayCTL = lastDay.projectedCTL || currentCTL;
+        
+        // On event day, we typically assume no training load (TRIMP=0)
+        const eventDayTrimp = 0; 
+        
+        // Update for event day (ATL decays faster than CTL)
+        eventDayATL = eventDayATL + (eventDayTrimp - eventDayATL) / 7;
+        eventDayCTL = eventDayCTL + (eventDayTrimp - eventDayCTL) / 42;
+        
+        // Final TSB on event day
+        const eventDayTSB = eventDayCTL - eventDayATL;
+        
+        // Store the event day TSB for display in the UI
+        setEventDayFinalTSB(eventDayTSB);
+      }
       
       setPlanningResults(results);
       
-      setEventDayFinalTSB(eventDayTSB);
     } catch (error) {
       console.error("Error calculating plan:", error);
       toast.error("Failed to calculate training plan");
@@ -138,9 +156,83 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     }
   };
 
-  const [eventDayFinalTSB, setEventDayFinalTSB] = useState<number | null>(null);
+  // New function to adjust the plan to hit target TSB precisely
+  const adjustPlanToHitTargetTSB = (plan: PlanDay[], targetTSB: number) => {
+    if (plan.length === 0) return;
+    
+    // Calculate what the event day TSB would be with the current plan
+    const lastDay = plan[plan.length - 1];
+    let eventDayATL = lastDay.projectedATL || 0;
+    let eventDayCTL = lastDay.projectedCTL || 0;
+    
+    // No TRIMP on event day
+    eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
+    eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
+    
+    const projectedEventTSB = eventDayCTL - eventDayATL;
+    
+    // If we're already close enough to target, don't adjust
+    if (Math.abs(projectedEventTSB - targetTSB) < 0.5) return;
+    
+    // Determine how much to adjust each day's TRIMP to hit the target
+    const tsbDifference = targetTSB - projectedEventTSB;
+    const adjustmentFactor = tsbDifference / plan.length;
+    
+    let atl = lastDay.projectedATL || 0;
+    let ctl = lastDay.projectedCTL || 0;
+    
+    // Work backwards to calculate required adjustments
+    for (let i = plan.length - 1; i >= 0; i--) {
+      // More aggressive adjustments for days closer to the event
+      const dayWeight = 0.5 + ((plan.length - i) / plan.length) * 0.5;
+      const trimpAdjustment = adjustmentFactor * dayWeight * -10; // Negative because increasing TRIMP decreases TSB
+      
+      let newTrimp = plan[i].trimp;
+      
+      // Don't adjust custom days
+      if (!plan[i].isCustom) {
+        newTrimp = Math.max(0, Math.round(newTrimp + trimpAdjustment));
+        plan[i].trimp = newTrimp;
+      }
+    }
+    
+    // Recalculate ATL, CTL, and TSB for all days after adjustments
+    let currentATL = plan[0].projectedATL || 0;
+    let currentCTL = plan[0].projectedCTL || 0;
+    
+    if (plan.length > 0) {
+      const today = new Date();
+      currentATL = currentATL || latestATL || 0;
+      currentCTL = currentCTL || latestCTL || 0;
+      
+      for (let i = 0; i < plan.length; i++) {
+        const day = plan[i];
+        
+        currentATL = currentATL + (day.trimp - currentATL) / 7;
+        currentCTL = currentCTL + (day.trimp - currentCTL) / 42;
+        
+        plan[i].projectedATL = currentATL;
+        plan[i].projectedCTL = currentCTL;
+        plan[i].projectedTSB = currentCTL - currentATL;
+      }
+      
+      // Calculate event day values
+      if (plan.length > 0) {
+        const lastDay = plan[plan.length - 1];
+        let eventDayATL = lastDay.projectedATL || 0;
+        let eventDayCTL = lastDay.projectedCTL || 0;
+        
+        // On event day (zero TRIMP)
+        eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
+        eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
+        
+        // Update the event day TSB
+        setEventDayFinalTSB(eventDayCTL - eventDayATL);
+      }
+    }
+  };
 
-  const recalculateRemainingDays = (plan: PlanDay[], targetTSB: string, eventDate: Date) => {
+  const recalculateRemainingDays = (plan: PlanDay[], targetTSB: number | string, eventDate: Date) => {
     try {
       const adjustableDays = plan.filter(day => !day.isCustom);
       
@@ -148,61 +240,71 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         return;
       }
       
-      const finalDay = plan[plan.length - 1];
-      const currentFinalTSB = finalDay.projectedTSB;
-      const targetTSBValue = parseFloat(targetTSB);
+      const target = typeof targetTSB === 'string' ? parseFloat(targetTSB) : targetTSB;
       
-      const tsbGap = targetTSBValue - currentFinalTSB;
-      
-      if (Math.abs(tsbGap) < 0.5) {
-        return;
-      }
-      
-      const totalDays = adjustableDays.length;
-      let totalAdjustment = 0;
-      
-      for (let i = 0; i < plan.length; i++) {
-        const day = plan[i];
-        
-        if (!day.isCustom) {
-          const daysFromStart = i;
-          const daysToEvent = plan.length - i - 1;
-          
-          const weight = 0.5 + (daysToEvent / totalDays) * 0.5;
-          
-          const adjustment = -tsbGap * weight * 0.5;
-          
-          const newTrimp = Math.max(0, Math.round(day.trimp + adjustment));
-          
-          plan[i].trimp = newTrimp;
-          
-          totalAdjustment += adjustment;
-        }
-      }
-      
-      let atl = latestATL!;
-      let ctl = latestCTL!;
-      
-      for (let i = 0; i < plan.length; i++) {
-        const day = plan[i];
-        
-        atl = atl + (day.trimp - atl) / 7;
-        ctl = ctl + (day.trimp - ctl) / 42;
-        
-        plan[i].projectedTSB = ctl - atl;
-        plan[i].projectedATL = atl;
-        plan[i].projectedCTL = ctl;
-      }
-      
+      // Calculate what the event day TSB would be with the current plan
       if (plan.length > 0) {
         const lastDay = plan[plan.length - 1];
-        let eventDayATL = lastDay.projectedATL;
-        let eventDayCTL = lastDay.projectedCTL;
+        let eventDayATL = lastDay.projectedATL || 0;
+        let eventDayCTL = lastDay.projectedCTL || 0;
         
+        // No TRIMP on event day
         eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
         eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
         
-        setEventDayFinalTSB(eventDayCTL - eventDayATL);
+        const projectedEventTSB = eventDayCTL - eventDayATL;
+        const tsbGap = target - projectedEventTSB;
+        
+        // If we're already close enough to target, don't recalculate
+        if (Math.abs(tsbGap) < 0.5) {
+          setEventDayFinalTSB(projectedEventTSB);
+          return;
+        }
+        
+        // Adjust non-custom days to compensate for the TSB gap
+        const totalDays = adjustableDays.length;
+        
+        for (let i = 0; i < plan.length; i++) {
+          const day = plan[i];
+          
+          if (!day.isCustom) {
+            const daysToEvent = plan.length - i - 1;
+            
+            // Weight adjustments more heavily for days closer to the event
+            const weight = 0.5 + (daysToEvent / totalDays) * 0.5;
+            
+            // Negative adjustment because increasing TRIMP decreases TSB
+            const adjustment = -tsbGap * weight * 0.7;
+            
+            const newTrimp = Math.max(0, Math.round(day.trimp + adjustment));
+            plan[i].trimp = newTrimp;
+          }
+        }
+        
+        // Recalculate ATL, CTL, and TSB for all days
+        let atl = latestATL || 0;
+        let ctl = latestCTL || 0;
+        
+        for (let i = 0; i < plan.length; i++) {
+          const day = plan[i];
+          
+          atl = atl + (day.trimp - atl) / 7;
+          ctl = ctl + (day.trimp - ctl) / 42;
+          
+          plan[i].projectedTSB = ctl - atl;
+          plan[i].projectedATL = atl;
+          plan[i].projectedCTL = ctl;
+        }
+        
+        // Calculate final event day TSB with zero TRIMP
+        const lastDayUpdated = plan[plan.length - 1];
+        let finalEventDayATL = lastDayUpdated.projectedATL || 0;
+        let finalEventDayCTL = lastDayUpdated.projectedCTL || 0;
+        
+        finalEventDayATL = finalEventDayATL + (0 - finalEventDayATL) / 7;
+        finalEventDayCTL = finalEventDayCTL + (0 - finalEventDayCTL) / 42;
+        
+        setEventDayFinalTSB(finalEventDayCTL - finalEventDayATL);
       }
     } catch (error) {
       console.error("Error recalculating plan:", error);
