@@ -7,6 +7,23 @@ import garth
 from garth.exc import GarthHTTPError
 from supabase_client import supabase, get_garmin_credentials
 import traceback
+import sys
+import os
+
+# Print environment information for debugging
+print(f"Python version: {sys.version}")
+print(f"Running on: {sys.platform}")
+print(f"Working directory: {os.getcwd()}")
+
+# Print package versions
+try:
+    import pkg_resources
+    garminconnect_version = pkg_resources.get_distribution("garminconnect").version
+    print(f"Installed garminconnect version: {garminconnect_version}")
+    garth_version = pkg_resources.get_distribution("garth").version
+    print(f"Installed garth version: {garth_version}")
+except Exception as e:
+    print(f"Error getting package versions: {e}")
 
 def get_garmin_credentials(supabase_client, user_id):
     print(f"Fetching Garmin credentials for user {user_id}")
@@ -33,29 +50,71 @@ def get_garmin_credentials(supabase_client, user_id):
         print(f"Full error: {traceback.format_exc()}")
         return None, None
 
+def test_raw_garmin_login(email, password):
+    """Test raw Garmin login without any error handling to see raw exceptions"""
+    print(f"\n===== DIAGNOSTIC: Testing raw Garmin login for {email} =====")
+    try:
+        # Direct API client creation
+        print("Creating raw Garmin client...")
+        import inspect
+        print(f"Garmin constructor signature: {inspect.signature(Garmin.__init__)}")
+        
+        raw_client = Garmin(email, password)
+        print("Raw client created successfully")
+        
+        # Try login directly
+        print("Attempting raw login...")
+        raw_client.login()
+        print("Raw login successful")
+        
+        return True
+    except Exception as e:
+        print(f"Raw login test failed with error: {str(e)}")
+        print(f"Raw error type: {type(e)}")
+        print(f"Raw error traceback: {traceback.format_exc()}")
+        return False
+
 def initialize_garmin_client(email, password):
     print(f"\nInitializing Garmin client for {email}")
     try:
         # Create API client with basic initialization
         print("Initializing GarminConnect client...")
+        print("Debugging Garmin constructor...")
+        try:
+            # Test raw login first for diagnostic purposes
+            test_raw_garmin_login(email, password)
+        except Exception as test_err:
+            print(f"Raw login test generated exception: {str(test_err)}")
+            # Continue with regular flow
+        
         garmin_client = Garmin(email, password)
         
         print("Attempting Garmin login...")
         try:
             # Try to get user info first to verify credentials
+            print(f"Calling get_user_summary with date: {datetime.now().strftime('%Y-%m-%d')}")
             garmin_client.get_user_summary(datetime.now().strftime("%Y-%m-%d"))
-            print("Successfully logged into Garmin")
+            print("Successfully logged into Garmin using get_user_summary")
         except Exception as e:
             print(f"Failed to get user info: {str(e)}")
-            # If that fails, try the regular login
-            garmin_client.login()
-            print("Successfully logged into Garmin")
+            print(f"Full error from get_user_summary: {traceback.format_exc()}")
+            print("Falling back to regular login method...")
+            try:
+                # If that fails, try the regular login
+                garmin_client.login()
+                print("Successfully logged into Garmin with regular login")
+            except Exception as login_err:
+                print(f"Regular login also failed: {str(login_err)}")
+                print(f"Full error from regular login: {traceback.format_exc()}")
+                raise login_err
         
         return garmin_client
         
     except GarminConnectAuthenticationError as err:
         print(f"Authentication failed for {email}")
         print(f"Error details: {str(err)}")
+        print(f"Error type: {type(err)}")
+        print(f"Full authentication error traceback: {traceback.format_exc()}")
         print(f"Please verify your Garmin credentials at https://connect.garmin.com")
         raise Exception(f"Garmin authentication failed: {str(err)}")
     except GarminConnectTooManyRequestsError as err:
@@ -103,9 +162,18 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
             email, password = get_garmin_credentials(supabase, user_id)
             if not email or not password:
                 raise Exception("Missing or invalid Garmin credentials")
+            
+            print(f"Attempting to initialize Garmin client with credentials for {email}")
+            print(f"Password length: {len(password) if password else 0} chars, first char: {password[0] if password else 'none'}")
                 
             # Initialize client with new method
-            client = initialize_garmin_client(email, password)
+            try:
+                client = initialize_garmin_client(email, password)
+                print("Successfully initialized Garmin client")
+            except Exception as auth_err:
+                print(f"Failed to initialize Garmin client: {str(auth_err)}")
+                print(f"Garmin API version: {Garmin.__version__ if hasattr(Garmin, '__version__') else 'unknown'}")
+                raise auth_err
             
             # Get activities and save them
             if isinstance(start_date, str):
