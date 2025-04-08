@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,15 +102,19 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
           adjustedTrimp = Math.max(0, Math.round(dailyAvgTrimp * (0.8 + dayFactor * 0.4)));
         }
         
-        // Update ATL and CTL
+        // Store current TSB (before applying today's training)
+        const todayTSB = projectedCTL - projectedATL;
+        
+        // Update ATL and CTL based on today's training
         projectedATL = projectedATL + (adjustedTrimp - projectedATL) / 7;
         projectedCTL = projectedCTL + (adjustedTrimp - projectedCTL) / 42;
-        projectedTSB = projectedCTL - projectedATL;
         
+        // The TSB we store for today is actually yesterday's CTL - yesterday's ATL
+        // This reflects that today's training affects tomorrow's TSB
         results.push({
           date,
           trimp: adjustedTrimp,
-          projectedTSB: projectedTSB,
+          projectedTSB: todayTSB, // Use the TSB from before today's training
           projectedATL: projectedATL,
           projectedCTL: projectedCTL,
           isCustom: hasCustomValue
@@ -132,14 +135,8 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         let eventDayATL = lastDay.projectedATL || currentATL;
         let eventDayCTL = lastDay.projectedCTL || currentCTL;
         
-        // On event day, we typically assume no training load (TRIMP=0)
-        const eventDayTrimp = 0; 
-        
-        // Update for event day (ATL decays faster than CTL)
-        eventDayATL = eventDayATL + (eventDayTrimp - eventDayATL) / 7;
-        eventDayCTL = eventDayCTL + (eventDayTrimp - eventDayCTL) / 42;
-        
-        // Final TSB on event day
+        // Calculate the TSB for the event day (which is based on the values AFTER the last training day)
+        // This is correct because TSB on event day = the CTL and ATL after the last training day
         const eventDayTSB = eventDayCTL - eventDayATL;
         
         // Store the event day TSB for display in the UI
@@ -165,10 +162,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     let eventDayATL = lastDay.projectedATL || 0;
     let eventDayCTL = lastDay.projectedCTL || 0;
     
-    // No TRIMP on event day
-    eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
-    eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
-    
+    // Event day TSB is calculated using the final ATL and CTL values after the last training day
     const projectedEventTSB = eventDayCTL - eventDayATL;
     
     // If we're already close enough to target, don't adjust
@@ -177,9 +171,6 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     // Determine how much to adjust each day's TRIMP to hit the target
     const tsbDifference = targetTSB - projectedEventTSB;
     const adjustmentFactor = tsbDifference / plan.length;
-    
-    let atl = lastDay.projectedATL || 0;
-    let ctl = lastDay.projectedCTL || 0;
     
     // Work backwards to calculate required adjustments
     for (let i = plan.length - 1; i >= 0; i--) {
@@ -201,32 +192,31 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
     let currentCTL = plan[0].projectedCTL || 0;
     
     if (plan.length > 0) {
-      const today = new Date();
       currentATL = currentATL || latestATL || 0;
       currentCTL = currentCTL || latestCTL || 0;
       
       for (let i = 0; i < plan.length; i++) {
         const day = plan[i];
         
+        // Store the current TSB before applying today's training
+        const todayTSB = currentCTL - currentATL;
+        
+        // Update based on today's training
         currentATL = currentATL + (day.trimp - currentATL) / 7;
         currentCTL = currentCTL + (day.trimp - currentCTL) / 42;
         
         plan[i].projectedATL = currentATL;
         plan[i].projectedCTL = currentCTL;
-        plan[i].projectedTSB = currentCTL - currentATL;
+        plan[i].projectedTSB = todayTSB; // The TSB we show is before today's training effect
       }
       
-      // Calculate event day values
+      // Calculate event day values (which is the TSB resulting from the last day's training)
       if (plan.length > 0) {
         const lastDay = plan[plan.length - 1];
         let eventDayATL = lastDay.projectedATL || 0;
         let eventDayCTL = lastDay.projectedCTL || 0;
         
-        // On event day (zero TRIMP)
-        eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
-        eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
-        
-        // Update the event day TSB
+        // The event day TSB is the CTL minus ATL after the final training day
         setEventDayFinalTSB(eventDayCTL - eventDayATL);
       }
     }
@@ -248,10 +238,7 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         let eventDayATL = lastDay.projectedATL || 0;
         let eventDayCTL = lastDay.projectedCTL || 0;
         
-        // No TRIMP on event day
-        eventDayATL = eventDayATL + (0 - eventDayATL) / 7;
-        eventDayCTL = eventDayCTL + (0 - eventDayCTL) / 42;
-        
+        // Event day TSB is calculated from the final ATL and CTL values
         const projectedEventTSB = eventDayCTL - eventDayATL;
         const tsbGap = target - projectedEventTSB;
         
@@ -288,21 +275,22 @@ export function TSBPlanner({ latestTSB, latestATL, latestCTL }: TSBPlannerProps)
         for (let i = 0; i < plan.length; i++) {
           const day = plan[i];
           
+          // Calculate TSB before applying today's training
+          const todayTSB = ctl - atl;
+          
+          // Update ATL and CTL based on today's training
           atl = atl + (day.trimp - atl) / 7;
           ctl = ctl + (day.trimp - ctl) / 42;
           
-          plan[i].projectedTSB = ctl - atl;
+          plan[i].projectedTSB = todayTSB;
           plan[i].projectedATL = atl;
           plan[i].projectedCTL = ctl;
         }
         
-        // Calculate final event day TSB with zero TRIMP
+        // Calculate final event day TSB
         const lastDayUpdated = plan[plan.length - 1];
         let finalEventDayATL = lastDayUpdated.projectedATL || 0;
         let finalEventDayCTL = lastDayUpdated.projectedCTL || 0;
-        
-        finalEventDayATL = finalEventDayATL + (0 - finalEventDayATL) / 7;
-        finalEventDayCTL = finalEventDayCTL + (0 - finalEventDayCTL) / 42;
         
         setEventDayFinalTSB(finalEventDayCTL - finalEventDayATL);
       }
