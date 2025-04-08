@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 import os
 import datetime
@@ -7,6 +6,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 import traceback
 import logging
+import time
 
 load_dotenv()
 
@@ -19,16 +19,21 @@ class ChartUpdater:
 
     def get_garmin_credentials(self):
         try:
+            print(f"Fetching Garmin credentials for user {self.user_id}")
             response = self.client.table('garmin_credentials')\
                 .select('email, password')\
                 .eq('user_id', self.user_id)\
                 .execute()
             if response.data:
-                return response.data[0] if isinstance(response.data, list) else response.data
+                credentials = response.data[0] if isinstance(response.data, list) else response.data
+                print(f"Found credentials with email: {credentials['email']}")
+                return credentials
             else:
+                print("No Garmin credentials found for user")
                 return None
         except Exception as e:
             print(f"Error fetching Garmin credentials: {e}")
+            print(f"Full error: {traceback.format_exc()}")
             return None
 
     def initialize_garmin(self):
@@ -36,8 +41,31 @@ class ChartUpdater:
         if not credentials:
             raise Exception("No Garmin credentials found for user")
         
-        self.garmin = Garmin(credentials['email'], credentials['password'])
-        self.garmin.login()
+        print(f"Initializing Garmin client for {credentials['email']}")
+        try:
+            # Create API client with basic initialization
+            print("Creating Garmin client...")
+            self.garmin = Garmin(credentials['email'], credentials['password'])
+            
+            print("Attempting Garmin login...")
+            try:
+                # Try to get user info first to verify credentials
+                today = datetime.date.today().strftime('%Y-%m-%d')
+                print(f"Calling get_user_summary with date: {today}")
+                self.garmin.get_user_summary(today)
+                print("Successfully logged into Garmin using get_user_summary")
+            except Exception as e:
+                print(f"Failed to get user info: {str(e)}")
+                print(f"Full error from get_user_summary: {traceback.format_exc()}")
+                print("Falling back to regular login method...")
+                self.garmin.login()
+                print("Successfully logged into Garmin with regular login")
+                
+            print("Garmin client initialized and logged in successfully")
+        except Exception as e:
+            print(f"Error initializing Garmin client: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            raise
 
     def find_last_existing_date(self):
         try:
@@ -264,7 +292,13 @@ class ChartUpdater:
             date_str = date.strftime('%Y-%m-%d')
             print(f"\nFetching activities for {date_str}")
             
+            # Make sure we're logged in
+            if not self.garmin:
+                print("Garmin client not initialized, initializing now...")
+                self.initialize_garmin()
+            
             # Get activities from Garmin for this date
+            print(f"Calling get_activities_by_date for {date_str}")
             activities = self.garmin.get_activities_by_date(
                 date_str,
                 date_str
@@ -286,16 +320,43 @@ class ChartUpdater:
                 
                 try:
                     # Get detailed activity data to find TRIMP
+                    print(f"Fetching details for activity {activity_id}")
                     details = self.garmin.get_activity(activity_id)
+                    
+                    # Debug the returned details
+                    print(f"Activity details keys: {list(details.keys())}")
+                    
                     trimp = 0.0
                     
                     # Look for TRIMP in connectIQMeasurements
                     if 'connectIQMeasurements' in details:
+                        print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
                         for item in details['connectIQMeasurements']:
+                            print(f"Measurement item: {item}")
                             if item.get('developerFieldNumber') == 4:  # TRIMP field
                                 trimp = round(float(item.get('value', 0)), 1)
                                 print(f"Found TRIMP in connectIQMeasurements: {trimp}")
                                 break
+                    else:
+                        print("No connectIQMeasurements found in activity details")
+                        # Try alternate methods to find TRIMP
+                        if 'summaryDTO' in details and 'trainingEffectLabel' in details['summaryDTO']:
+                            print(f"Found training effect: {details['summaryDTO']['trainingEffectLabel']}")
+                            # Estimate TRIMP from other metrics if available
+                            if 'summaryDTO' in details and 'movingDuration' in details['summaryDTO'] and 'averageHR' in details['summaryDTO']:
+                                # Calculate estimated TRIMP from duration and average HR
+                                moving_minutes = details['summaryDTO']['movingDuration'] / 60
+                                avg_hr = details['summaryDTO']['averageHR']
+                                # Basic TRIMP calculation formula
+                                trimp = round(moving_minutes * (avg_hr / 10), 1)
+                                print(f"Estimated TRIMP from HR and duration: {trimp}")
+                        elif 'measurements' in details:
+                            print("Looking for TRIMP in measurements section")
+                            for measurement in details.get('measurements', []):
+                                if measurement.get('key') == 'TRIMP' or 'trimp' in measurement.get('key', '').lower():
+                                    trimp = round(float(measurement.get('value', 0)), 1)
+                                    print(f"Found TRIMP in measurements: {trimp}")
+                                    break
                     
                     # Double TRIMP for strength training activities
                     activity_type = activity.get('activityType', {}).get('typeKey', '')
@@ -307,6 +368,9 @@ class ChartUpdater:
                     activity['trimp'] = trimp
                     activities_with_trimp.append(activity)
                     print(f"Added activity {activity_name} with TRIMP = {trimp}")
+                    
+                    # Add a small delay to avoid rate limiting
+                    time.sleep(0.5)
                     
                 except Exception as e:
                     print(f"Error getting details for activity {activity_id}: {str(e)}")
