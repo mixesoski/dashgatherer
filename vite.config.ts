@@ -1,3 +1,4 @@
+
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
@@ -16,8 +17,9 @@ export default defineConfig(({ mode }) => {
     NODE_ENV: process.env.NODE_ENV
   });
   
-  // Production API URL
+  // Production API URL and domains
   const productionApiUrl = 'https://trimpbara.onrender.com';
+  const allowedDomains = ['trimpbara.space', 'trimpbara.onrender.com'];
   
   return {
     server: {
@@ -38,6 +40,7 @@ export default defineConfig(({ mode }) => {
       // Ensure environment variables are available in the client
       'import.meta.env.VITE_API_URL': JSON.stringify(mode === 'production' ? productionApiUrl : (env.VITE_API_URL || 'http://localhost:5001')),
       'import.meta.env.VITE_SUPABASE_PROJECT_ID': JSON.stringify(env.VITE_SUPABASE_PROJECT_ID || 'eeaebxnbcxhzafzpzqsu'),
+      'import.meta.env.VITE_ALLOWED_DOMAINS': JSON.stringify(allowedDomains),
     },
     build: {
       // Ensure environment variables are properly replaced in production build
