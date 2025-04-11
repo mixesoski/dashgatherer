@@ -75,8 +75,8 @@ export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps)
   }
 
   return (
-    <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
-      <div className="flex flex-col flex-grow border-r border-gray-200 bg-white overflow-y-auto">
+    <div className="flex-shrink-0 md:w-64 md:fixed md:inset-y-0 z-10">
+      <div className="flex flex-col h-full border-r border-gray-200 bg-white overflow-y-auto">
         <div className="flex items-center justify-between px-4 py-5">
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center">

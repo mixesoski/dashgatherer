@@ -158,3 +158,10 @@ input, select, textarea {
     @apply -translate-x-full;
   }
 }
+
+/* Add spacing for the fixed sidebar on larger screens */
+@media (min-width: 768px) {
+  .md\:ml-64 {
+    margin-left: 16rem;
+  }
+}

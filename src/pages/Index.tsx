@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +18,6 @@ import { ProgressToast } from "@/components/ui/ProgressToast";
 import { Logo } from "@/components/Logo";
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
 import { PremiumFeatureGuard } from "@/components/PremiumFeatureGuard";
-import { usePremiumFeatures } from "@/hooks/usePremiumFeatures";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -228,7 +226,7 @@ const Index = () => {
     <div className="flex h-screen bg-gray-50">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden md:ml-64">
         <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
           <div className="flex items-center">
             <Logo variant="dark" className="h-8 w-auto" />

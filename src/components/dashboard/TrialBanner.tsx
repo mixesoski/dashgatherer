@@ -25,7 +25,7 @@ export function TrialBanner() {
               Your free trial will end in {daysLeft} days. Subscribe now to continue using all of Trimpbara's features.
             </p>
           </div>
-          <Button className="bg-gray-900 hover:bg-gray-800 text-white" asChild>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white shrink-0" asChild>
             <Link to="/subscription">
               Subscribe now
             </Link>
