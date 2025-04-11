@@ -221,8 +221,8 @@ const Account = () => {
           </Link>
         </header>
         
-        <main>
-          <Card className="w-full max-w-2xl mx-auto">
+        <main className="max-w-4xl mx-auto w-full">
+          <Card className="w-full">
             <CardHeader>
               <CardTitle>Account Settings</CardTitle>
               <CardDescription>
