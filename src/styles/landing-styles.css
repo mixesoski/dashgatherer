@@ -278,3 +278,17 @@
   text-align: center;
 }
 
+/* Chart visualization styling */
+.chart-visualization {
+  transition: all 0.3s ease;
+  height: 10rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chart-visualization:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
