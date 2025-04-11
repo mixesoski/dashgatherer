@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { BookOpen, FileText, Search } from 'lucide-react';
@@ -74,7 +75,7 @@ const Docs = () => {
     <div className="flex min-h-screen bg-background">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
-      <main className="flex-1 p-6 md:p-8 md:pt-10">
+      <main className="flex-1 p-6 md:p-8 md:pt-10 md:ml-64">
         <div className="mx-auto max-w-4xl">
           <h1 className="text-3xl font-bold tracking-tight">Documentation</h1>
           <p className="text-muted-foreground mt-2 mb-6">
