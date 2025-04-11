@@ -70,7 +70,7 @@ const FeatureCarousel = () => {
           }
         ]
       },
-      background: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=1800&h=1000"
+      background: "https://images.unsplash.com/photo-1516383274595-37357ded271a?auto=format&fit=crop&q=80&w=1800&h=1000"
     },
     {
       title: "Performance Metrics",
@@ -98,7 +98,7 @@ const FeatureCarousel = () => {
           }
         ]
       },
-      background: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=1800&h=1000"
+      background: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1800&h=1000"
     },
     {
       title: "Training Stress Balance",
@@ -124,7 +124,7 @@ const FeatureCarousel = () => {
           }
         ]
       },
-      background: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=1800&h=1000"
+      background: "https://images.unsplash.com/photo-1594882645126-14020914d58d?auto=format&fit=crop&q=80&w=1800&h=1000"
     },
     {
       title: "Coach Integration",
@@ -171,7 +171,7 @@ const FeatureCarousel = () => {
           }
         ]
       },
-      background: "https://images.unsplash.com/photo-1605810230434-7631ac76ec81?auto=format&fit=crop&q=80&w=1800&h=1000"
+      background: "https://images.unsplash.com/photo-1576678927484-cc907957088c?auto=format&fit=crop&q=80&w=1800&h=1000"
     }
   ];
 

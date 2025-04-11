@@ -7,25 +7,25 @@ const FeatureSection = () => {
       icon: <Activity className="h-8 w-8 text-purple-500" />,
       title: "Advanced Analytics",
       description: "Track your Acute and Chronic Training Load with sophisticated TRIMP calculations for optimal performance.",
-      image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800"
+      image: "https://images.unsplash.com/photo-1516383274595-37357ded271a?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Compass className="h-8 w-8 text-indigo-500" />,
       title: "Garmin Integration",
       description: "Seamlessly sync your Garmin data and get instant insights into your training load and patterns.",
-      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800"
+      image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Users className="h-8 w-8 text-blue-500" />,
       title: "Coach Integration",
       description: "Share your training data with your coach and get personalized feedback to improve faster.",
-      image: "https://images.unsplash.com/photo-1605810230434-7631ac76ec81?auto=format&fit=crop&q=80&w=800"
+      image: "https://images.unsplash.com/photo-1576678927484-cc907957088c?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Award className="h-8 w-8 text-purple-500" />,
       title: "Performance Tracking",
       description: "Monitor your progress with detailed analytics and visualize your journey towards peak performance.",
-      image: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800"
+      image: "https://images.unsplash.com/photo-1594882645126-14020914d58d?auto=format&fit=crop&q=80&w=800"
     }
   ];
 
