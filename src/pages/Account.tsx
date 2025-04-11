@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -205,10 +206,10 @@ const Account = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
-      <div className="flex-1 flex flex-col overflow-hidden md:ml-64">
+      <div className="flex-1 overflow-auto md:ml-64">
         <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
           <div className="flex items-center">
             <Logo variant="dark" className="h-8 w-auto" />
@@ -221,7 +222,7 @@ const Account = () => {
           </Link>
         </header>
         
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="p-6">
           <Card className="max-w-2xl mx-auto">
             <CardHeader>
               <CardTitle>Account Settings</CardTitle>
