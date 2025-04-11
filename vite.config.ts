@@ -18,8 +18,8 @@ export default defineConfig(({ mode }) => {
   });
   
   // Production API URL and domains
-  const productionApiUrl = 'https://trimpbara.onrender.com';
-  const allowedDomains = ['trimpbara.space', 'trimpbara.onrender.com'];
+  const productionApiUrl = 'https://dashgatherer-api.onrender.com';
+  const allowedDomains = ['trimpbara.space', 'dashgatherer-api.onrender.com'];
   
   return {
     server: {
