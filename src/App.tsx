@@ -15,6 +15,7 @@ import RespondInvitation from "./pages/RespondInvitation";
 import Account from "./pages/Account";
 import ManageSubscription from "./pages/ManageSubscription";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import Docs from "./pages/Docs";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <ManageSubscription />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/docs"
+            element={
+              <ProtectedRoute>
+                <Docs />
               </ProtectedRoute>
             }
           />
