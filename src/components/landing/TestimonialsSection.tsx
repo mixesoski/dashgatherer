@@ -8,19 +8,19 @@ const testimonialsData = [
     quote: "Trimpbara has completely changed how I train. The insights from TRIMP analysis have helped me optimize my workouts and reach new personal records.",
     name: "Alex M.",
     title: "Marathon Runner",
-    avatar: "/placeholder.svg"
+    avatar: "https://images.unsplash.com/photo-1542327897-4141b355e20e?auto=format&fit=crop&q=80&w=150"
   },
   {
     quote: "As a coach, I love being able to monitor my athletes' training load in real-time. It helps me adjust their programs for optimal results without overtraining.",
     name: "Sarah K.",
     title: "Professional Coach",
-    avatar: "/placeholder.svg"
+    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=150"
   },
   {
     quote: "The ability to track ATL and CTL has been game-changing for my cycling performance. I can now plan my peak performance with scientific precision.",
     name: "Michael T.",
     title: "Cyclist",
-    avatar: "/placeholder.svg"
+    avatar: "https://images.unsplash.com/photo-1567037782848-b071163a3f24?auto=format&fit=crop&q=80&w=150"
   }
 ];
 
@@ -61,7 +61,7 @@ const TestimonialsSection = () => {
                     <Quote className="h-10 w-10 text-purple-200 mb-4" />
                     <p className="text-xl text-gray-700 italic mb-6">{testimonial.quote}</p>
                     <div className="flex items-center">
-                      <div className="w-12 h-12 rounded-full bg-gray-200 mr-4 overflow-hidden">
+                      <div className="w-12 h-12 rounded-full overflow-hidden mr-4">
                         <img 
                           src={testimonial.avatar} 
                           alt={testimonial.name} 

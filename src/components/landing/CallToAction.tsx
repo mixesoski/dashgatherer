@@ -11,6 +11,15 @@ const CallToAction = () => {
           {/* Background pattern */}
           <div className="absolute inset-0 bg-grid-pattern opacity-10"></div>
           
+          {/* Background image with overlay */}
+          <div className="absolute inset-0 opacity-10">
+            <img 
+              src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&q=80&w=1600" 
+              alt="Athletes training"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          
           <div className="relative z-10 text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
               Ready to Optimize Your Training?

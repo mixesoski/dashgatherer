@@ -1,5 +1,29 @@
 
 const IntegrationSection = () => {
+  // Define integration logos with images
+  const integrations = [
+    {
+      name: "Garmin Connect",
+      logo: "https://images.unsplash.com/photo-1505751171710-1f6d0ace5a85?auto=format&fit=crop&q=80&w=400"
+    },
+    {
+      name: "Strava",
+      logo: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&q=80&w=400"
+    },
+    {
+      name: "Apple Health",
+      logo: "https://images.unsplash.com/photo-1512428559087-560fa5ceab42?auto=format&fit=crop&q=80&w=400"
+    },
+    {
+      name: "Google Fit",
+      logo: "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&q=80&w=400"
+    },
+    {
+      name: "Polar",
+      logo: "https://images.unsplash.com/photo-1544027993-37dbfe43562a?auto=format&fit=crop&q=80&w=400"
+    }
+  ];
+
   return (
     <section className="py-20 bg-white">
       <div className="container mx-auto px-4">
@@ -11,10 +35,14 @@ const IntegrationSection = () => {
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-12 max-w-4xl mx-auto">
-          {/* Placeholder for integration logos */}
-          {[1, 2, 3, 4, 5].map((item) => (
-            <div key={item} className="w-32 h-16 bg-gray-100 rounded flex items-center justify-center">
-              <p className="text-gray-500">Integration {item}</p>
+          {integrations.map((integration, index) => (
+            <div key={index} className="w-32 h-16 rounded overflow-hidden shadow-sm">
+              <img 
+                src={integration.logo} 
+                alt={integration.name} 
+                className="w-full h-full object-cover"
+                title={integration.name}
+              />
             </div>
           ))}
         </div>

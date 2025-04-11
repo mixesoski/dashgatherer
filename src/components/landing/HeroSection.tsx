@@ -36,10 +36,12 @@ const HeroSection = () => {
           </div>
           <div className="md:w-1/2">
             <div className="relative rounded-xl shadow-2xl bg-white p-2">
-              {/* Placeholder for dashboard screenshot */}
-              <div className="aspect-video rounded-lg bg-gray-100 flex items-center justify-center">
-                <p className="text-gray-500 text-lg">Dashboard Preview</p>
-              </div>
+              {/* Dashboard screenshot */}
+              <img 
+                src="https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&q=80&w=1600" 
+                alt="Trimpbara Dashboard"
+                className="w-full rounded-lg aspect-video object-cover"
+              />
             </div>
           </div>
         </div>

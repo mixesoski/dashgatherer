@@ -6,22 +6,26 @@ const FeatureSection = () => {
     {
       icon: <Activity className="h-8 w-8 text-purple-500" />,
       title: "Advanced Analytics",
-      description: "Track your Acute and Chronic Training Load with sophisticated TRIMP calculations for optimal performance."
+      description: "Track your Acute and Chronic Training Load with sophisticated TRIMP calculations for optimal performance.",
+      image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Compass className="h-8 w-8 text-indigo-500" />,
       title: "Garmin Integration",
-      description: "Seamlessly sync your Garmin data and get instant insights into your training load and patterns."
+      description: "Seamlessly sync your Garmin data and get instant insights into your training load and patterns.",
+      image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Users className="h-8 w-8 text-blue-500" />,
       title: "Coach Integration",
-      description: "Share your training data with your coach and get personalized feedback to improve faster."
+      description: "Share your training data with your coach and get personalized feedback to improve faster.",
+      image: "https://images.unsplash.com/photo-1605810230434-7631ac76ec81?auto=format&fit=crop&q=80&w=800"
     },
     {
       icon: <Award className="h-8 w-8 text-purple-500" />,
       title: "Performance Tracking",
-      description: "Monitor your progress with detailed analytics and visualize your journey towards peak performance."
+      description: "Monitor your progress with detailed analytics and visualize your journey towards peak performance.",
+      image: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&q=80&w=800"
     }
   ];
 
@@ -39,13 +43,20 @@ const FeatureSection = () => {
           {features.map((feature, index) => (
             <div 
               key={index}
-              className="p-6 rounded-xl border border-gray-100 shadow-sm bg-white hover:shadow-md transition-shadow duration-300"
+              className="p-6 rounded-xl border border-gray-100 shadow-sm bg-white hover:shadow-md transition-shadow duration-300 feature-card"
             >
               <div className="mb-4">
                 {feature.icon}
               </div>
               <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-              <p className="text-gray-600">{feature.description}</p>
+              <p className="text-gray-600 mb-4">{feature.description}</p>
+              <div className="rounded-lg overflow-hidden">
+                <img 
+                  src={feature.image} 
+                  alt={feature.title}
+                  className="w-full h-40 object-cover"
+                />
+              </div>
             </div>
           ))}
         </div>
