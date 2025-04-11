@@ -7,7 +7,7 @@ import { Menu, X } from "lucide-react";
 import { PricingTier } from "@/components/PricingTier";
 import FooterSection from "@/components/landing/FooterSection";
 import HeroSection from "@/components/landing/HeroSection";
-import FeatureSection from "@/components/landing/FeatureSection";
+import FeatureCarousel from "@/components/landing/FeatureCarousel";
 import HowItWorksSection from "@/components/landing/HowItWorksSection";
 import TestimonialsSection from "@/components/landing/TestimonialsSection";
 import IntegrationSection from "@/components/landing/IntegrationSection";
@@ -78,7 +78,7 @@ const Landing = () => {
 
       {/* Main Content Sections */}
       <HeroSection />
-      <FeatureSection />
+      <FeatureCarousel />
       <HowItWorksSection />
       <IntegrationSection />
       <TestimonialsSection />
