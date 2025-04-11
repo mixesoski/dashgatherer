@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import 'react-datepicker/dist/react-datepicker.css';
 
 @tailwind base;
@@ -8,6 +9,7 @@
 @layer base {
   html {
     font-size: 16px;
+    font-family: 'Inter', sans-serif;
   }
   
   @media (max-width: 640px) {
@@ -109,7 +111,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
     -webkit-tap-highlight-color: transparent;
     /* Prevent content shift on mobile when address bar shows/hides */
     min-height: 100vh;
@@ -137,4 +139,22 @@ html {
 input, select, textarea {
   @apply text-base;
   font-size: max(16px, 1rem);
+}
+
+/* Data visualization colors */
+.chart-color-1 { color: #4f46e5; }
+.chart-color-2 { color: #0ea5e9; }
+.chart-color-3 { color: #10b981; }
+.chart-color-4 { color: #f59e0b; }
+.chart-color-5 { color: #ef4444; }
+
+/* Responsive sidebar */
+@media (max-width: 767px) {
+  .sidebar-open {
+    @apply w-64 absolute z-20;
+  }
+  
+  .sidebar-closed {
+    @apply -translate-x-full;
+  }
 }

@@ -4,7 +4,7 @@ import { GarminCredentialsForm } from "@/components/GarminCredentialsForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { RefreshCw, Loader2, ArrowDownCircle } from "lucide-react";
+import { RefreshCw, Loader2, ArrowDownCircle, BarChart2, Activity, Calendar, Users, Settings, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { ProfileMenu } from "@/components/dashboard/ProfileMenu";
@@ -20,6 +20,10 @@ import { Logo } from "@/components/Logo";
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
 import { PremiumFeatureGuard } from "@/components/PremiumFeatureGuard";
 import { usePremiumFeatures } from "@/hooks/usePremiumFeatures";
+import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { TrialBanner } from "@/components/dashboard/TrialBanner";
 
 interface Athlete {
   user_id: string;
@@ -36,6 +40,7 @@ const Index = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const {
     data: roleData
@@ -46,8 +51,9 @@ const Index = () => {
       const {
         data,
         error
-      } = await supabase.from('profiles').select('role').eq('user_id', userId).maybeSingle();
+      } = await supabase.from('profiles').select('role, email').eq('user_id', userId).maybeSingle();
       if (error) throw error;
+      setUserEmail(data?.email || null);
       return data?.role;
     },
     enabled: !!userId
@@ -218,89 +224,166 @@ const Index = () => {
       </div>;
   }
 
-  return <div className="min-h-screen bg-gray-100 py-8 relative">
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
-        <div className="flex justify-between mb-8">
-          <Logo variant="dark" />
-          <div className="flex gap-2">
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <DashboardSidebar userRole={userRole} userEmail={userEmail} />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
+          <div className="flex items-center">
+            <Logo variant="dark" className="h-8 w-auto" />
+          </div>
+          <div className="flex items-center gap-4">
             <InviteCoachDialog />
             <ProfileMenu onDeleteGarminCredentials={handleDeleteCredentials} />
           </div>
-        </div>
-
-        <SubscriptionBanner />
-
-        {userRole === 'coach' ? <>
-            <CoachDashboard athletes={athletes} selectedAthleteId={selectedAthleteId} onAthleteSelect={setSelectedAthleteId} />
-            {selectedAthleteId ? <div className="bg-white p-6 rounded-lg shadow mb-8">
-                <GarminChart data={garminData?.filter(Boolean) || []} email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"} onUpdate={handleUpdate} isUpdating={isUpdating} />
-              </div> : <p className="text-gray-600"></p>}
-          </> : <>
-            {garminCredentials ? <div className="space-y-4">
-                <p className="text-xl text-gray-600">Your Garmin account is connected</p>
-                <p className="text-md text-gray-500">Connected email: {garminCredentials.email}</p>
-                {showButtons && <div className="relative flex flex-col items-center">
-                    <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 animate-bounce text-primary">
-                      <ArrowDownCircle className="h-8 w-8" />
-                    </div>
-                    
-                    <div className="flex justify-center gap-4 items-center p-6 rounded-lg border-2 border-primary bg-primary/5 shadow-md mb-4 w-full max-w-2xl mx-auto">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button id="syncButton" variant="default" className="gap-2 font-semibold text-white bg-primary hover:bg-primary/90 px-6" onClick={handleSync} disabled={isUpdating}>
-                              {isUpdating ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Syncing...
-                                </>
-                              ) : (
-                                <>
-                                  <RefreshCw className="h-4 w-4" />
-                                  Sync Garmin
-                                </>
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Sync Garmin activities and TRIMP data</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-700">Start from:</span>
-                        <DatePicker 
-                          selected={startDate} 
-                          onChange={(date: Date) => setStartDate(startOfDay(date))} 
-                          maxDate={new Date()} 
-                          className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                          dateFormat="yyyy-MM-dd" 
-                          placeholderText="Select start date" 
-                          popperPlacement="bottom-end" 
-                          popperProps={{
-                            strategy: "fixed"
-                          }} 
-                          calendarClassName="translate-y-2" 
-                          disabled={isUpdating} 
-                        />
+        </header>
+        
+        <main className="flex-1 overflow-y-auto p-6">
+          <TrialBanner />
+          
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold text-gray-900">Let's get started</h1>
+            <p className="text-gray-600 mt-1">
+              Connect your Garmin account and start tracking your training metrics
+            </p>
+          </div>
+          
+          {userRole === 'coach' ? (
+            <>
+              <Card className="mb-6">
+                <CardContent className="p-6">
+                  <CoachDashboard 
+                    athletes={athletes} 
+                    selectedAthleteId={selectedAthleteId} 
+                    onAthleteSelect={setSelectedAthleteId} 
+                  />
+                </CardContent>
+              </Card>
+              
+              {selectedAthleteId ? (
+                <Card>
+                  <CardContent className="p-6">
+                    <GarminChart 
+                      data={garminData?.filter(Boolean) || []} 
+                      email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"} 
+                      onUpdate={handleUpdate} 
+                      isUpdating={isUpdating} 
+                    />
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm text-center">
+                  <Info className="mx-auto h-12 w-12 text-blue-500 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900">Select an athlete</h3>
+                  <p className="mt-2 text-gray-500">
+                    Please select an athlete from the list above to view their training data
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {garminCredentials ? (
+                <div className="space-y-6">
+                  <Card className="border border-gray-200">
+                    <CardContent className="p-6">
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Garmin Connection Status</h3>
+                      <div className="flex items-center gap-2 text-green-600 mb-4">
+                        <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                        <span className="font-medium">Connected</span>
                       </div>
-                    </div>
-                    
-                    <p className="text-center text-gray-600 text-sm mb-6">
-                      👆 Start here! Sync your Garmin data to see your training metrics
-                    </p>
-                  </div>}
-              </div> : <>
-                <p className="text-xl text-gray-600">Connect your Garmin account below</p>
-                <GarminCredentialsForm />
-              </>}
-            <div className="bg-white p-6 rounded-lg shadow mb-8 my-[73px]">
-              <GarminChart data={garminData?.filter(Boolean) || []} email={garminCredentials?.email || ""} onUpdate={handleUpdate} isUpdating={isUpdating} />
-            </div>
-          </>}
+                      <p className="text-gray-600">Connected email: <span className="font-medium">{garminCredentials.email}</span></p>
+                    </CardContent>
+                  </Card>
+                  
+                  {showButtons && (
+                    <Card className="border border-blue-200 bg-blue-50">
+                      <CardContent className="p-6">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">Sync Your Data</h3>
+                            <p className="text-gray-600">Start by syncing your Garmin data to see your training metrics</p>
+                          </div>
+                          
+                          <div className="flex flex-col sm:flex-row items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-700">Start from:</span>
+                              <DatePicker 
+                                selected={startDate} 
+                                onChange={(date: Date) => setStartDate(startOfDay(date))} 
+                                maxDate={new Date()} 
+                                className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                                dateFormat="yyyy-MM-dd" 
+                                placeholderText="Select start date" 
+                                popperPlacement="bottom-end" 
+                                popperProps={{
+                                  strategy: "fixed"
+                                }} 
+                                calendarClassName="translate-y-2" 
+                                disabled={isUpdating} 
+                              />
+                            </div>
+                            
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button id="syncButton" variant="default" className="gap-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 px-6 w-full sm:w-auto" onClick={handleSync} disabled={isUpdating}>
+                                    {isUpdating ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Syncing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <RefreshCw className="h-4 w-4" />
+                                        Sync Garmin
+                                      </>
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Sync Garmin activities and TRIMP data</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <Card className="border border-gray-200">
+                  <CardContent className="p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Connect your Garmin account</h3>
+                    <GarminCredentialsForm />
+                  </CardContent>
+                </Card>
+              )}
+              
+              <div className="mt-6">
+                <Card className="border border-gray-200">
+                  <CardContent className="p-6">
+                    <GarminChart 
+                      data={garminData?.filter(Boolean) || []} 
+                      email={garminCredentials?.email || ""} 
+                      onUpdate={handleUpdate} 
+                      isUpdating={isUpdating} 
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+          
+          <div className="mt-6">
+            <SubscriptionBanner />
+          </div>
+        </main>
       </div>
-    </div>;
+    </div>
+  );
 };
 
 export default Index;
