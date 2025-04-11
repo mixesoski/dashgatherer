@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { BookOpen, FileText, Search } from 'lucide-react';
 import { 
@@ -15,12 +14,25 @@ import {
   TabsList, 
   TabsTrigger 
 } from '@/components/ui/tabs';
-import { useAuth } from '@supabase/auth-helpers-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Docs = () => {
-  const { user } = useAuth();
-  const userEmail = user?.email;
-  const userRole = 'athlete'; // This would be fetched from the user's profile
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>('athlete'); // Default role
+
+  useEffect(() => {
+    // Fetch the current user
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email);
+        // In a real app, you might want to fetch the user's role from a profiles table
+        // For now, we'll keep the default 'athlete' role
+      }
+    };
+
+    fetchUser();
+  }, []);
 
   const resources = [
     {
