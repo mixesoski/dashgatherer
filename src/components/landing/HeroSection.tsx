@@ -8,11 +8,11 @@ const HeroSection = () => {
     <section className="hero-section">
       {/* Video background */}
       <div className="video-background">
-        <img src="public/lovable-uploads/21904e73-7326-49a5-b1de-e86a240e49a2.png" alt="Training background" />
-        {/* Fallback if we had a video: */}
-        {/* <video autoPlay muted loop playsInline>
-          <source src="/videos/hero-background.mp4" type="video/mp4" />
-        </video> */}
+        <img 
+          src="https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1920&h=1080" 
+          alt="Training background" 
+          className="w-full h-full object-cover" 
+        />
       </div>
       
       {/* Content overlay */}
