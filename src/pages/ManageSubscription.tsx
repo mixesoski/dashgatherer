@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,47 +11,44 @@ import { Logo } from "@/components/Logo";
 import { useSubscription } from "@/hooks/useSubscription";
 import { CancelSubscriptionButton } from "@/components/CancelSubscriptionButton";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-
 const ManageSubscription = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const { subscription, isLoading: subscriptionLoading } = useSubscription();
-
+  const {
+    subscription,
+    isLoading: subscriptionLoading
+  } = useSubscription();
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: {
+            user
+          }
+        } = await supabase.auth.getUser();
         if (!user) {
           navigate("/login");
           return;
         }
-
         setUserId(user.id);
-        
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role, email')
-          .eq('user_id', user.id)
-          .maybeSingle();
-          
+        const {
+          data: profileData
+        } = await supabase.from('profiles').select('role, email').eq('user_id', user.id).maybeSingle();
         if (profileData) {
           setUserRole(profileData.role);
           setUserEmail(profileData.email);
         }
-        
       } catch (error: any) {
         toast.error(error.message || "Error checking authentication");
       } finally {
         setLoading(false);
       }
     };
-
     checkAuth();
   }, [navigate]);
-
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString(undefined, {
@@ -61,7 +57,6 @@ const ManageSubscription = () => {
       day: 'numeric'
     });
   };
-
   const getStatusBadge = (status: string) => {
     if (status === 'active' || status === 'trialing') {
       return <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 px-2.5 py-0.5 rounded-full text-xs font-medium"><CheckCircle className="h-3.5 w-3.5" /> Active</span>;
@@ -73,31 +68,16 @@ const ManageSubscription = () => {
       return <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 px-2.5 py-0.5 rounded-full text-xs font-medium">No Subscription</span>;
     }
   };
-
   if (loading || subscriptionLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
+    return <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+  return <div className="flex h-screen bg-gray-50 overflow-hidden">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
       <div className="flex-1 overflow-auto md:ml-64">
-        <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
-          <div className="flex items-center">
-            <Logo variant="dark" className="h-8 w-auto" />
-          </div>
-          <Link to="/dashboard">
-            <Button variant="outline" size="sm" className="flex items-center gap-2">
-              <Home className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
-          </Link>
-        </header>
+        
         
         <main className="p-6">
           <Card className="max-w-2xl mx-auto">
@@ -111,8 +91,7 @@ const ManageSubscription = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {!subscription || subscription.active === false ? (
-                <div className="text-center py-8">
+              {!subscription || subscription.active === false ? <div className="text-center py-8">
                   <h3 className="text-lg font-medium">No Active Subscription</h3>
                   <p className="text-muted-foreground mt-2">
                     You don't currently have an active subscription.
@@ -122,9 +101,7 @@ const ManageSubscription = () => {
                       View Pricing Plans
                     </Button>
                   </div>
-                </div>
-              ) : (
-                <>
+                </div> : <>
                   <div>
                     <h3 className="text-lg font-medium mb-2">Subscription Details</h3>
                     <div className="rounded-md border p-4 grid gap-3">
@@ -143,8 +120,7 @@ const ManageSubscription = () => {
                     </div>
                   </div>
 
-                  {subscription.trialEnd && (
-                    <div>
+                  {subscription.trialEnd && <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Calendar className="h-5 w-5 text-primary" />
                         <h3 className="text-lg font-medium">Trial Period</h3>
@@ -155,8 +131,7 @@ const ManageSubscription = () => {
                           <span className="font-medium">{formatDate(subscription.trialEnd)}</span>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    </div>}
 
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -164,22 +139,17 @@ const ManageSubscription = () => {
                       <h3 className="text-lg font-medium">Billing Information</h3>
                     </div>
                     <div className="rounded-md border p-4 grid gap-3">
-                      {subscription.renewsAt && (
-                        <div className="flex justify-between">
+                      {subscription.renewsAt && <div className="flex justify-between">
                           <span className="text-muted-foreground">Next billing date</span>
                           <span className="font-medium">{formatDate(subscription.renewsAt)}</span>
-                        </div>
-                      )}
-                      {subscription.cancelAt && (
-                        <div className="flex justify-between">
+                        </div>}
+                      {subscription.cancelAt && <div className="flex justify-between">
                           <span className="text-muted-foreground">Cancels on</span>
                           <span className="font-medium">{formatDate(subscription.cancelAt)}</span>
-                        </div>
-                      )}
+                        </div>}
                     </div>
                   </div>
-                </>
-              )}
+                </>}
             </CardContent>
             <Separator />
             <CardFooter className="flex justify-between pt-6">
@@ -187,16 +157,11 @@ const ManageSubscription = () => {
                 Back to Account
               </Button>
               
-              <CancelSubscriptionButton 
-                variant="outline" 
-                className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-              />
+              <CancelSubscriptionButton variant="outline" className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white" />
             </CardFooter>
           </Card>
         </main>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default ManageSubscription;
