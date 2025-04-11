@@ -7,41 +7,17 @@ interface LogoProps {
 }
 
 export const Logo = ({ className = "", variant = "light" }: LogoProps) => {
-  const textColor = variant === "light" ? "text-white" : "text-black";
+  const textColor = variant === "light" ? "text-white" : "text-gray-900";
   
   return (
     <Link to="/" className={`flex items-center ${className}`}>
       <div className="relative">
-        <h1 className={`text-2xl font-bold ${textColor}`}>
+        <h1 className={`text-2xl font-bold ${textColor} flex items-center`}>
           Trimpbara
-        </h1>
-        <div className="absolute top-0 right-0 -mt-2 -mr-12">
-          <div className="relative">
-            <svg width="60" height="30" viewBox="0 0 60 30">
-              <rect 
-                x="4" 
-                y="4" 
-                width="52" 
-                height="22" 
-                rx="4" 
-                ry="4" 
-                fill="#f471b5" 
-              />
-              <text 
-                x="30" 
-                y="19" 
-                fontFamily="Arial" 
-                fontSize="12" 
-                fontWeight="bold" 
-                fill="black" 
-                textAnchor="middle" 
-                dominantBaseline="middle"
-              >
-                BETA
-              </text>
-            </svg>
+          <div className="ml-2 px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-full">
+            BETA
           </div>
-        </div>
+        </h1>
       </div>
     </Link>
   );
