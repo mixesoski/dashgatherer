@@ -1,55 +1,41 @@
 
+import React from 'react';
+import { SiGarmin } from 'react-icons/si';
+
 const IntegrationSection = () => {
-  // Define integration logos with images
+  // Update integrations to focus on Garmin
   const integrations = [
     {
       name: "Garmin Connect",
-      logo: "https://images.unsplash.com/photo-1505751171710-1f6d0ace5a85?auto=format&fit=crop&q=80&w=400"
-    },
-    {
-      name: "Strava",
-      logo: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&q=80&w=400"
-    },
-    {
-      name: "Apple Health",
-      logo: "https://images.unsplash.com/photo-1512428559087-560fa5ceab42?auto=format&fit=crop&q=80&w=400"
-    },
-    {
-      name: "Google Fit",
-      logo: "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&q=80&w=400"
-    },
-    {
-      name: "Polar",
-      logo: "https://images.unsplash.com/photo-1544027993-37dbfe43562a?auto=format&fit=crop&q=80&w=400"
+      logo: <SiGarmin className="text-green-600 w-16 h-16" />
     }
   ];
 
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-[#1A1F2C] text-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Seamless Integrations</h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Trimpbara works with the tools and devices you already use.
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">Seamless Garmin Integration</h2>
+          <p className="text-lg text-gray-300 max-w-2xl mx-auto">
+            Trimpbara works directly with Garmin Connect, providing seamless synchronization of your training data.
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-center items-center gap-12 max-w-4xl mx-auto">
+        <div className="flex justify-center items-center gap-12 max-w-4xl mx-auto">
           {integrations.map((integration, index) => (
-            <div key={index} className="w-32 h-16 rounded overflow-hidden shadow-sm">
-              <img 
-                src={integration.logo} 
-                alt={integration.name} 
-                className="w-full h-full object-cover"
-                title={integration.name}
-              />
+            <div 
+              key={index} 
+              className="w-32 h-32 flex items-center justify-center rounded-xl bg-[#222932] shadow-lg"
+            >
+              {integration.logo}
             </div>
           ))}
         </div>
 
         <div className="mt-16 max-w-3xl mx-auto text-center">
-          <p className="text-gray-600">
-            Trimpbara integrates seamlessly with Garmin Connect and other popular fitness platforms, making it easy to synchronize your training data and get the insights you need to improve your performance.
+          <p className="text-gray-400">
+            Our direct integration with Garmin Connect ensures that your training metrics are automatically synchronized, 
+            giving you real-time insights into your performance and training load.
           </p>
         </div>
       </div>
