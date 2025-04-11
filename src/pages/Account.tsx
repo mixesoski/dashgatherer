@@ -20,6 +20,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Logo } from "@/components/Logo";
 import { Home } from "lucide-react";
+import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -33,6 +34,8 @@ const Account = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -65,6 +68,8 @@ const Account = () => {
 
         if (profile) {
           setProfile(profile);
+          setUserRole(profile.role);
+          setUserEmail(profile.email);
           form.reset({
             email: profile.email || "",
             nickname: profile.nickname || "",
@@ -200,128 +205,134 @@ const Account = () => {
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="flex justify-between items-center mb-8">
-        <Link to="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
-          <Logo variant="dark" />
-        </Link>
-        <Link to="/dashboard">
-          <Button variant="outline" size="sm" className="flex items-center gap-2">
-            <Home className="h-4 w-4" />
-            Back to Dashboard
-          </Button>
-        </Link>
-      </div>
+    <div className="flex h-screen bg-gray-50">
+      <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Account Settings</CardTitle>
-          <CardDescription>
-            Update your account information and Garmin Connect credentials
-          </CardDescription>
-          {userId && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              <span className="font-semibold">User ID:</span> {userId}
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input {...field} type="email" placeholder="Enter your email" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="nickname"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nickname</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Enter a nickname" />
-                    </FormControl>
-                    <FormDescription>
-                      Setting a nickname will make it easier for coaches to recognize you.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Garmin Connect Integration</h3>
-                <FormField
-                  control={form.control}
-                  name="garmin_email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Garmin Email</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="email" placeholder="Your Garmin Connect email" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="garmin_password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Garmin Password</FormLabel>
-                      <FormControl>
-                        <Input 
-                          {...field} 
-                          type="password" 
-                          placeholder="Enter new Garmin password" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <Button type="submit" className="w-full">
-                Save Changes
-              </Button>
-            </form>
-          </Form>
-
-          <div className="mt-10 pt-6 border-t border-border">
-            <h3 className="text-lg font-medium mb-4">Danger Zone</h3>
-            <div className="space-y-4">
-              <Button 
-                variant="outline" 
-                className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-                onClick={handleDeleteGarminCredentials}
-              >
-                Delete Garmin Credentials
-              </Button>
-              
-              <Button 
-                variant="outline" 
-                className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-                onClick={handleDeleteAllData}
-              >
-                Delete All My Data
-              </Button>
-            </div>
+      <div className="flex-1 flex flex-col overflow-hidden md:ml-64">
+        <header className="bg-white border-b border-gray-200 py-4 px-6 flex justify-between items-center">
+          <div className="flex items-center">
+            <Logo variant="dark" className="h-8 w-auto" />
           </div>
-        </CardContent>
-      </Card>
+          <Link to="/dashboard">
+            <Button variant="outline" size="sm" className="flex items-center gap-2">
+              <Home className="h-4 w-4" />
+              Back to Dashboard
+            </Button>
+          </Link>
+        </header>
+        
+        <main className="flex-1 overflow-y-auto p-6">
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle>Account Settings</CardTitle>
+              <CardDescription>
+                Update your account information and Garmin Connect credentials
+              </CardDescription>
+              {userId && (
+                <div className="mt-2 text-sm text-muted-foreground">
+                  <span className="font-semibold">User ID:</span> {userId}
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="email" placeholder="Enter your email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nickname"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nickname</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Enter a nickname" />
+                        </FormControl>
+                        <FormDescription>
+                          Setting a nickname will make it easier for coaches to recognize you.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Garmin Connect Integration</h3>
+                    <FormField
+                      control={form.control}
+                      name="garmin_email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Garmin Email</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="email" placeholder="Your Garmin Connect email" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="garmin_password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Garmin Password</FormLabel>
+                          <FormControl>
+                            <Input 
+                              {...field} 
+                              type="password" 
+                              placeholder="Enter new Garmin password" 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full">
+                    Save Changes
+                  </Button>
+                </form>
+              </Form>
+
+              <div className="mt-10 pt-6 border-t border-border">
+                <h3 className="text-lg font-medium mb-4">Danger Zone</h3>
+                <div className="space-y-4">
+                  <Button 
+                    variant="outline" 
+                    className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                    onClick={handleDeleteGarminCredentials}
+                  >
+                    Delete Garmin Credentials
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="w-full border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+                    onClick={handleDeleteAllData}
+                  >
+                    Delete All My Data
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
     </div>
   );
 };
