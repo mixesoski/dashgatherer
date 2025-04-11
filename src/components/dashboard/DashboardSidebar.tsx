@@ -11,7 +11,8 @@ import {
   ChevronRight,
   LayoutDashboard,
   CreditCard,
-  HelpCircle
+  HelpCircle,
+  FileText
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 
@@ -47,6 +48,12 @@ export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps)
       href: '/dashboard', 
       icon: Calendar, 
       current: false 
+    },
+    { 
+      name: 'Docs', 
+      href: '/docs', 
+      icon: FileText, 
+      current: location.pathname === '/docs' 
     },
   ];
   
