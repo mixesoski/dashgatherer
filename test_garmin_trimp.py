@@ -1,217 +1,245 @@
 #!/usr/bin/env python3
-"""
-Test script for Garmin Connect authentication and TRIMP data retrieval.
-This helps diagnose issues with Garmin Connect API access.
-"""
-
 import os
 import sys
 import traceback
-from datetime import datetime, timedelta
+import time
 import json
+from datetime import datetime, timedelta
 from garminconnect import Garmin
-import requests
-import urllib.parse
+from dotenv import load_dotenv
+from supabase_client import supabase
 
-def test_login_with_cookies(email, password):
-    """Attempt to login using direct cookie-based approach"""
-    print(f"\n===== Testing cookie-based login for {email} =====")
+load_dotenv()
 
-    safe_password = password
-    if any(c in password for c in ['@', '!', '#', '$', '%', '^', '&', '*', '(', ')', '+', '=', '{', '}', '[', ']', '|', '\\', ':', ';', '"', "'", '<', '>', ',', '?', '/']):
-        print("Password contains special characters - applying URL encoding")
-        safe_password = urllib.parse.quote_plus(password)
+def test_garmin_trimp(email, password, days_back=7):
+    print(f"Testing Garmin TRIMP retrieval for {email}")
+    print(f"Looking back {days_back} days")
     
     try:
-        session = requests.Session()
+        # Initialize Garmin client with updated approach for version 0.2.25
+        print("Initializing Garmin client...")
         
-        # Setup session with proper headers
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
-            'origin': 'https://sso.garmin.com',
-            'nk': 'NT'
-        })
-        
-        # First get the SSO page to collect initial cookies
-        sso_url = "https://sso.garmin.com/sso/signin"
-        print(f"Fetching initial SSO page: {sso_url}")
-        
-        params = {
-            'service': 'https://connect.garmin.com/modern',
-            'webhost': 'https://connect.garmin.com/modern',
-            'source': 'https://connect.garmin.com/signin',
-            'redirectAfterAccountLoginUrl': 'https://connect.garmin.com/modern',
-            'redirectAfterAccountCreationUrl': 'https://connect.garmin.com/modern',
-            'gauthHost': 'https://sso.garmin.com/sso',
-            'locale': 'en_US',
-            'id': 'gauth-widget',
-            'cssUrl': 'https://connect.garmin.com/gauth-custom-v1.2-min.css',
-            'clientId': 'GarminConnect',
-            'rememberMeShown': 'true',
-            'rememberMeChecked': 'false',
-            'createAccountShown': 'true',
-            'openCreateAccount': 'false',
-            'displayNameShown': 'false',
-            'consumeServiceTicket': 'false',
-            'initialFocus': 'true',
-            'embedWidget': 'false',
-            'generateExtraServiceTicket': 'true',
-            'generateTwoExtraServiceTickets': 'false',
-            'generateNoServiceTicket': 'false',
-            'globalOptInShown': 'true',
-            'globalOptInChecked': 'false',
-            'mobile': 'false',
-            'connectLegalTerms': 'true',
-            'locationPromptShown': 'true',
-            'showPassword': 'true'
-        }
-        
-        print("Sending initial request...")
-        response = session.get(sso_url, params=params)
-        print(f"Initial response status: {response.status_code}")
-        
-        if response.status_code != 200:
-            print("Initial SSO page request failed")
-            print(f"Error body: {response.text[:200]}...")
-            raise Exception("Failed to load Garmin login page")
-        
-        # Now attempt the actual login
-        print("Preparing login request...")
-        payload = {
-            'username': email,
-            'password': safe_password,
-            'embed': 'false',
-            'rememberme': 'on'  # Keep the session alive longer
-        }
-        
-        login_url = "https://sso.garmin.com/sso/signin"
-        print(f"Sending login request to: {login_url}")
-        
-        login_response = session.post(login_url, params=params, data=payload)
-        print(f"Login response status: {login_response.status_code}")
-        
-        if login_response.status_code != 200:
-            print("Login request failed")
-            print(f"Error body: {login_response.text[:200]}...")
-            raise Exception("Failed to login to Garmin Connect")
-        
-        # Check if login was successful by looking for ticket in response
-        if "ticket" not in login_response.text:
-            print("No ticket found in response, login likely failed")
-            print(f"Response excerpt: {login_response.text[:200]}...")
-            raise Exception("Login authentication failed - no ticket found")
-        
-        print("Login appears successful, found ticket in response")
-        
-        # Use the existing client but with our authenticated session
-        garmin_client = Garmin(email, password, session=session)
-        print("Created Garmin client with authenticated session")
-        
-        # Test that we're properly authenticated
-        print("Testing connection with user profile request...")
+        # First try the current approach with direct client initialization
+        client = None
         try:
-            profile = garmin_client.get_full_name()
-            print(f"Successfully authenticated! User profile: {profile}")
-            return garmin_client
-        except Exception as e:
-            print(f"Profile request failed: {str(e)}")
-            print(f"Full error: {traceback.format_exc()}")
-            raise Exception("Authentication appeared successful but API requests failed")
+            client = Garmin(email, password)
+            print("Client initialized, attempting login...")
+            client.login()
+            print("Login successful!")
+        except Exception as direct_err:
+            print(f"Direct login attempt failed: {str(direct_err)}")
+            print("Trying alternate authentication method...")
+            
+            # Newer versions might use a different login approach
+            try:
+                from garminconnect import Garmin
+                from garminconnect.garmin_client import get_credentials
+                print("Getting credentials via get_credentials helper...")
+                
+                # Try to use get_credentials helper if available in newer versions
+                try:
+                    creds = get_credentials(email, password)
+                    client = Garmin(email=email, password=password, auth_tokens=creds)
+                    print("Created client with auth tokens")
+                except (ImportError, AttributeError):
+                    # Fall back to direct instantiation with tokenstore=True
+                    print("Falling back to tokenstore approach")
+                    client = Garmin(email=email, password=password, tokenstore=True)
+                
+                # Connect to Garmin
+                client.login()
+                print("Login successful with alternate method!")
+            except Exception as alt_err:
+                print(f"Alternate login also failed: {str(alt_err)}")
+                print(f"Full error from alternate login: {traceback.format_exc()}")
+                raise Exception(f"All login methods failed: {str(alt_err)}")
         
-    except Exception as e:
-        print(f"Cookie-based login failed with error: {str(e)}")
-        print(f"Error type: {type(e)}")
-        print(f"Full traceback: {traceback.format_exc()}")
-        return None
-
-def test_activities_and_trimp(client):
-    """Test retrieving activities and TRIMP data"""
-    print("\n===== Testing activities and TRIMP data retrieval =====")
-    
-    try:
-        # Get today's date and 30 days back
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=30)
+        # Test the connection by getting user summary
+        try:
+            summary = client.get_user_summary()
+            user_id = summary.get('userId', 'Unknown')
+            print(f"Successfully connected to Garmin account for user ID: {user_id}")
+        except Exception as test_err:
+            print(f"Warning: Connected to Garmin but couldn't get user summary: {str(test_err)}")
+            print("Will continue anyway as we might still be able to access activities")
         
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = end_date.strftime("%Y-%m-%d")
+        # Get activities for the last X days
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days_back)
         
-        print(f"Getting activities from {start_str} to {end_str}")
+        print(f"\nFetching activities from {start_date} to {end_date}")
+        # Updated get_activities_by_date call for version 0.2.25
+        activities = client.get_activities_by_date(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+            activityType=None  # Get all activity types
+        )
         
-        activities = client.get_activities_by_date(start_str, end_str)
         print(f"Found {len(activities)} activities")
         
-        if len(activities) == 0:
-            print("No activities found in the date range")
-            return
+        # Try another method to get recent activities
+        print("\nTrying alternative method - get_activities...")
+        recent_activities = client.get_activities(0, 10)
+        print(f"Found {len(recent_activities)} recent activities")
         
-        # Look at most recent activity for TRIMP data
-        recent_activity = activities[0]
-        activity_id = recent_activity['activityId']
-        activity_name = recent_activity.get('activityName', 'Unknown')
-        activity_date = recent_activity.get('startTimeLocal', 'Unknown date')
-        
-        print(f"\nExamining activity: {activity_name} from {activity_date}")
-        print(f"Activity ID: {activity_id}")
-        
-        print("Getting detailed activity data...")
-        activity_details = client.get_activity(activity_id)
-        
-        # Look for TRIMP data in connectIQMeasurements
-        trimp_found = False
-        if 'connectIQMeasurements' in activity_details:
-            print("\nFound connectIQMeasurements in activity data")
-            print(f"Number of Connect IQ measurements: {len(activity_details['connectIQMeasurements'])}")
+        # Try each day separately with debugging
+        print("\nTrying each day separately:")
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            print(f"\nChecking activities for {date_str}")
             
-            for item in activity_details['connectIQMeasurements']:
-                print(f"Measurement: developerFieldNumber={item.get('developerFieldNumber')}, value={item.get('value')}")
-                if item.get('developerFieldNumber') == 4:
-                    trimp_value = round(float(item.get('value', 0)), 1)
-                    print(f"\n✓ FOUND TRIMP VALUE: {trimp_value}")
-                    trimp_found = True
-        else:
-            print("No connectIQMeasurements found in activity data")
+            try:
+                # Updated get_activities_by_date call for version 0.2.25
+                day_activities = client.get_activities_by_date(
+                    date_str, 
+                    date_str,
+                    activityType=None  # Get all activity types
+                )
+                print(f"Found {len(day_activities)} activities on {date_str}")
+            except Exception as e:
+                print(f"Error retrieving activities for {date_str}: {e}")
+            
+            current_date += timedelta(days=1)
         
-        if not trimp_found:
-            print("\n⚠ NO TRIMP DATA FOUND FOR THIS ACTIVITY")
-            print("Check that your device is recording TRIMP data through Connect IQ")
+        # If we have any activities from any method, process them
+        combined_activities = activities if activities else recent_activities
+        
+        if not combined_activities:
+            print("\nNo activities found with any method.")
+            print("Testing connection with other API endpoints...")
+            
+            # Try to get user info
+            try:
+                print("\nTrying to get user profile...")
+                profile = client.get_full_name()
+                print(f"User profile accessible: {profile}")
+            except Exception as e:
+                print(f"Could not get user profile: {e}")
+            
+            # Try to get heart rate data
+            try:
+                print("\nTrying to get heart rate data...")
+                heart_rate = client.get_heart_rates(end_date.strftime("%Y-%m-%d"))
+                print(f"Heart rate data accessible: {bool(heart_rate)}")
+            except Exception as e:
+                print(f"Could not get heart rate data: {e}")
+                
+            return False
+        
+        # Process each activity to find TRIMP
+        for idx, activity in enumerate(combined_activities):
+            activity_id = activity.get('activityId')
+            activity_name = activity.get('activityName', 'Unknown Activity')
+            
+            # Get activity date based on various possible fields
+            activity_date = None
+            if 'startTimeLocal' in activity:
+                activity_date = activity['startTimeLocal'].split()[0]
+            elif 'startTimeGMT' in activity:
+                activity_date = activity['startTimeGMT'].split()[0]
+            elif 'startTime' in activity:
+                activity_date = activity['startTime'].split('T')[0]
+            
+            print(f"\n{idx+1}/{len(combined_activities)}: Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
+            
+            # Print the full activity data for debugging
+            print(f"Activity data: {json.dumps(activity, indent=2)}")
+            
+            try:
+                # Get detailed activity data - updated for 0.2.25
+                print(f"Fetching details for activity {activity_id}")
+                details = client.get_activity_details(activity_id)
+                
+                # Debug the returned keys
+                print(f"Activity details keys: {list(details.keys())}")
+                
+                # Check for different possible locations of TRIMP data in 0.2.25
+                trimp_found = False
+                
+                # 1. Check connectIQMeasurements
+                if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
+                    print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
+                    
+                    # Print each measurement to inspect
+                    for i, item in enumerate(details['connectIQMeasurements']):
+                        print(f"Measurement {i+1}: {item}")
+                        
+                        # Look for TRIMP specifically - check various possible formats
+                        if item.get('developerFieldNumber') == 4 or 'TRIMP' in str(item) or 'trimp' in str(item):
+                            try:
+                                trimp = round(float(item.get('value', 0)), 1)
+                                print(f"FOUND TRIMP: {trimp}")
+                                trimp_found = True
+                                break
+                            except (ValueError, TypeError):
+                                print(f"Failed to convert TRIMP value: {item.get('value')}")
+                
+                # 2. Check in summaryDTO if available and no TRIMP found yet
+                if not trimp_found and 'summaryDTO' in details:
+                    summary = details['summaryDTO']
+                    print(f"Summary keys: {list(summary.keys())}")
+                    
+                    if 'trainingEffect' in summary:
+                        te = summary.get('trainingEffect', 0)
+                        if te > 0:
+                            # Report training effect - could be used to estimate TRIMP
+                            print(f"Training Effect: {te}")
+                            
+                            if 'movingDuration' in summary and 'averageHR' in summary:
+                                duration_min = summary.get('movingDuration', 0) / 60
+                                avg_hr = summary.get('averageHR', 0)
+                                print(f"Duration: {duration_min} min, Avg HR: {avg_hr} bpm")
+                                print(f"Could estimate TRIMP from these values")
+                
+                # Wait a bit to avoid rate limiting
+                time.sleep(1)
+                
+            except Exception as e:
+                print(f"Error getting details for activity {activity_id}: {e}")
+                print(traceback.format_exc())
+        
+        print("\nTest completed successfully!")
+        return True
         
     except Exception as e:
-        print(f"Error testing activities and TRIMP: {str(e)}")
-        print(f"Full error: {traceback.format_exc()}")
+        print(f"Test failed with error: {e}")
+        print(traceback.format_exc())
+        return False
 
-def main():
-    """Main test function"""
-    print("==================================================")
-    print("GARMIN CONNECT AUTHENTICATION AND TRIMP DATA TEST")
-    print("==================================================")
-    
-    if len(sys.argv) != 3:
-        print("Usage: python test_garmin_trimp.py <email> <password>")
-        print("Example: python test_garmin_trimp.py user@example.com mypassword")
-        return
-    
-    email = sys.argv[1]
-    password = sys.argv[2]
-    
-    print(f"Testing with email: {email}")
-    print(f"Password length: {len(password)} characters")
-    
-    # Try cookie-based login
-    client = test_login_with_cookies(email, password)
-    
-    if client:
-        print("\n✓ LOGIN SUCCESSFUL!")
-        # Test activities and TRIMP data
-        test_activities_and_trimp(client)
-    else:
-        print("\n❌ ALL LOGIN METHODS FAILED")
-        print("Recommendations:")
-        print("1. Verify your email and password are correct")
-        print("2. Try logging into Garmin Connect web interface manually")
-        print("3. Check if your account has two-factor authentication enabled")
-        print("4. If using special characters in password, try a simpler password temporarily")
-        print("5. Ensure your IP address is not blocked by Garmin")
+def get_user_credentials(user_id):
+    try:
+        print(f"Fetching Garmin credentials for user {user_id}")
+        response = supabase.table('garmin_credentials').select('*').eq('user_id', user_id).execute()
+        
+        if not response.data or len(response.data) == 0:
+            print("No Garmin credentials found for user")
+            return None, None
+            
+        credentials = response.data[0]
+        email = credentials.get('email')
+        password = credentials.get('password')
+        
+        print(f"Found credentials with email: {email}")
+        return email, password
+    except Exception as e:
+        print(f"Error fetching Garmin credentials: {str(e)}")
+        print(traceback.format_exc())
+        return None, None
 
 if __name__ == "__main__":
-    main() 
+    if len(sys.argv) > 1:
+        # Get user ID from command line
+        user_id = sys.argv[1]
+        days = int(sys.argv[2]) if len(sys.argv) > 2 else 7
+        
+        print(f"Looking up credentials for user ID: {user_id}")
+        email, password = get_user_credentials(user_id)
+        
+        if email and password:
+            test_garmin_trimp(email, password, days)
+        else:
+            print("Could not retrieve credentials. Test aborted.")
+    else:
+        print("Usage: python test_garmin_trimp.py <user_id> [days_back]")
+        print("Example: python test_garmin_trimp.py da6a495a-f12d-4df5-9568-224fd0a96325 7") 
