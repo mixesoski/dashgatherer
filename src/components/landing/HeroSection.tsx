@@ -1,49 +1,43 @@
 
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 const HeroSection = () => {
   return (
-    <section className="relative overflow-hidden">
-      {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50 z-0"></div>
+    <section className="hero-section">
+      {/* Video background */}
+      <div className="video-background">
+        <img src="public/lovable-uploads/21904e73-7326-49a5-b1de-e86a240e49a2.png" alt="Training background" />
+        {/* Fallback if we had a video: */}
+        {/* <video autoPlay muted loop playsInline>
+          <source src="/videos/hero-background.mp4" type="video/mp4" />
+        </video> */}
+      </div>
       
-      {/* Background pattern */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-[0.05] z-0"></div>
-      
-      <div className="container mx-auto px-4 py-20 md:py-32 relative z-10">
-        <div className="flex flex-col md:flex-row items-center">
-          <div className="md:w-1/2 mb-10 md:mb-0 md:pr-8">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight mb-6">
-              Track Your Training Load <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600">Like Never Before</span>
-            </h1>
-            <p className="text-xl text-gray-600 mb-8 max-w-lg">
-              Advanced analytics and insights for athletes who want to optimize their training and reach peak performance.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link to="/login">
-                <Button size="lg" className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white">
-                  Start Tracking Now <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/pricing">
-                <Button size="lg" variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50">
-                  View Pricing
-                </Button>
-              </Link>
-            </div>
+      {/* Content overlay */}
+      <div className="content-overlay container mx-auto px-4 py-20">
+        <div className="max-w-4xl mx-auto">
+          <div className="hero-logo">
+            <Logo variant="dark" />
           </div>
-          <div className="md:w-1/2">
-            <div className="relative rounded-xl shadow-2xl bg-white p-2">
-              {/* Dashboard screenshot */}
-              <img 
-                src="https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=crop&q=80&w=1600" 
-                alt="Trimpbara Dashboard"
-                className="w-full rounded-lg aspect-video object-cover"
-              />
-            </div>
-          </div>
+          
+          <h2 className="hero-subtitle">THE NEXT GENERATION PLATFORM FOR:</h2>
+          
+          <h1 className="hero-title">
+            Athletic<br />
+            Performance Tracking
+          </h1>
+          
+          <Link to="/login">
+            <Button size="lg" className="hero-cta">
+              Activate tracking beyond your workouts
+            </Button>
+          </Link>
+          
+          <p className="hero-description">
+            The most powerful analytics platform you can use to build, track, and optimize your athletic performance.
+          </p>
         </div>
       </div>
     </section>

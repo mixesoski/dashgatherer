@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
-import { Menu, X, ArrowRight, CheckCircle } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { PricingTier } from "@/components/PricingTier";
 import FooterSection from "@/components/landing/FooterSection";
 import HeroSection from "@/components/landing/HeroSection";
@@ -19,14 +19,14 @@ const Landing = () => {
   return (
     <div className="min-h-screen bg-white text-gray-900">
       {/* Navigation */}
-      <nav className="container mx-auto px-4 py-6 flex justify-between items-center">
-        <Logo variant="dark" />
+      <nav className="absolute top-0 left-0 right-0 z-50 container mx-auto px-4 py-6 flex justify-between items-center">
+        <Logo variant="light" />
         
         {/* Mobile Menu Button */}
         <div className="md:hidden">
           <Button 
             variant="ghost" 
-            className="text-gray-900 hover:text-gray-900 hover:bg-gray-100 p-2"
+            className="text-white hover:text-white hover:bg-white/10 p-2"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -36,17 +36,17 @@ const Landing = () => {
         {/* Desktop Navigation */}
         <div className="hidden md:flex space-x-4 items-center">
           <Link to="/pricing">
-            <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100">
+            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
               Pricing
             </Button>
           </Link>
           <Link to="/login">
-            <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100">
+            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
               Sign in
             </Button>
           </Link>
           <Link to="/login">
-            <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white">
+            <Button className="bg-white text-purple-900 hover:bg-gray-100">
               Get Started
             </Button>
           </Link>
@@ -55,20 +55,20 @@ const Landing = () => {
       
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white absolute z-20 inset-0 p-6">
+        <div className="md:hidden bg-purple-900 text-white absolute z-20 inset-0 p-6">
           <div className="flex flex-col gap-4 items-center mt-16">
             <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100 w-full justify-center text-lg">
+              <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 w-full justify-center text-lg">
                 Pricing
               </Button>
             </Link>
             <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="ghost" className="text-gray-700 hover:text-gray-900 hover:bg-gray-100 w-full justify-center text-lg">
+              <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 w-full justify-center text-lg">
                 Sign in
               </Button>
             </Link>
             <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-              <Button className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white w-full justify-center text-lg">
+              <Button className="bg-white text-purple-900 hover:bg-gray-100 w-full justify-center text-lg">
                 Get Started
               </Button>
             </Link>
