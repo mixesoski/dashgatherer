@@ -22,14 +22,12 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
-
 interface Athlete {
   user_id: string;
   user: {
     email: string;
   };
 }
-
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -39,7 +37,6 @@ const Index = () => {
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-
   const {
     data: roleData
   } = useQuery({
@@ -56,7 +53,6 @@ const Index = () => {
     },
     enabled: !!userId
   });
-
   const {
     data: athletes
   } = useQuery<Athlete[]>({
@@ -64,27 +60,19 @@ const Index = () => {
     queryFn: async () => {
       if (!userId || roleData !== 'coach') return [];
       console.log('Fetching athletes for coach:', userId);
-      
       const {
         data: coachData,
         error: coachError
-      } = await supabase
-        .from('coach_athletes')
-        .select('athlete_id, athlete_email')
-        .eq('coach_id', userId);
-      
+      } = await supabase.from('coach_athletes').select('athlete_id, athlete_email').eq('coach_id', userId);
       console.log('Raw coach data:', coachData);
-      
       if (coachError) {
         console.error('Coach data fetch error:', coachError);
         return [];
       }
-      
       if (!coachData || !Array.isArray(coachData)) {
         console.log('No coach data or not an array');
         return [];
       }
-      
       return coachData.map(row => ({
         user_id: row.athlete_id,
         user: {
@@ -94,9 +82,7 @@ const Index = () => {
     },
     enabled: !!userId && roleData === 'coach'
   });
-
   const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
-
   const {
     data: garminCredentials,
     isLoading: isCredentialsLoading,
@@ -114,7 +100,6 @@ const Index = () => {
     },
     enabled: !!userId && userRole !== 'coach'
   });
-
   const {
     data: garminData,
     isLoading: isDataLoading,
@@ -134,7 +119,6 @@ const Index = () => {
     },
     enabled: !!relevantUserId
   });
-
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
@@ -154,19 +138,16 @@ const Index = () => {
     };
     getCurrentUser();
   }, []);
-
   useEffect(() => {
     if (garminData && garminData.length > 0) {
       setShowButtons(false);
     }
   }, [garminData]);
-
   useEffect(() => {
     if (roleData) {
       setUserRole(roleData);
     }
   }, [roleData]);
-
   const handleDeleteCredentials = async () => {
     if (!userId) return;
     const {
@@ -179,7 +160,6 @@ const Index = () => {
     toast.success("Garmin credentials deleted successfully");
     await refetchCredentials();
   };
-
   const handleSync = async () => {
     if (!relevantUserId || !startDate) {
       toast.error('No user logged in or start date not selected');
@@ -197,7 +177,6 @@ const Index = () => {
     }
     setIsUpdating(false);
   };
-
   const handleUpdate = async () => {
     if (!relevantUserId) return;
     try {
@@ -214,16 +193,13 @@ const Index = () => {
       setIsUpdating(false);
     }
   };
-
   if (isInitialLoading) {
     return <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
         <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
         <p className="text-xl font-medium text-gray-700">Loading your training data...</p>
       </div>;
   }
-
-  return (
-    <div className="flex h-screen bg-gray-50">
+  return <div className="flex h-screen bg-gray-50">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
       <div className="flex-1 flex flex-col overflow-hidden md:ml-64">
@@ -247,43 +223,26 @@ const Index = () => {
             </p>
           </div>
           
-          {userRole === 'coach' ? (
-            <>
+          {userRole === 'coach' ? <>
               <Card className="mb-6">
                 <CardContent className="p-6">
-                  <CoachDashboard 
-                    athletes={athletes} 
-                    selectedAthleteId={selectedAthleteId} 
-                    onAthleteSelect={setSelectedAthleteId} 
-                  />
+                  <CoachDashboard athletes={athletes} selectedAthleteId={selectedAthleteId} onAthleteSelect={setSelectedAthleteId} />
                 </CardContent>
               </Card>
               
-              {selectedAthleteId ? (
-                <Card>
+              {selectedAthleteId ? <Card>
                   <CardContent className="p-6">
-                    <GarminChart 
-                      data={garminData?.filter(Boolean) || []} 
-                      email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"} 
-                      onUpdate={handleUpdate} 
-                      isUpdating={isUpdating} 
-                    />
+                    <GarminChart data={garminData?.filter(Boolean) || []} email={athletes?.find(a => a.user_id === selectedAthleteId)?.user.email || "No email"} onUpdate={handleUpdate} isUpdating={isUpdating} />
                   </CardContent>
-                </Card>
-              ) : (
-                <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm text-center">
+                </Card> : <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm text-center">
                   <Info className="mx-auto h-12 w-12 text-blue-500 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900">Select an athlete</h3>
                   <p className="mt-2 text-gray-500">
                     Please select an athlete from the list above to view their training data
                   </p>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {garminCredentials ? (
-                <div className="space-y-6">
+                </div>}
+            </> : <>
+              {garminCredentials ? <div className="space-y-6">
                   <Card className="border border-gray-200">
                     <CardContent className="p-6">
                       <h3 className="text-lg font-medium text-gray-900 mb-2">Garmin Connection Status</h3>
@@ -295,8 +254,7 @@ const Index = () => {
                     </CardContent>
                   </Card>
                   
-                  {showButtons && (
-                    <Card className="border border-blue-200 bg-blue-50">
+                  {showButtons && <Card className="border border-blue-200 bg-blue-50">
                       <CardContent className="p-6">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                           <div>
@@ -307,37 +265,22 @@ const Index = () => {
                           <div className="flex flex-col sm:flex-row items-center gap-4">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-gray-700">Start from:</span>
-                              <DatePicker 
-                                selected={startDate} 
-                                onChange={(date: Date) => setStartDate(startOfDay(date))} 
-                                maxDate={new Date()} 
-                                className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                                dateFormat="yyyy-MM-dd" 
-                                placeholderText="Select start date" 
-                                popperPlacement="bottom-end" 
-                                popperProps={{
-                                  strategy: "fixed"
-                                }} 
-                                calendarClassName="translate-y-2" 
-                                disabled={isUpdating} 
-                              />
+                              <DatePicker selected={startDate} onChange={(date: Date) => setStartDate(startOfDay(date))} maxDate={new Date()} className="px-3 py-2 border rounded-md text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" dateFormat="yyyy-MM-dd" placeholderText="Select start date" popperPlacement="bottom-end" popperProps={{
+                        strategy: "fixed"
+                      }} calendarClassName="translate-y-2" disabled={isUpdating} />
                             </div>
                             
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button id="syncButton" variant="default" className="gap-2 font-semibold text-white bg-blue-600 hover:bg-blue-700 px-6 w-full sm:w-auto" onClick={handleSync} disabled={isUpdating}>
-                                    {isUpdating ? (
-                                      <>
+                                    {isUpdating ? <>
                                         <Loader2 className="h-4 w-4 animate-spin" />
                                         Syncing...
-                                      </>
-                                    ) : (
-                                      <>
+                                      </> : <>
                                         <RefreshCw className="h-4 w-4" />
                                         Sync Garmin
-                                      </>
-                                    )}
+                                      </>}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -348,40 +291,28 @@ const Index = () => {
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
-                  )}
-                </div>
-              ) : (
-                <Card className="border border-gray-200">
+                    </Card>}
+                </div> : <Card className="border border-gray-200">
                   <CardContent className="p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Connect your Garmin account</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Start with connecting Garmin Connect</h3>
                     <GarminCredentialsForm />
                   </CardContent>
-                </Card>
-              )}
+                </Card>}
               
               <div className="mt-6">
                 <Card className="border border-gray-200">
                   <CardContent className="p-6">
-                    <GarminChart 
-                      data={garminData?.filter(Boolean) || []} 
-                      email={garminCredentials?.email || ""} 
-                      onUpdate={handleUpdate} 
-                      isUpdating={isUpdating} 
-                    />
+                    <GarminChart data={garminData?.filter(Boolean) || []} email={garminCredentials?.email || ""} onUpdate={handleUpdate} isUpdating={isUpdating} />
                   </CardContent>
                 </Card>
               </div>
-            </>
-          )}
+            </>}
           
           <div className="mt-6">
             <SubscriptionBanner />
           </div>
         </main>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
