@@ -38,7 +38,7 @@ if missing_vars:
 # Initialize CORS
 try:
     CORS(app, resources={
-        r"/api/*": {  # Only allow CORS for API routes
+        r"/*": {  # Allow CORS for all routes from allowed origins
             "origins": ["https://trimpbara.space", "http://localhost:5173"],
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
@@ -239,18 +239,18 @@ def update_chart():
             'error': str(e)
         }), 500
 
-@app.route('/api/health', methods=['GET'])
+@app.route('/api/health')
 def health_check():
-    """Health check endpoint for Render"""
+    """Health check endpoint"""
     try:
-        # Just verify we can connect to Supabase without requiring a specific table
+        # Test Supabase connection
         supabase.auth.get_session()
         return jsonify({
             'status': 'healthy',
-            'timestamp': datetime.utcnow().isoformat()
+            'message': 'API is running and Supabase connection is working'
         })
     except Exception as e:
-        print(f"Health check error: {e}")
+        logger.error(f"Health check failed: {e}")
         return jsonify({
             'status': 'unhealthy',
             'error': str(e)
