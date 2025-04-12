@@ -39,14 +39,18 @@ if missing_vars:
 try:
     CORS(app, resources={
         r"/*": {  # Allow CORS for all routes from allowed origins
-            "origins": ["https://trimpbara.space", "http://localhost:5173"],
+            "origins": [
+                "https://trimpbara.space",
+                "https://dashgatherer.lovable.app",
+                "http://localhost:5173"
+            ],
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
             "supports_credentials": True,
             "expose_headers": ["Content-Type", "Authorization"]
         }
     })
-    logger.info("CORS initialized successfully")
+    logger.info("CORS initialized successfully with allowed origins: trimpbara.space, dashgatherer.lovable.app")
 except Exception as e:
     logger.error(f"Failed to initialize CORS: {e}")
     raise
@@ -131,8 +135,13 @@ def catch_all(path):
         'message': f'The path /{path} does not exist on the API server'
     }), 404
 
-@app.route('/api/sync-garmin', methods=['POST'])
+@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
 def sync_garmin():
+    # Handle preflight requests
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        return response
+
     try:
         logger.info("=== Starting /api/sync-garmin request ===")
         
@@ -298,6 +307,21 @@ def handle_exception(e):
         'message': str(e),
         'timestamp': datetime.utcnow().isoformat()
     }), 500
+
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to all responses"""
+    origin = request.headers.get('Origin')
+    if origin in [
+        'https://trimpbara.space',
+        'https://dashgatherer.lovable.app',
+        'http://localhost:5173'
+    ]:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Cache-Control'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
 
 if __name__ == '__main__':
     try:
