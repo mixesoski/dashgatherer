@@ -76,7 +76,21 @@ def log_error(error_message, exception=None):
 @app.route('/')
 def root():
     """Root endpoint that shows API status or redirects to frontend"""
-    # Check if the request is from a browser
+    # Check if we're already on trimpbara.space to prevent redirect loops
+    if request.headers.get('Host') == 'trimpbara.space':
+        return jsonify({
+            'status': 'online',
+            'message': 'DashGatherer API is running',
+            'version': '1.0.0',
+            'endpoints': {
+                'health': '/api/health',
+                'sync_garmin': '/api/sync-garmin',
+                'update_chart': '/api/update-chart'
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    # Only redirect if coming from a different domain
     if request.headers.get('Accept', '').find('text/html') != -1:
         return redirect('https://trimpbara.space')
     
