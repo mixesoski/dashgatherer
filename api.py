@@ -9,25 +9,58 @@ import traceback
 import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import logging
 
-load_dotenv()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
+try:
+    load_dotenv()
+    logger.info("Environment variables loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to load environment variables: {e}")
+    raise
 
 app = Flask(__name__)
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://trimpbara.space", "http://localhost:5173"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
-        "supports_credentials": True,
-        "expose_headers": ["Content-Type", "Authorization"]
-    }
-})
+
+# Verify required environment variables
+required_env_vars = ["SUPABASE_URL", "SUPABASE_KEY"]
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
+# Initialize CORS
+try:
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["https://trimpbara.space", "http://localhost:5173"],
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
+            "supports_credentials": True,
+            "expose_headers": ["Content-Type", "Authorization"]
+        }
+    })
+    logger.info("CORS initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize CORS: {e}")
+    raise
 
 # Initialize Supabase client
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL", ""),
-    os.getenv("SUPABASE_KEY", "")
-)
+try:
+    supabase: Client = create_client(
+        os.getenv("SUPABASE_URL", ""),
+        os.getenv("SUPABASE_KEY", "")
+    )
+    logger.info("Supabase client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Supabase client: {e}")
+    raise
 
 @app.before_request
 def log_request_info():
@@ -232,10 +265,39 @@ def health_check():
             'error': str(e)
         }), 500
 
+@app.errorhandler(500)
+def handle_500_error(e):
+    logger.error(f"Internal server error: {e}")
+    return jsonify({
+        'error': 'Internal server error',
+        'message': str(e),
+        'timestamp': datetime.utcnow().isoformat()
+    }), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {e}")
+    return jsonify({
+        'error': 'Internal server error',
+        'message': str(e),
+        'timestamp': datetime.utcnow().isoformat()
+    }), 500
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
-    print(f"\n{'='*50}")
-    print(f"Starting Flask server on port {port}")
-    print(f"Debug mode: {os.environ.get('FLASK_ENV') == 'development'}")
-    print(f"{'='*50}\n")
-    app.run(host='0.0.0.0', port=port, debug=True)
+    try:
+        port = int(os.environ.get('PORT', 5001))
+        logger.info(f"Starting Flask server on port {port}")
+        logger.info(f"Debug mode: {os.environ.get('FLASK_ENV') == 'development'}")
+        
+        # Test Supabase connection before starting
+        try:
+            supabase.auth.get_session()
+            logger.info("Successfully connected to Supabase")
+        except Exception as e:
+            logger.error(f"Failed to connect to Supabase: {e}")
+            raise
+            
+        app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        raise
