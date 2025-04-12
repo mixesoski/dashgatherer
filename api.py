@@ -78,7 +78,7 @@ def root():
     """Root endpoint that shows API status or redirects to frontend"""
     # Check if the request is from a browser
     if request.headers.get('Accept', '').find('text/html') != -1:
-        return redirect('https://dashgatherer.lovable.app')
+        return redirect('https://trimpbara.space')
     
     # Return API status for non-browser requests
     return jsonify({
