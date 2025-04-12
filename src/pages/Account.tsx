@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ import * as z from "zod";
 import { Logo } from "@/components/Logo";
 import { Home } from "lucide-react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { useQueryClient } from "@tanstack/react-query";
 
 const formSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -31,6 +33,7 @@ const formSchema = z.object({
 
 const Account = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -161,12 +164,19 @@ const Account = () => {
         return;
       }
 
+      // Invalidate relevant queries to force refresh of data
+      queryClient.invalidateQueries({ queryKey: ['garminCredentials'] });
+      queryClient.invalidateQueries({ queryKey: ['garminData'] });
+
       toast.success('Garmin credentials deleted successfully');
       
       // Update the form and local state
       form.setValue('garmin_email', '');
       form.setValue('garmin_password', '');
       setProfile({ ...profile, garmin_email: null, garmin_password: null });
+
+      // Redirect to dashboard to see the updated state
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error:', error);
       toast.error('An unexpected error occurred');
@@ -193,7 +203,13 @@ const Account = () => {
         return;
       }
 
+      // Invalidate relevant queries to force refresh of data
+      queryClient.invalidateQueries({ queryKey: ['garminData'] });
+
       toast.success('All your data has been deleted');
+      
+      // Redirect to dashboard to see the updated state
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error:', error);
       toast.error('An unexpected error occurred');
