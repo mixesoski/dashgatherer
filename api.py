@@ -109,8 +109,19 @@ def log_error(error_message, exception=None):
 @app.route('/')
 def root():
     """Root endpoint that shows API status or redirects to frontend"""
-    # Check if we're already on trimpbara.space to prevent redirect loops
-    if request.headers.get('Host') == 'trimpbara.space':
+    # Get the host from headers
+    host = request.headers.get('Host', '')
+    logger.info(f"Received request at root endpoint. Host: {host}")
+    
+    # Check if this is an API request
+    is_api_request = (
+        'application/json' in request.headers.get('Accept', '') or
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+        'api' in host.lower()
+    )
+    
+    if is_api_request:
+        logger.info("API request detected, returning API status")
         return jsonify({
             'status': 'online',
             'message': 'DashGatherer API is running',
@@ -123,22 +134,9 @@ def root():
             'timestamp': datetime.utcnow().isoformat()
         })
     
-    # Only redirect if coming from a different domain
-    if request.headers.get('Accept', '').find('text/html') != -1:
-        return redirect('https://trimpbara.space')
-    
-    # Return API status for non-browser requests
-    return jsonify({
-        'status': 'online',
-        'message': 'DashGatherer API is running',
-        'version': '1.0.0',
-        'endpoints': {
-            'health': '/api/health',
-            'sync_garmin': '/api/sync-garmin',
-            'update_chart': '/api/update-chart'
-        },
-        'timestamp': datetime.utcnow().isoformat()
-    })
+    # For all other requests, redirect to the frontend
+    logger.info("Non-API request detected, redirecting to frontend")
+    return redirect('https://trimpbara.space/dashboard', code=302)
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
