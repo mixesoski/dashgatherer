@@ -126,8 +126,8 @@ def root():
             'timestamp': datetime.utcnow().isoformat()
         })
     
-    # For all other requests (including trimpbara.space), redirect to the frontend
-    return redirect('https://trimpbara.space/dashboard')
+    # For all other requests (including trimpbara.space), redirect to the frontend root
+    return redirect('https://trimpbara.space')
 
 # Add a catch-all route for the API domain
 @app.route('/<path:path>')
@@ -142,8 +142,8 @@ def catch_all(path):
             'message': f'The path /{path} does not exist on the API server'
         }), 404
         
-    # For frontend domain, redirect to frontend
-    return redirect('https://trimpbara.space/dashboard')
+    # For frontend domain, redirect to frontend root
+    return redirect('https://trimpbara.space')
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
