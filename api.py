@@ -108,51 +108,19 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def root():
-    """Root endpoint that shows API status or redirects to frontend"""
-    # Get the host from headers
-    host = request.headers.get('Host', '')
-    logger.info(f"Received request at root endpoint. Host: {host}")
-    
-    # If the request is to the API domain, return API status
-    if 'onrender.com' in host.lower():
-        logger.info("API domain detected, returning API status")
-        return jsonify({
-            'status': 'online',
-            'message': 'DashGatherer API is running',
-            'version': '1.0.0',
-            'endpoints': {
-                'health': '/api/health',
-                'sync_garmin': '/api/sync-garmin',
-                'update_chart': '/api/update-chart'
-            },
-            'timestamp': datetime.utcnow().isoformat()
-        })
-    
-    # For frontend domain requests, return 200 OK
-    if 'trimpbara.space' in host.lower():
-        logger.info("Frontend domain detected, returning 200 OK")
-        return '', 200
-    
-    # For all other requests, redirect to the frontend domain
-    logger.info("Other domain detected, redirecting to frontend")
-    return redirect('https://trimpbara.space', code=302)
-
-# Add a catch-all route to handle all other paths
-@app.route('/<path:path>')
-def catch_all(path):
-    """Catch-all route to handle all other paths"""
-    host = request.headers.get('Host', '')
-    logger.info(f"Catch-all route hit. Path: {path}, Host: {host}")
-    
-    # If the request is to the API domain, return 404
-    if 'onrender.com' in host.lower():
-        return jsonify({
-            'error': 'Not Found',
-            'message': f'The path /{path} does not exist on the API server'
-        }), 404
-    
-    # For frontend domain or other requests, redirect to frontend root
-    return redirect('https://trimpbara.space', code=302)
+    """Root endpoint that shows API status"""
+    logger.info(f"Received request at root endpoint. Host: {request.headers.get('Host', '')}")
+    return jsonify({
+        'status': 'online',
+        'message': 'DashGatherer API is running',
+        'version': '1.0.0',
+        'endpoints': {
+            'health': '/api/health',
+            'sync_garmin': '/api/sync-garmin',
+            'update_chart': '/api/update-chart'
+        },
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
