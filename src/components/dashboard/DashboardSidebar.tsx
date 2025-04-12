@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -104,7 +103,11 @@ export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps)
         </div>
         
         <div className="mt-1 px-3">
-          <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700 text-white justify-center" asChild>
+          <Button 
+            variant="default" 
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white justify-center" 
+            asChild
+          >
             <Link to="/subscription">
               Upgrade to Premium
             </Link>
