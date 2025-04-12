@@ -22,12 +22,15 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
+import { getUserFriendlyErrorMessage } from "@/utils/errorMessages";
+
 interface Athlete {
   user_id: string;
   user: {
     email: string;
   };
 }
+
 const Index = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [showButtons, setShowButtons] = useState(true);
@@ -37,6 +40,7 @@ const Index = () => {
   const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
   const {
     data: roleData
   } = useQuery({
@@ -53,6 +57,7 @@ const Index = () => {
     },
     enabled: !!userId
   });
+
   const {
     data: athletes
   } = useQuery<Athlete[]>({
@@ -82,7 +87,9 @@ const Index = () => {
     },
     enabled: !!userId && roleData === 'coach'
   });
+
   const relevantUserId = userRole === 'coach' ? selectedAthleteId : userId;
+
   const {
     data: garminCredentials,
     isLoading: isCredentialsLoading,
@@ -100,6 +107,7 @@ const Index = () => {
     },
     enabled: !!userId && userRole !== 'coach'
   });
+
   const {
     data: garminData,
     isLoading: isDataLoading,
@@ -119,6 +127,7 @@ const Index = () => {
     },
     enabled: !!relevantUserId
   });
+
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
@@ -138,67 +147,74 @@ const Index = () => {
     };
     getCurrentUser();
   }, []);
+
   useEffect(() => {
     if (garminData && garminData.length > 0) {
       setShowButtons(false);
     }
   }, [garminData]);
+
   useEffect(() => {
     if (roleData) {
       setUserRole(roleData);
     }
   }, [roleData]);
+
   const handleDeleteCredentials = async () => {
     if (!userId) return;
     const {
       error
     } = await supabase.from('garmin_credentials').delete().eq('user_id', userId);
     if (error) {
-      toast.error("Failed to delete Garmin credentials");
+      toast.error(getUserFriendlyErrorMessage(error));
       return;
     }
-    toast.success("Garmin credentials deleted successfully");
+    toast.success("Garmin connection removed successfully");
     await refetchCredentials();
   };
+
   const handleSync = async () => {
     if (!relevantUserId || !startDate) {
-      toast.error('No user logged in or start date not selected');
+      toast.error('Please log in and select a start date before syncing');
       return;
     }
     setIsUpdating(true);
-    toast.custom(() => <ProgressToast message="Syncing Garmin data..." />);
+    toast.custom(() => <ProgressToast message="Syncing with Garmin Connect..." />);
     const success = await syncGarminData(relevantUserId, startDate);
     if (success) {
       setShowButtons(false);
       await refetchGarminData();
-      toast.success("Data synced successfully");
+      toast.success("Your training data has been successfully synced");
     } else {
-      toast.error("Failed to sync data");
+      toast.error("We couldn't sync your Garmin data. Please check your credentials and try again");
     }
     setIsUpdating(false);
   };
+
   const handleUpdate = async () => {
     if (!relevantUserId) return;
     try {
       setIsUpdating(true);
-      toast.custom(() => <ProgressToast message="Updating Garmin data..." />);
+      toast.custom(() => <ProgressToast message="Updating your latest training data..." />);
       const success = await updateGarminData(relevantUserId);
       if (success) {
         await refetchGarminData();
-        toast.success("Data updated successfully");
+        toast.success("Your training data has been updated successfully");
       } else {
-        toast.error("Failed to update data");
+        toast.error("We couldn't update your training data. Please try again later");
       }
     } finally {
       setIsUpdating(false);
     }
   };
+
   if (isInitialLoading) {
     return <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
         <Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
         <p className="text-xl font-medium text-gray-700">Loading your training data...</p>
       </div>;
   }
+
   return <div className="flex h-screen bg-gray-50">
       <DashboardSidebar userRole={userRole} userEmail={userEmail} />
       
@@ -315,4 +331,5 @@ const Index = () => {
       </div>
     </div>;
 };
+
 export default Index;
