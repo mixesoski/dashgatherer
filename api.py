@@ -38,7 +38,7 @@ if missing_vars:
 # Initialize CORS
 try:
     CORS(app, resources={
-        r"/api/*": {
+        r"/*": {  # Allow CORS for all routes when accessed from allowed origins
             "origins": ["https://trimpbara.space", "http://localhost:5173"],
             "methods": ["GET", "POST", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
@@ -108,19 +108,42 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def root():
-    """Root endpoint that shows API status"""
-    logger.info(f"Received request at root endpoint. Host: {request.headers.get('Host', '')}")
-    return jsonify({
-        'status': 'online',
-        'message': 'DashGatherer API is running',
-        'version': '1.0.0',
-        'endpoints': {
-            'health': '/api/health',
-            'sync_garmin': '/api/sync-garmin',
-            'update_chart': '/api/update-chart'
-        },
-        'timestamp': datetime.utcnow().isoformat()
-    })
+    """Root endpoint that shows API status or redirects to frontend"""
+    host = request.headers.get('Host', '')
+    logger.info(f"Received request at root endpoint. Host: {host}")
+    
+    # If accessing through the API domain, return API status
+    if 'onrender.com' in host:
+        return jsonify({
+            'status': 'online',
+            'message': 'DashGatherer API is running',
+            'version': '1.0.0',
+            'endpoints': {
+                'health': '/api/health',
+                'sync_garmin': '/api/sync-garmin',
+                'update_chart': '/api/update-chart'
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    
+    # For all other requests (including trimpbara.space), redirect to the frontend
+    return redirect('https://trimpbara.space/dashboard')
+
+# Add a catch-all route for the API domain
+@app.route('/<path:path>')
+def catch_all(path):
+    """Handle undefined routes"""
+    host = request.headers.get('Host', '')
+    logger.info(f"Catch-all route hit. Path: {path}, Host: {host}")
+    
+    if 'onrender.com' in host:
+        return jsonify({
+            'error': 'Not Found',
+            'message': f'The path /{path} does not exist on the API server'
+        }), 404
+        
+    # For frontend domain, redirect to frontend
+    return redirect('https://trimpbara.space/dashboard')
 
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
