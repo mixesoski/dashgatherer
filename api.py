@@ -134,46 +134,71 @@ def catch_all(path):
 @app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
     try:
+        logger.info("=== Starting /api/sync-garmin request ===")
+        
+        # Log request details
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Request data: {request.get_data(as_text=True)}")
+        
         # Verify authentication
         auth_header = request.headers.get('Authorization')
+        logger.info(f"Auth header present: {bool(auth_header)}")
+        
         user = verify_auth_token(auth_header)
         if not user:
+            logger.error("Authentication failed - invalid or missing token")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
-        data = request.json
+        try:
+            data = request.json
+            logger.info(f"Parsed request JSON data: {data}")
+        except Exception as json_err:
+            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
+            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
+
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
         # Access user ID correctly from UserResponse object
         if not user_id or user_id != user.user.id:
-            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
+            logger.error(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
-        print(f"Starting sync for user {user_id}, days={days}")
+        logger.info(f"Starting sync for user {user_id}, days={days}")
         
         # Calculate start date from days
         start_date = datetime.now() - timedelta(days=days)
         is_first_sync = data.get('is_first_sync', False)
+        logger.info(f"Start date: {start_date}, is_first_sync: {is_first_sync}")
         
         # Use the original garmin_sync module for sync
         from garmin_sync import sync_garmin_data
         
         # Sync Garmin data using the original implementation that works
+        logger.info("Calling sync_garmin_data function...")
         sync_result = sync_garmin_data(user_id, start_date, is_first_sync)
+        logger.info(f"Sync result: {sync_result}")
         
         if not sync_result.get('success', False):
+            logger.error(f"Sync failed: {sync_result}")
             return jsonify(sync_result)
         
+        logger.info("Sync completed successfully")
         return jsonify({
             'success': True,
             'newActivities': sync_result.get('newActivities', 0),
             'message': sync_result.get('message', 'Sync complete')
         })
     except Exception as e:
-        print(f"Error in sync-garmin: {e}")
-        traceback_str = traceback.format_exc()
-        print(traceback_str)
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error("Error in sync-garmin endpoint:")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error("Traceback:", exc_info=True)
+        return jsonify({
+            'success': False, 
+            'error': str(e),
+            'error_type': type(e).__name__
+        }), 500
 
 @app.route('/api/update-chart', methods=['POST'])
 def update_chart():
