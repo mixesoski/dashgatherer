@@ -15,7 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["https://dashgatherer.lovable.app", "http://localhost:5173"],
+        "origins": ["https://trimpbara.space", "http://localhost:5173"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
         "supports_credentials": True,
