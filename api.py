@@ -9,62 +9,25 @@ import traceback
 import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Load environment variables
-try:
-    load_dotenv()
-    logger.info("Environment variables loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load environment variables: {e}")
-    raise
+load_dotenv()
 
 app = Flask(__name__)
-
-# Verify required environment variables
-required_env_vars = ["SUPABASE_URL", "SUPABASE_KEY"]
-missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-if missing_vars:
-    logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
-    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
-
-# Initialize CORS
-try:
-    CORS(app, resources={
-        r"/*": {  # Allow CORS for all routes from allowed origins
-            "origins": [
-                "https://trimpbara.space",
-                "https://dashgatherer.lovable.app",
-                "http://localhost:5173"
-            ],
-            "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
-            "supports_credentials": True,
-            "expose_headers": ["Content-Type", "Authorization"]
-        }
-    })
-    logger.info("CORS initialized successfully with allowed origins: trimpbara.space, dashgatherer.lovable.app")
-except Exception as e:
-    logger.error(f"Failed to initialize CORS: {e}")
-    raise
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://dashgatherer.lovable.app", "http://localhost:5173"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Initialize Supabase client
-try:
-    supabase: Client = create_client(
-        os.getenv("SUPABASE_URL", ""),
-        os.getenv("SUPABASE_KEY", "")
-    )
-    logger.info("Supabase client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize Supabase client: {e}")
-    raise
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL", ""),
+    os.getenv("SUPABASE_KEY", "")
+)
 
 @app.before_request
 def log_request_info():
@@ -112,8 +75,12 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def root():
-    """Root endpoint that shows API status"""
-    logger.info(f"Received request at root endpoint")
+    """Root endpoint that shows API status or redirects to frontend"""
+    # Check if the request is from a browser
+    if request.headers.get('Accept', '').find('text/html') != -1:
+        return redirect('https://dashgatherer.lovable.app')
+    
+    # Return API status for non-browser requests
     return jsonify({
         'status': 'online',
         'message': 'DashGatherer API is running',
@@ -126,88 +93,49 @@ def root():
         'timestamp': datetime.utcnow().isoformat()
     })
 
-@app.route('/<path:path>')
-def catch_all(path):
-    """Handle undefined API routes"""
-    logger.info(f"Catch-all route hit. Path: {path}")
-    return jsonify({
-        'error': 'Not Found',
-        'message': f'The path /{path} does not exist on the API server'
-    }), 404
-
-@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
+@app.route('/api/sync-garmin', methods=['POST'])
 def sync_garmin():
-    # Handle preflight requests
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
     try:
-        logger.info("=== Starting /api/sync-garmin request ===")
-        
-        # Log request details
-        logger.info(f"Headers: {dict(request.headers)}")
-        logger.info(f"Request data: {request.get_data(as_text=True)}")
-        
         # Verify authentication
         auth_header = request.headers.get('Authorization')
-        logger.info(f"Auth header present: {bool(auth_header)}")
-        
         user = verify_auth_token(auth_header)
         if not user:
-            logger.error("Authentication failed - invalid or missing token")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
-        try:
-            data = request.json
-            logger.info(f"Parsed request JSON data: {data}")
-        except Exception as json_err:
-            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
-            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
-
+        data = request.json
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
         # Access user ID correctly from UserResponse object
         if not user_id or user_id != user.user.id:
-            logger.error(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
+            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
-        logger.info(f"Starting sync for user {user_id}, days={days}")
+        print(f"Starting sync for user {user_id}, days={days}")
         
         # Calculate start date from days
         start_date = datetime.now() - timedelta(days=days)
         is_first_sync = data.get('is_first_sync', False)
-        logger.info(f"Start date: {start_date}, is_first_sync: {is_first_sync}")
         
         # Use the original garmin_sync module for sync
         from garmin_sync import sync_garmin_data
         
         # Sync Garmin data using the original implementation that works
-        logger.info("Calling sync_garmin_data function...")
         sync_result = sync_garmin_data(user_id, start_date, is_first_sync)
-        logger.info(f"Sync result: {sync_result}")
         
         if not sync_result.get('success', False):
-            logger.error(f"Sync failed: {sync_result}")
             return jsonify(sync_result)
         
-        logger.info("Sync completed successfully")
         return jsonify({
             'success': True,
             'newActivities': sync_result.get('newActivities', 0),
             'message': sync_result.get('message', 'Sync complete')
         })
     except Exception as e:
-        logger.error("Error in sync-garmin endpoint:")
-        logger.error(f"Error type: {type(e).__name__}")
-        logger.error(f"Error message: {str(e)}")
-        logger.error("Traceback:", exc_info=True)
-        return jsonify({
-            'success': False, 
-            'error': str(e),
-            'error_type': type(e).__name__
-        }), 500
+        print(f"Error in sync-garmin: {e}")
+        traceback_str = traceback.format_exc()
+        print(traceback_str)
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update-chart', methods=['POST'])
 def update_chart():
@@ -273,71 +201,27 @@ def update_chart():
             'error': str(e)
         }), 500
 
-@app.route('/api/health')
+@app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint for Render"""
     try:
-        # Test Supabase connection
+        # Just verify we can connect to Supabase without requiring a specific table
         supabase.auth.get_session()
         return jsonify({
             'status': 'healthy',
-            'message': 'API is running and Supabase connection is working'
+            'timestamp': datetime.utcnow().isoformat()
         })
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        print(f"Health check error: {e}")
         return jsonify({
             'status': 'unhealthy',
             'error': str(e)
         }), 500
 
-@app.errorhandler(500)
-def handle_500_error(e):
-    logger.error(f"Internal server error: {e}")
-    return jsonify({
-        'error': 'Internal server error',
-        'message': str(e),
-        'timestamp': datetime.utcnow().isoformat()
-    }), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logger.error(f"Unhandled exception: {e}")
-    return jsonify({
-        'error': 'Internal server error',
-        'message': str(e),
-        'timestamp': datetime.utcnow().isoformat()
-    }), 500
-
-@app.after_request
-def add_cors_headers(response):
-    """Add CORS headers to all responses"""
-    origin = request.headers.get('Origin')
-    if origin in [
-        'https://trimpbara.space',
-        'https://dashgatherer.lovable.app',
-        'http://localhost:5173'
-    ]:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Cache-Control'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-    return response
-
 if __name__ == '__main__':
-    try:
-        port = int(os.environ.get('PORT', 5001))
-        logger.info(f"Starting Flask server on port {port}")
-        logger.info(f"Debug mode: {os.environ.get('FLASK_ENV') == 'development'}")
-        
-        # Test Supabase connection before starting
-        try:
-            supabase.auth.get_session()
-            logger.info("Successfully connected to Supabase")
-        except Exception as e:
-            logger.error(f"Failed to connect to Supabase: {e}")
-            raise
-            
-        app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_ENV') == 'development')
-    except Exception as e:
-        logger.error(f"Failed to start server: {e}")
-        raise
+    port = int(os.environ.get('PORT', 5001))
+    print(f"\n{'='*50}")
+    print(f"Starting Flask server on port {port}")
+    print(f"Debug mode: {os.environ.get('FLASK_ENV') == 'development'}")
+    print(f"{'='*50}\n")
+    app.run(host='0.0.0.0', port=port, debug=True)
