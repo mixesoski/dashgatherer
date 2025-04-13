@@ -15,13 +15,17 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
     const days = Math.ceil((new Date().getTime() - startDate.getTime()) / (1000 * 3600 * 24));
     
     // Call the API
-    const url = import.meta.env.VITE_API_URL || 'https://trimpbara-backend.onrender.com';
-    const response = await fetch(`${url}/api/sync-garmin`, {
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://dashgatherer-api.onrender.com';
+    console.log("Using API URL:", apiUrl);
+    
+    const response = await fetch(`${apiUrl}/api/sync-garmin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
+      credentials: 'include',
+      mode: 'cors',
       body: JSON.stringify({
         user_id: userId,
         days: days,
@@ -73,13 +77,17 @@ export const updateGarminData = async (userId: string) => {
   }
 
   try {
-    const url = import.meta.env.VITE_API_URL || 'https://trimpbara-backend.onrender.com';
-    const response = await fetch(`${url}/api/update-chart`, {
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://dashgatherer-api.onrender.com';
+    console.log("Using API URL:", apiUrl);
+    
+    const response = await fetch(`${apiUrl}/api/update-chart`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
+      credentials: 'include',
+      mode: 'cors',
       body: JSON.stringify({
         userId,
         forceRefresh: true
