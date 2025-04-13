@@ -87,6 +87,7 @@ export const GarminChart = ({
   const [editTrimp, setEditTrimp] = useState("");
   const [editActivityName, setEditActivityName] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("recent");
 
   useEffect(() => {
@@ -528,7 +529,7 @@ export const GarminChart = ({
   const handleUpdateEntry = async () => {
     if (!editData || !editDate) return;
     try {
-      setIsEditing(true);
+      setIsEditSubmitting(true);
       const formattedDate = format(editDate, 'yyyy-MM-dd');
       const trimpValue = parseFloat(editTrimp);
       if (isNaN(trimpValue)) {
@@ -601,6 +602,7 @@ export const GarminChart = ({
       console.error("Error in handleUpdateEntry:", error);
       toast.error("An error occurred while updating the activity");
     } finally {
+      setIsEditSubmitting(false);
       setIsEditing(false);
     }
   };
@@ -983,8 +985,8 @@ export const GarminChart = ({
                 <Button variant="outline" onClick={() => setIsEditing(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateEntry} disabled={!editDate} className="gap-2">
-                  {isEditing ? (
+                <Button onClick={handleUpdateEntry} disabled={!editDate || isEditSubmitting} className="gap-2">
+                  {isEditSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Updating...
