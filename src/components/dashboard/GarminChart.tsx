@@ -983,11 +983,13 @@ export const GarminChart = ({
                 <Button variant="outline" onClick={() => setIsEditing(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateEntry} disabled={isEditing && !editDate} className="gap-2">
-                  {isEditing ? <>
+                <Button onClick={handleUpdateEntry} disabled={!editDate} className="gap-2">
+                  {isEditing ? (
+                    <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Updating...
-                    </> : 'Save Changes'}
+                    </>
+                  ) : 'Save Changes'}
                 </Button>
               </DialogFooter>
             </DialogContent>
