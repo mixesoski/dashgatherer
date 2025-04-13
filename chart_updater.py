@@ -56,7 +56,7 @@ class ChartUpdater:
             self.garmin = garminconnect.Garmin(email, password)
             
             print("Logging in to Garmin...")
-        self.garmin.login()
+            self.garmin.login()
             print("Login successful!")
             
             # Test the connection by getting user summary
@@ -133,7 +133,7 @@ class ChartUpdater:
             'ctl': round(new_ctl, 2),
             'tsb': round(new_tsb, 2)
         }
-
+        
         print(f"\nMetrics calculation for TRIMP {current_trimp}:")
         print(f"Previous day's metrics - ATL: {previous_atl}, CTL: {previous_ctl}")
         print(f"New ATL: {metrics['atl']}")
@@ -171,7 +171,7 @@ class ChartUpdater:
                     last_date, previous_metrics = self.find_last_existing_date()
                     print(f"Last date: {last_date}")
                     print(f"Previous metrics: {previous_metrics}")
-                    except Exception as e:
+                except Exception as e:
                     print(f"Failed to find last existing date: {e}")
                     raise
                 
@@ -179,12 +179,12 @@ class ChartUpdater:
                     # If no data exists, start from 180 days ago
                     start_date = datetime.date.today() - datetime.timedelta(days=180)
                     print(f"No existing data found, starting from {start_date}")
-                    else:
+                else:
                     # Start from the day AFTER the last date
-                start_date = last_date + datetime.timedelta(days=1)
+                    start_date = last_date + datetime.timedelta(days=1)
                     print(f"Found existing data for {last_date}, starting from {start_date}")
-            
-            end_date = datetime.date.today()
+                
+                end_date = datetime.date.today()
             
             # If start_date is after end_date, there's nothing to update
             if start_date > end_date:
@@ -267,7 +267,7 @@ class ChartUpdater:
                 print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
                 print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
                 
-                    updated_count += 1
+                updated_count += 1
             
             print(f"\n=== Update completed ===")
             print(f"Total records processed: {updated_count}")

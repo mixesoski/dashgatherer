@@ -14,7 +14,6 @@ import { Logo } from "@/components/Logo";
 import { createCheckoutSession } from "@/services/stripe";
 import { Loader2 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getUserFriendlyErrorMessage } from "@/utils/errorMessages";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
 const Login = () => {
@@ -33,6 +32,7 @@ const Login = () => {
   const [isRedirectingToCheckout, setIsRedirectingToCheckout] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Handle redirect to checkout after successful signup/login if plan is specified
   const handleSubscriptionRedirect = async (userId: string) => {
     if (!planId || isRedirectingToCheckout) return;
     
@@ -40,11 +40,13 @@ const Login = () => {
       setIsRedirectingToCheckout(true);
       setIsLoading(true);
       
+      // Coach plan doesn't need checkout
       if (planId === 'coach') {
         navigate('/dashboard');
         return;
       }
       
+      // Organization plan shows contact sales message
       if (planId === 'organization') {
         toast({
           title: "Contact Sales",
@@ -54,6 +56,7 @@ const Login = () => {
         return;
       }
       
+      // For athlete plan, create checkout session
       const baseUrl = window.location.origin;
       const successUrl = `${baseUrl}/dashboard?subscription=success&plan=${planId}`;
       const cancelUrl = `${baseUrl}/pricing?subscription=canceled`;
@@ -69,6 +72,7 @@ const Login = () => {
         navigate('/dashboard');
       } else if (result.url) {
         console.log("Redirecting to checkout URL:", result.url);
+        // Redirect to Stripe checkout
         window.location.href = result.url;
       } else {
         console.error("No URL returned from checkout session");
@@ -102,12 +106,13 @@ const Login = () => {
       
       if (sessionError) {
         console.error("Session check error:", sessionError);
-        setError(getUserFriendlyErrorMessage(sessionError));
+        setError("Nieprawidłowe dane logowania");
         return;
       }
       
       if (session) {
         console.log("User is logged in, checking for plan parameter:", planId);
+        // If we have a plan parameter, handle subscription redirect
         if (planId) {
           await handleSubscriptionRedirect(session.user.id);
         } else {
@@ -123,6 +128,7 @@ const Login = () => {
       
       if (event === 'SIGNED_IN' && session) {
         console.log("User signed in, checking for plan parameter:", planId);
+        // If we have a plan parameter, handle subscription redirect
         if (planId) {
           await handleSubscriptionRedirect(session.user.id);
         } else {
@@ -135,7 +141,7 @@ const Login = () => {
       }
       
       if (event === 'TOKEN_REFRESHED') {
-        console.log('Token refreshed successfully');
+        console.log('Token odświeżony pomyślnie');
       }
     });
     
@@ -144,6 +150,7 @@ const Login = () => {
     };
   }, [navigate, planId]);
 
+  // Update role if plan changes
   useEffect(() => {
     if (planId === 'coach') {
       setRole('coach');
@@ -182,8 +189,9 @@ const Login = () => {
         
         if (signUpError) {
           console.error('Error signing up:', signUpError);
-          setError(getUserFriendlyErrorMessage(signUpError));
+          setError(signUpError.message);
         } else {
+          // Add profile entry directly from the client side
           if (data.user) {
             try {
               const { error: profileError } = await supabase
@@ -197,9 +205,11 @@ const Login = () => {
 
               if (profileError) {
                 console.error('Error creating profile:', profileError);
+                // Continue anyway as authentication succeeded
               }
             } catch (profileCreationError) {
               console.error('Exception creating profile:', profileCreationError);
+              // Continue anyway as authentication succeeded
             }
           }
 
@@ -208,6 +218,7 @@ const Login = () => {
             description: "Please check your email to confirm your account."
           });
           
+          // If email confirmation is disabled, the user is already signed in
           if (data.session) {
             console.log("User signed up and session created without email confirmation");
             if (planId) {
@@ -226,7 +237,7 @@ const Login = () => {
         
         if (signInError) {
           console.error('Error logging in:', signInError);
-          setError(getUserFriendlyErrorMessage(signInError));
+          setError(signInError.message);
         } else {
           toast({
             title: "Welcome back!",
@@ -240,7 +251,7 @@ const Login = () => {
       }
     } catch (error) {
       console.error("Authentication error:", error);
-      setError(getUserFriendlyErrorMessage(error));
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
