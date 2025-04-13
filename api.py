@@ -9,12 +9,22 @@ import traceback
 import sys
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# Initialize CORS with all necessary headers
 CORS(app, resources={
-    r"/api/*": {
+    r"/*": {  # Allow CORS for all routes
         "origins": ["https://dashgatherer.lovable.app", "http://localhost:5173"],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
@@ -24,27 +34,39 @@ CORS(app, resources={
 })
 
 # Initialize Supabase client
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL", ""),
-    os.getenv("SUPABASE_KEY", "")
-)
+try:
+    supabase: Client = create_client(
+        os.getenv("SUPABASE_URL", ""),
+        os.getenv("SUPABASE_KEY", "")
+    )
+    logger.info("Supabase client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Supabase client: {e}")
+    raise
 
 @app.before_request
 def log_request_info():
     """Log request information for debugging"""
-    print(f"\n{'='*50}")
-    print(f"Request: {request.method} {request.url}")
-    print(f"Origin: {request.headers.get('Origin', 'No Origin')}")
-    print(f"Headers: {dict(request.headers)}")
-    print(f"{'='*50}\n")
+    logger.info(f"\n{'='*50}")
+    logger.info(f"Request: {request.method} {request.url}")
+    logger.info(f"Origin: {request.headers.get('Origin', 'No Origin')}")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"{'='*50}\n")
 
 @app.after_request
 def after_request(response):
-    """Log response information for debugging"""
-    print(f"\n{'='*50}")
-    print(f"Response: {response.status}")
-    print(f"Headers: {dict(response.headers)}")
-    print(f"{'='*50}\n")
+    """Add CORS headers and log response"""
+    origin = request.headers.get('Origin')
+    if origin in ["https://dashgatherer.lovable.app", "http://localhost:5173"]:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Cache-Control'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    logger.info(f"\n{'='*50}")
+    logger.info(f"Response: {response.status}")
+    logger.info(f"Headers: {dict(response.headers)}")
+    logger.info(f"{'='*50}\n")
     return response
 
 def verify_auth_token(auth_header):
@@ -93,25 +115,39 @@ def root():
         'timestamp': datetime.utcnow().isoformat()
     })
 
-@app.route('/api/sync-garmin', methods=['POST'])
+@app.route('/api/sync-garmin', methods=['POST', 'OPTIONS'])
 def sync_garmin():
+    if request.method == 'OPTIONS':
+        return '', 204  # Return empty response for preflight requests
+        
     try:
+        logger.info("=== Starting /api/sync-garmin request ===")
+        
         # Verify authentication
         auth_header = request.headers.get('Authorization')
+        logger.info(f"Auth header present: {bool(auth_header)}")
+        
         user = verify_auth_token(auth_header)
         if not user:
+            logger.error("Authentication failed - invalid or missing token")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
-        data = request.json
+        try:
+            data = request.json
+            logger.info(f"Parsed request JSON data: {data}")
+        except Exception as json_err:
+            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
+            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
+
         user_id = data.get('user_id')
         days = data.get('days', 15)
         
         # Access user ID correctly from UserResponse object
         if not user_id or user_id != user.user.id:
-            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
+            logger.error(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
-        print(f"Starting sync for user {user_id}, days={days}")
+        logger.info(f"Starting sync for user {user_id}, days={days}")
         
         # Calculate start date from days
         start_date = datetime.now() - timedelta(days=days)
@@ -121,84 +157,92 @@ def sync_garmin():
         from garmin_sync import sync_garmin_data
         
         # Sync Garmin data using the original implementation that works
+        logger.info("Starting Garmin sync...")
         sync_result = sync_garmin_data(user_id, start_date, is_first_sync)
+        logger.info(f"Sync result: {sync_result}")
         
         if not sync_result.get('success', False):
+            logger.error(f"Sync failed: {sync_result}")
             return jsonify(sync_result)
         
+        logger.info("Sync completed successfully")
         return jsonify({
             'success': True,
             'newActivities': sync_result.get('newActivities', 0),
             'message': sync_result.get('message', 'Sync complete')
         })
     except Exception as e:
-        print(f"Error in sync-garmin: {e}")
-        traceback_str = traceback.format_exc()
-        print(traceback_str)
-        return jsonify({'success': False, 'error': str(e)})
+        logger.error("Error in sync-garmin endpoint:")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error("Traceback:", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        }), 500
 
-@app.route('/api/update-chart', methods=['POST'])
+@app.route('/api/update-chart', methods=['POST', 'OPTIONS'])
 def update_chart():
+    if request.method == 'OPTIONS':
+        return '', 204  # Return empty response for preflight requests
+        
     try:
+        logger.info("=== Starting /api/update-chart request ===")
+        
         # Verify authentication
         auth_header = request.headers.get('Authorization')
-        print(f"\nReceived request to /api/update-chart")
-        print(f"Auth header present: {bool(auth_header)}")
-        print(f"Request method: {request.method}")
-        print(f"Content-Type: {request.headers.get('Content-Type')}")
-        print(f"Request data: {request.get_data(as_text=True)}")
+        logger.info(f"Auth header present: {bool(auth_header)}")
         
         user = verify_auth_token(auth_header)
         if not user:
-            print("Authentication failed - invalid or missing token")
-            print(f"Auth header: {auth_header[:15]}... (truncated)")
+            logger.error("Authentication failed - invalid or missing token")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
         try:
             data = request.json
-            print(f"Parsed request JSON data: {data}")
+            logger.info(f"Parsed request JSON data: {data}")
         except Exception as json_err:
-            print(f"Failed to parse JSON from request: {str(json_err)}")
-            print(f"Raw request data: {request.get_data(as_text=True)}")
+            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
             return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
         
         if not data:
-            print("No data provided in request body")
+            logger.error("No data provided in request body")
             return jsonify({'success': False, 'error': 'No data provided'}), 400
             
         user_id = data.get('userId')
         if not user_id:
-            print("No user ID provided in request")
+            logger.error("No user ID provided in request")
             return jsonify({'success': False, 'error': 'No user ID provided'}), 400
             
-        print(f"User ID from request: {user_id}")
-        print(f"User ID from token: {user.user.id}")
+        logger.info(f"User ID from request: {user_id}")
+        logger.info(f"User ID from token: {user.user.id}")
         
         if user_id != user.user.id:
-            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
+            logger.error(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
             return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
         
         # Check if force refresh is requested
         force_refresh = data.get('forceRefresh', False)
-        print(f"Force refresh requested: {force_refresh}")
+        logger.info(f"Force refresh requested: {force_refresh}")
         
-        print(f"\nStarting chart update for user: {user_id}")
+        logger.info(f"Starting chart update for user: {user_id}")
         
         # Pass the force_refresh parameter to the chart updater
         result = update_chart_data(user_id, force_refresh=force_refresh)
-        print(f"Chart update completed with result: {result}")
+        logger.info(f"Chart update completed with result: {result}")
         
         return jsonify(result)
         
     except Exception as e:
-        print(f"\nError in update chart endpoint:")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("Traceback:")
-        traceback.print_exc()
+        logger.error("Error in update-chart endpoint:")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error("Traceback:", exc_info=True)
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'error_type': type(e).__name__
         }), 500
 
 @app.route('/api/health', methods=['GET'])
