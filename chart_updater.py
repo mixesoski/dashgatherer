@@ -539,42 +539,25 @@ class ChartUpdater:
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
         try:
-            # Convert date_str to datetime object
+            # Convert date_str to datetime object and ensure consistent format
             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
             print(f"Upserting data for {date_str}:")
             print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
             
-            # First, check if a record exists for this date and user
-            existing = self.client.table('garmin_data') \
-                .select('*') \
-                .eq('user_id', self.user_id) \
-                .eq('date', date_iso) \
-                .execute()
+            # Use upsert with on_conflict to handle duplicates
+            self.client.table('garmin_data').upsert({
+                'date': date_iso,
+                'trimp': trimp_total,
+                'activity': activity_str,
+                'user_id': self.user_id,
+                'atl': new_metrics['atl'],
+                'ctl': new_metrics['ctl'],
+                'tsb': new_metrics['tsb']
+            }, on_conflict='user_id,date').execute()
             
-            if existing.data:
-                # Update existing record
-                self.client.table('garmin_data') \
-                    .update({
-                        'trimp': trimp_total,
-                        'activity': activity_str,
-                        **new_metrics
-                    }) \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', date_iso) \
-                    .execute()
-            else:
-                # Insert new record
-                self.client.table('garmin_data') \
-                    .insert({
-                        'date': date_iso,
-                        'trimp': trimp_total,
-                        'activity': activity_str,
-                        'user_id': self.user_id,
-                        **new_metrics
-                    }) \
-                    .execute()
+            print(f"Successfully updated/inserted data for {date_str}")
         except Exception as e:
             print(f"Error upserting metrics for {date_str}: {e}")
             print(f"Traceback: {traceback.format_exc()}")
