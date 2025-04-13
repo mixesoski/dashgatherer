@@ -138,7 +138,13 @@ def sync_garmin():
             logger.error("Authentication failed - invalid or missing token")
             return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
 
-        # ... keep existing code (JSON data parsing and processing)
+        # Parse JSON data from request
+        try:
+            data = request.json
+            logger.info(f"Parsed request JSON data: {data}")
+        except Exception as json_err:
+            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
+            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
 
         user_id = data.get('user_id')
         days = data.get('days', 15)
@@ -189,7 +195,51 @@ def update_chart():
         return '', 204  # Return empty response for preflight requests
         
     try:
-        # ... keep existing code (update-chart endpoint implementation)
+        logger.info("=== Starting /api/update-chart request ===")
+        
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        logger.info(f"Auth header present: {bool(auth_header)}")
+        
+        user = verify_auth_token(auth_header)
+        if not user:
+            logger.error("Authentication failed - invalid or missing token")
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+
+        try:
+            data = request.json
+            logger.info(f"Parsed request JSON data: {data}")
+        except Exception as json_err:
+            logger.error(f"Failed to parse JSON from request: {str(json_err)}")
+            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
+        
+        if not data:
+            logger.error("No data provided in request body")
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        user_id = data.get('userId')
+        if not user_id:
+            logger.error("No user ID provided in request")
+            return jsonify({'success': False, 'error': 'No user ID provided'}), 400
+            
+        logger.info(f"User ID from request: {user_id}")
+        logger.info(f"User ID from token: {user.user.id}")
+        
+        if user_id != user.user.id:
+            logger.error(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
+            return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
+        
+        # Check if force refresh is requested
+        force_refresh = data.get('forceRefresh', False)
+        logger.info(f"Force refresh requested: {force_refresh}")
+        
+        logger.info(f"Starting chart update for user: {user_id}")
+        
+        # Pass the force_refresh parameter to the chart updater
+        result = update_chart_data(user_id, force_refresh=force_refresh)
+        logger.info(f"Chart update completed with result: {result}")
+        
+        return jsonify(result)
         
     except Exception as e:
         logger.error("Error in update-chart endpoint:")
