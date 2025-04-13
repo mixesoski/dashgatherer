@@ -543,14 +543,40 @@ class ChartUpdater:
             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
+            # Get manual data for this date
+            manual_response = self.client.table('manual_data') \
+                .select('trimp, activity_name') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_str) \
+                .execute()
+            
+            manual_trimp = 0
+            manual_activities = []
+            
+            if manual_response.data:
+                for entry in manual_response.data:
+                    if entry.get('trimp'):
+                        manual_trimp += float(entry['trimp'])
+                    if entry.get('activity_name'):
+                        manual_activities.append(entry['activity_name'])
+            
+            # Combine Garmin and manual data
+            total_trimp = trimp_total + manual_trimp
+            all_activities = []
+            if activity_str != 'Rest Day':
+                all_activities.append(activity_str)
+            all_activities.extend(manual_activities)
+            combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
+            
             print(f"Upserting data for {date_str}:")
-            print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
+            print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
             
             # Use upsert with on_conflict to handle duplicates
             self.client.table('garmin_data').upsert({
                 'date': date_iso,
-                'trimp': trimp_total,
-                'activity': activity_str,
+                'trimp': total_trimp,
+                'activity': combined_activity_str,
                 'user_id': self.user_id,
                 'atl': new_metrics['atl'],
                 'ctl': new_metrics['ctl'],
