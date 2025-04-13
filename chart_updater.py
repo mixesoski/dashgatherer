@@ -546,15 +546,38 @@ class ChartUpdater:
             print(f"Upserting data for {date_str}:")
             print(f"TRIMP: {trimp_total} | ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
             
-            self.client.table('garmin_data').upsert({
-                'date': date_iso,
-                'trimp': trimp_total,
-                'activity': activity_str,
-                'user_id': self.user_id,
-                **new_metrics
-            }, on_conflict='user_id,date').execute()
+            # First, check if a record exists for this date and user
+            existing = self.client.table('garmin_data') \
+                .select('*') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_iso) \
+                .execute()
+            
+            if existing.data:
+                # Update existing record
+                self.client.table('garmin_data') \
+                    .update({
+                        'trimp': trimp_total,
+                        'activity': activity_str,
+                        **new_metrics
+                    }) \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', date_iso) \
+                    .execute()
+            else:
+                # Insert new record
+                self.client.table('garmin_data') \
+                    .insert({
+                        'date': date_iso,
+                        'trimp': trimp_total,
+                        'activity': activity_str,
+                        'user_id': self.user_id,
+                        **new_metrics
+                    }) \
+                    .execute()
         except Exception as e:
             print(f"Error upserting metrics for {date_str}: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
 
     def process_activity(self, activity, date_str):
         """Process a single activity and extract TRIMP data"""
