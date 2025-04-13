@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, redirect
 from flask_cors import CORS
 from direct_garmin_sync import sync_garmin_data
