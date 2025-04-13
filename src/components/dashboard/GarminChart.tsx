@@ -378,13 +378,41 @@ export const GarminChart = ({
         ctl: 0,
         tsb: 0
       };
+
+      // Get all manual entries for this date
+      const {
+        data: manualEntries,
+        error: manualEntriesError
+      } = await supabase.from('manual_data').select('trimp, activity_name').eq('user_id', currentUserId).eq('date', formattedDate);
+      if (manualEntriesError) {
+        logError("Error fetching manual entries", manualEntriesError, {
+          userId: currentUserId,
+          date: formattedDate
+        });
+        throw manualEntriesError;
+      }
+
+      // Calculate total TRIMP from all manual entries
+      const existingManualTrimp = manualEntries?.reduce((sum, entry) => sum + (entry.trimp || 0), 0) || 0;
+      const existingManualActivities = manualEntries?.map(entry => entry.activity_name).filter(Boolean) || [];
+
       let combinedTrimp = trimpValue;
       let combinedActivities = [activityName];
+
       if (existingEntry) {
-        combinedTrimp = existingEntry.trimp + trimpValue;
-        let existingActivities = existingEntry.activity.split(', ').filter(a => a !== "Rest Day");
-        combinedActivities = [...existingActivities, activityName];
+        // If there's a Garmin entry, add its TRIMP and activities (if not Rest Day)
+        if (existingEntry.activity !== 'Rest Day') {
+          combinedTrimp += existingEntry.trimp;
+          combinedActivities.push(...existingEntry.activity.split(', '));
+        }
       }
+
+      // Add existing manual activities (excluding the new one we're adding)
+      combinedActivities.push(...existingManualActivities);
+
+      // Remove duplicates and filter out empty strings
+      combinedActivities = Array.from(new Set(combinedActivities)).filter(Boolean);
+
       console.log(`Combined TRIMP: ${combinedTrimp}, Combined Activities: ${combinedActivities.join(', ')}`);
       const newAtl = previousMetrics.atl + (combinedTrimp - previousMetrics.atl) / 7;
       const newCtl = previousMetrics.ctl + (combinedTrimp - previousMetrics.ctl) / 42;
@@ -400,7 +428,7 @@ export const GarminChart = ({
         user_id: currentUserId,
         date: formattedDate,
         trimp: combinedTrimp,
-        activity: combinedActivities.join(', '),
+        activity: combinedActivities.length > 0 ? combinedActivities.join(', ') : 'Rest Day',
         atl: parseFloat(newAtl.toFixed(2)),
         ctl: parseFloat(newCtl.toFixed(2)),
         tsb: parseFloat(newTsb.toFixed(2))
