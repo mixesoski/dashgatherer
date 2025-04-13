@@ -19,7 +19,7 @@ CORS(app, resources={
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
         "supports_credentials": True,
-        "expose_headers": ["Content-Type", "Authorization"]
+        "max_age": 3600
     }
 })
 
@@ -45,6 +45,10 @@ def after_request(response):
     print(f"Response: {response.status}")
     print(f"Headers: {dict(response.headers)}")
     print(f"{'='*50}\n")
+    response.headers.add('Access-Control-Allow-Origin', 'https://dashgatherer.lovable.app')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cache-Control')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
 
 def verify_auth_token(auth_header):
