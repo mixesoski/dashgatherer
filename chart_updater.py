@@ -165,28 +165,27 @@ class ChartUpdater:
                 print(f"Failed to find last existing date: {e}")
                 raise
 
-            # If force refresh is enabled, we'll reprocess recent days regardless
+            # Set the end date to today if not specified
+            if not end_date:
+                end_date = datetime.date.today()
+            
+            # If no start_date provided, use the day after the last date in database
+            if not start_date:
+                if last_date:
+                    start_date = last_date + datetime.timedelta(days=1)
+                    print(f"Starting from day after last date in database: {start_date}")
+                else:
+                    # If no data exists, start from 180 days ago
+                    start_date = end_date - datetime.timedelta(days=180)
+                    print(f"No existing data found, starting from {start_date}")
+            
+            # If force refresh is enabled, we'll reprocess recent days
             if force_refresh:
-                if not end_date:
-                    end_date = datetime.date.today()
-                if not start_date:
-                    # When force refreshing, just process the last 3 days by default
-                    start_date = end_date - datetime.timedelta(days=3)
+                # When force refreshing, process at least the last 3 days
+                force_refresh_start = end_date - datetime.timedelta(days=3)
+                # Use the earlier of force_refresh_start and start_date
+                start_date = min(force_refresh_start, start_date)
                 print(f"Force refresh enabled, processing dates from {start_date} to {end_date}")
-            else:
-                # Set the end date to today if not specified
-                if not end_date:
-                    end_date = datetime.date.today()
-                
-                # If no start_date provided, use the day after the last date in database
-                if not start_date:
-                    if last_date:
-                        start_date = last_date + datetime.timedelta(days=1)
-                        print(f"Starting from day after last date in database: {start_date}")
-                    else:
-                        # If no data exists, start from 180 days ago
-                        start_date = end_date - datetime.timedelta(days=180)
-                        print(f"No existing data found, starting from {start_date}")
             
             # If start_date is after end_date, there's nothing to update
             if start_date > end_date:
