@@ -78,11 +78,10 @@ class ChartUpdater:
 
     def find_last_existing_date(self):
         try:
-            # Get the most recent date with TRIMP > 0 for this user
+            # Get the most recent date for this user, regardless of TRIMP value
             response = self.client.table('garmin_data') \
                 .select('date, trimp, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
@@ -96,14 +95,14 @@ class ChartUpdater:
                         'ctl': float(data['ctl']),
                         'tsb': float(data['tsb'])
                     }
-                    print(f"Found last existing date with TRIMP > 0: {date}")
+                    print(f"Found last existing date: {date}")
                     print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
                     return date, last_metrics
                 except ValueError as e:
                     print(f"Error converting metrics to float: {e}")
                     return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
-            print("No existing data found with TRIMP > 0")
+            print("No existing data found in database")
             return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
         except Exception as e:
@@ -156,6 +155,16 @@ class ChartUpdater:
                 print(f"Failed to initialize Garmin connection: {e}")
                 raise
 
+            # Find the last existing date and its metrics
+            print("Finding last existing date...")
+            try:
+                last_date, previous_metrics = self.find_last_existing_date()
+                print(f"Last date: {last_date}")
+                print(f"Previous metrics: {previous_metrics}")
+            except Exception as e:
+                print(f"Failed to find last existing date: {e}")
+                raise
+
             # If force refresh is enabled, we'll reprocess recent days regardless
             if force_refresh:
                 if not end_date:
@@ -165,26 +174,19 @@ class ChartUpdater:
                     start_date = end_date - datetime.timedelta(days=3)
                 print(f"Force refresh enabled, processing dates from {start_date} to {end_date}")
             else:
-                # Find the last existing date and its metrics
-                print("Finding last existing date...")
-                try:
-                    last_date, previous_metrics = self.find_last_existing_date()
-                    print(f"Last date: {last_date}")
-                    print(f"Previous metrics: {previous_metrics}")
-                except Exception as e:
-                    print(f"Failed to find last existing date: {e}")
-                    raise
+                # Set the end date to today if not specified
+                if not end_date:
+                    end_date = datetime.date.today()
                 
-                if not last_date:
-                    # If no data exists, start from 180 days ago
-                    start_date = datetime.date.today() - datetime.timedelta(days=180)
-                    print(f"No existing data found, starting from {start_date}")
-                else:
-                    # Start from the day AFTER the last date
-                    start_date = last_date + datetime.timedelta(days=1)
-                    print(f"Found existing data for {last_date}, starting from {start_date}")
-                
-                end_date = datetime.date.today()
+                # If no start_date provided, use the day after the last date in database
+                if not start_date:
+                    if last_date:
+                        start_date = last_date + datetime.timedelta(days=1)
+                        print(f"Starting from day after last date in database: {start_date}")
+                    else:
+                        # If no data exists, start from 180 days ago
+                        start_date = end_date - datetime.timedelta(days=180)
+                        print(f"No existing data found, starting from {start_date}")
             
             # If start_date is after end_date, there's nothing to update
             if start_date > end_date:
@@ -206,9 +208,8 @@ class ChartUpdater:
                 print(f"\n=== Initial metrics from {last_date} ===")
                 print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
             else:
-                # If force refreshing, get the metrics from the day before start_date
+                # If force refreshing or no last date, get the metrics from the day before start_date
                 day_before = start_date - datetime.timedelta(days=1)
-                day_before_str = day_before.strftime('%Y-%m-%d')
                 previous_metrics = self.get_previous_day_metrics(start_date.strftime('%Y-%m-%d'))
                 print(f"\n=== Using metrics from {day_before} for calculation ===")
                 print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
@@ -225,7 +226,7 @@ class ChartUpdater:
                 # Get previous day's metrics
                 previous_metrics = self.get_previous_day_metrics(date_str)
                 
-                # Get activities for this date - FIXED: Properly get and process activities
+                # Get activities for this date
                 activities = self.get_activities_for_date(date)
                 
                 # Calculate total TRIMP for all activities on this date
