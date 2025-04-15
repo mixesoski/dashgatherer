@@ -560,8 +560,20 @@ class ChartUpdater:
                     if entry.get('activity_name'):
                         manual_activities.append(entry['activity_name'])
             
-            # Combine Garmin and manual data
-            total_trimp = trimp_total + manual_trimp
+            # Get existing data to check if we already have manual data included
+            existing_data = self.get_existing_data(date_str)
+            
+            # If we have existing data and it already includes manual data,
+            # we don't want to add it again
+            if existing_data and existing_data.get('trimp', 0) > trimp_total:
+                # Keep the higher TRIMP value (existing one)
+                total_trimp = existing_data.get('trimp', 0)
+                print(f"Keeping existing higher TRIMP value: {total_trimp}")
+            else:
+                # Use the new total (Garmin + manual)
+                total_trimp = trimp_total + manual_trimp
+            
+            # Combine activities
             all_activities = []
             if activity_str != 'Rest Day':
                 all_activities.append(activity_str)
