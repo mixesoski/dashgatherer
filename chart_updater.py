@@ -264,7 +264,7 @@ class ChartUpdater:
                 previous_metrics = new_metrics
                 
                 # Update the database
-                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
+                self.update_database_entry(self.user_id, date_str, trimp_total, activity_str)
                 
                 print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
                 print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
@@ -539,74 +539,64 @@ class ChartUpdater:
             print(f"Traceback: {traceback.format_exc()}")
             return []
 
-    def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
+    def update_database_entry(self, user_id, date, garmin_trimp, garmin_activities):
+        """Update or insert a new entry in the database for a specific date."""
         try:
-            # Convert date_str to datetime object and ensure consistent format
-            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
+            # Fetch manual data for this date
+            manual_data = self.client.table('manual_data').select('*').eq('user_id', user_id).eq('date', date).execute()
             
-            # Get existing data first to check what we already have
-            existing_data = self.get_existing_data(date_str)
-            existing_trimp = float(existing_data.get('trimp', 0)) if existing_data else 0
-            
-            # Get manual data for this date
-            manual_response = self.client.table('manual_data') \
-                .select('trimp, activity_name') \
-                .eq('user_id', self.user_id) \
-                .eq('date', date_str) \
-                .execute()
-            
+            # Initialize variables
             manual_trimp = 0
             manual_activities = []
             
-            if manual_response.data:
-                for entry in manual_response.data:
-                    if entry.get('trimp'):
-                        manual_trimp += float(entry['trimp'])
+            # Process manual data if it exists
+            if manual_data.data:
+                for entry in manual_data.data:
+                    manual_trimp += entry.get('trimp', 0)
                     if entry.get('activity_name'):
                         manual_activities.append(entry['activity_name'])
             
-            # Calculate total TRIMP based on what we have
-            if trimp_total > 0:
-                # If we have new Garmin data, use it and add manual data
-                total_trimp = trimp_total + manual_trimp
-            elif existing_trimp > 0:
-                # If we have existing data but no new Garmin data, preserve it
-                total_trimp = existing_trimp
-            else:
-                # If we have neither, just use manual data
-                total_trimp = manual_trimp
+            # Calculate total TRIMP
+            total_trimp = garmin_trimp + manual_trimp
             
-            # Combine activities
+            # Combine activities, ensuring no duplicates
             all_activities = []
-            if activity_str != 'Rest Day':
-                all_activities.append(activity_str)
-            if existing_data and existing_data.get('activity') != 'Rest Day':
-                existing_activities = existing_data.get('activity', '').split(', ')
-                all_activities.extend([a for a in existing_activities if a not in all_activities])
-            all_activities.extend([a for a in manual_activities if a not in all_activities])
+            if garmin_activities:
+                all_activities.extend(garmin_activities)
+            if manual_activities:
+                all_activities.extend(manual_activities)
             
-            combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_activities = []
+            for activity in all_activities:
+                if activity not in seen:
+                    seen.add(activity)
+                    unique_activities.append(activity)
             
-            print(f"Upserting data for {date_str}:")
-            print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Existing TRIMP: {existing_trimp} | Total TRIMP: {total_trimp}")
-            print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            # Convert activities list to string
+            activities_str = ', '.join(unique_activities) if unique_activities else None
             
-            # Use upsert with on_conflict to handle duplicates
-            self.client.table('garmin_data').upsert({
-                'date': date_iso,
+            print(f"Updating database for {date}:")
+            print(f"  Garmin TRIMP: {garmin_trimp}")
+            print(f"  Manual TRIMP: {manual_trimp}")
+            print(f"  Total TRIMP: {total_trimp}")
+            print(f"  Activities: {activities_str}")
+            
+            # Upsert the data
+            data = {
+                'user_id': user_id,
+                'date': date,
                 'trimp': total_trimp,
-                'activity': combined_activity_str,
-                'user_id': self.user_id,
-                'atl': new_metrics['atl'],
-                'ctl': new_metrics['ctl'],
-                'tsb': new_metrics['tsb']
-            }, on_conflict='user_id,date').execute()
+                'activities': activities_str
+            }
             
-            print(f"Successfully updated/inserted data for {date_str}")
+            result = self.client.table('garmin_data').upsert(data).execute()
+            print(f"Database update result: {result}")
+            
         except Exception as e:
-            print(f"Error upserting metrics for {date_str}: {e}")
-            print(f"Traceback: {traceback.format_exc()}")
+            print(f"Error updating database entry: {e}")
+            raise
 
     def process_activity(self, activity, date_str):
         """Process a single activity and extract TRIMP data"""
