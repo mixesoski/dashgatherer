@@ -77,17 +77,19 @@ class ChartUpdater:
             raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
+        """Find the most recent date with activity data in the database."""
         try:
-            # Get the most recent date for this user, regardless of TRIMP value
+            # Get the most recent date that has any activity (not Rest Day)
             response = self.client.table('garmin_data') \
-                .select('date, trimp, atl, ctl, tsb') \
+                .select('date, trimp, atl, ctl, tsb, activity') \
                 .eq('user_id', self.user_id) \
+                .neq('activity', 'Rest Day') \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
-            
-            if response.data:
-                data = response.data[0] if isinstance(response.data, list) else response.data
+
+            if response.data and len(response.data) > 0:
+                data = response.data[0]
                 try:
                     date = datetime.datetime.fromisoformat(data['date']).date()
                     last_metrics = {
@@ -95,19 +97,19 @@ class ChartUpdater:
                         'ctl': float(data['ctl']),
                         'tsb': float(data['tsb'])
                     }
-                    print(f"Found last existing date: {date}")
+                    print(f"Found last date with activity: {date}")
                     print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
                     return date, last_metrics
-                except ValueError as e:
-                    print(f"Error converting metrics to float: {e}")
-                    return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
-            
-            print("No existing data found in database")
-            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
-            
+                except (ValueError, KeyError) as e:
+                    print(f"Error parsing last date data: {e}")
+                    return None, None
+            else:
+                print("No existing dates with activity found")
+                return None, None
+
         except Exception as e:
             print(f"Error finding last existing date: {e}")
-            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
+            return None, None
 
     def calculate_new_metrics(self, current_trimp, previous_metrics):
         current_trimp = float(current_trimp)  # This might be 0 for rest days
@@ -543,6 +545,10 @@ class ChartUpdater:
             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
+            # Get existing data first to check what we already have
+            existing_data = self.get_existing_data(date_str)
+            existing_trimp = float(existing_data.get('trimp', 0)) if existing_data else 0
+            
             # Get manual data for this date
             manual_response = self.client.table('manual_data') \
                 .select('trimp, activity_name') \
@@ -560,32 +566,30 @@ class ChartUpdater:
                     if entry.get('activity_name'):
                         manual_activities.append(entry['activity_name'])
             
-            # Get existing data to check if we already have manual data included
-            existing_data = self.get_existing_data(date_str)
-            
-            # Calculate the total TRIMP based on the source of data
-            if existing_data:
-                existing_trimp = float(existing_data.get('trimp', 0))
-                # If Garmin data is 0 but we have existing data, preserve it
-                if trimp_total == 0 and existing_trimp > 0:
-                    print(f"Preserving existing data for {date_str} with TRIMP {existing_trimp}")
-                    total_trimp = existing_trimp
-                else:
-                    # Use Garmin data and add manual data
-                    total_trimp = trimp_total + manual_trimp
-            else:
-                # No existing data, just combine Garmin and manual
+            # Calculate total TRIMP based on what we have
+            if trimp_total > 0:
+                # If we have new Garmin data, use it and add manual data
                 total_trimp = trimp_total + manual_trimp
+            elif existing_trimp > 0:
+                # If we have existing data but no new Garmin data, preserve it
+                total_trimp = existing_trimp
+            else:
+                # If we have neither, just use manual data
+                total_trimp = manual_trimp
             
             # Combine activities
             all_activities = []
             if activity_str != 'Rest Day':
                 all_activities.append(activity_str)
-            all_activities.extend(manual_activities)
+            if existing_data and existing_data.get('activity') != 'Rest Day':
+                existing_activities = existing_data.get('activity', '').split(', ')
+                all_activities.extend([a for a in existing_activities if a not in all_activities])
+            all_activities.extend([a for a in manual_activities if a not in all_activities])
+            
             combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
             
             print(f"Upserting data for {date_str}:")
-            print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
+            print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Existing TRIMP: {existing_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
             
             # Use upsert with on_conflict to handle duplicates
