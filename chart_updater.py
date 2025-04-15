@@ -575,7 +575,7 @@ class ChartUpdater:
                     unique_activities.append(activity)
             
             # Convert activities list to string
-            activities_str = ', '.join(unique_activities) if unique_activities else None
+            activities_str = ', '.join(unique_activities) if unique_activities else 'Rest Day'
             
             print(f"Updating database for {date}:")
             print(f"  Garmin TRIMP: {garmin_trimp}")
@@ -583,15 +583,19 @@ class ChartUpdater:
             print(f"  Total TRIMP: {total_trimp}")
             print(f"  Activities: {activities_str}")
             
+            # Convert date to ISO format with timezone
+            date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
+            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
+            
             # Upsert the data
             data = {
                 'user_id': user_id,
-                'date': date,
+                'date': date_iso,
                 'trimp': total_trimp,
-                'activities': activities_str
+                'activity': activities_str
             }
             
-            result = self.client.table('garmin_data').upsert(data).execute()
+            result = self.client.table('garmin_data').upsert(data, on_conflict='user_id,date').execute()
             print(f"Database update result: {result}")
             
         except Exception as e:
