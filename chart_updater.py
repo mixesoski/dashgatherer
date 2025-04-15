@@ -563,14 +563,18 @@ class ChartUpdater:
             # Get existing data to check if we already have manual data included
             existing_data = self.get_existing_data(date_str)
             
-            # If we have existing data and it already includes manual data,
-            # we don't want to add it again
-            if existing_data and existing_data.get('trimp', 0) > trimp_total:
-                # Keep the higher TRIMP value (existing one)
-                total_trimp = existing_data.get('trimp', 0)
-                print(f"Keeping existing higher TRIMP value: {total_trimp}")
+            # Calculate the total TRIMP based on the source of data
+            if existing_data:
+                existing_trimp = float(existing_data.get('trimp', 0))
+                # If Garmin data is 0 but we have existing data, preserve it
+                if trimp_total == 0 and existing_trimp > 0:
+                    print(f"Preserving existing data for {date_str} with TRIMP {existing_trimp}")
+                    total_trimp = existing_trimp
+                else:
+                    # Use Garmin data and add manual data
+                    total_trimp = trimp_total + manual_trimp
             else:
-                # Use the new total (Garmin + manual)
+                # No existing data, just combine Garmin and manual
                 total_trimp = trimp_total + manual_trimp
             
             # Combine activities
