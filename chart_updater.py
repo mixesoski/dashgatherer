@@ -77,71 +77,99 @@ class ChartUpdater:
             raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
-        """Find the most recent date with activity data in the database."""
+        """Find the most recent date with data in the database."""
         try:
-            # Get the most recent date that has any activity (not Rest Day)
-            response = self.client.table('garmin_data') \
-                .select('date, trimp, atl, ctl, tsb, activity') \
+            result = self.client.table('garmin_data') \
+                .select('date') \
                 .eq('user_id', self.user_id) \
-                .neq('activity', 'Rest Day') \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
-
-            if response.data and len(response.data) > 0:
-                data = response.data[0]
-                try:
-                    date = datetime.datetime.fromisoformat(data['date']).date()
-                    last_metrics = {
-                        'atl': float(data['atl']),
-                        'ctl': float(data['ctl']),
-                        'tsb': float(data['tsb'])
-                    }
-                    print(f"Found last date with activity: {date}")
-                    print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
-                    return date, last_metrics
-                except (ValueError, KeyError) as e:
-                    print(f"Error parsing last date data: {e}")
-                    return None, None
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]['date'].split('T')[0]  # Get just the date part
             else:
-                print("No existing dates with activity found")
-                return None, None
-
+                print("No existing data found in the database")
+                return None
+                
         except Exception as e:
             print(f"Error finding last existing date: {e}")
-            return None, None
+            return None
 
-    def calculate_new_metrics(self, current_trimp, previous_metrics):
-        current_trimp = float(current_trimp)  # This might be 0 for rest days
+    def get_previous_metrics(self, date):
+        """Get metrics from the previous day for ATL/CTL/TSB calculations."""
+        try:
+            # Convert date string to datetime
+            date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
+            # Get previous day
+            prev_date = (date_obj - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+            
+            result = self.client.table('garmin_data') \
+                .select('*') \
+                .eq('user_id', self.user_id) \
+                .eq('date', prev_date) \
+                .execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            else:
+                # If no previous data exists, return default initial values
+                return {
+                    'atl': 0,
+                    'ctl': 0,
+                    'tsb': 0,
+                    'trimp': 0
+                }
+                
+        except Exception as e:
+            print(f"Error getting previous metrics: {e}")
+            # Return default initial values on error
+            return {
+                'atl': 0,
+                'ctl': 0,
+                'tsb': 0,
+                'trimp': 0
+            }
+
+    def calculate_metrics(self, date, trimp, previous_metrics=None):
+        """Calculate ATL, CTL, and TSB for a given date."""
+        if previous_metrics is None:
+            previous_metrics = {
+                'atl': 0,
+                'ctl': 0,
+                'tsb': 0,
+                'trimp': 0
+            }
         
-        if not previous_metrics:
-            return {'atl': current_trimp, 'ctl': current_trimp, 'tsb': 0}
-        
-        previous_atl = float(previous_metrics['atl'])
-        previous_ctl = float(previous_metrics['ctl'])
-        
-        # Calculate new ATL and CTL
-        new_atl = previous_atl + (current_trimp - previous_atl) / 7
-        new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
-        
-        # TSB is ALWAYS calculated using previous day's values
-        # TSB = previous day's CTL - previous day's ATL
-        new_tsb = previous_ctl - previous_atl
-        
-        # Round to 2 decimal places
-        metrics = {
-            'atl': round(new_atl, 2),
-            'ctl': round(new_ctl, 2),
-            'tsb': round(new_tsb, 2)
-        }
-        
-        print(f"\nMetrics calculation for TRIMP {current_trimp}:")
-        print(f"Previous day's metrics - ATL: {previous_atl}, CTL: {previous_ctl}")
-        print(f"New ATL: {metrics['atl']}")
-        print(f"New CTL: {metrics['ctl']}")
-        print(f"TSB: {metrics['tsb']} (previous CTL {previous_ctl} - previous ATL {previous_atl})")
-        
-        return metrics
+        try:
+            # Constants for ATL and CTL calculations
+            ATL_DAYS = 7  # Acute Training Load window
+            CTL_DAYS = 42  # Chronic Training Load window
+            
+            # Calculate new ATL
+            prev_atl = float(previous_metrics['atl'])
+            new_atl = prev_atl + (trimp - prev_atl) / ATL_DAYS
+            
+            # Calculate new CTL
+            prev_ctl = float(previous_metrics['ctl'])
+            new_ctl = prev_ctl + (trimp - prev_ctl) / CTL_DAYS
+            
+            # Calculate TSB (Training Stress Balance)
+            new_tsb = new_ctl - new_atl
+            
+            return {
+                'atl': round(new_atl, 1),
+                'ctl': round(new_ctl, 1),
+                'tsb': round(new_tsb, 1)
+            }
+            
+        except Exception as e:
+            print(f"Error calculating metrics: {e}")
+            return {
+                'atl': 0,
+                'ctl': 0,
+                'tsb': 0
+            }
 
     def update_chart_data(self, start_date=None, end_date=None, force_refresh=False):
         try:
@@ -160,9 +188,8 @@ class ChartUpdater:
             # Find the last existing date and its metrics
             print("Finding last existing date...")
             try:
-                last_date, previous_metrics = self.find_last_existing_date()
+                last_date = self.find_last_existing_date()
                 print(f"Last date: {last_date}")
-                print(f"Previous metrics: {previous_metrics}")
             except Exception as e:
                 print(f"Failed to find last existing date: {e}")
                 raise
@@ -204,17 +231,6 @@ class ChartUpdater:
             
             print(f"\nProcessing dates from {start_date} to {end_date}")
             
-            # If we're not force refreshing, we need the previous metrics
-            if not force_refresh and last_date:
-                print(f"\n=== Initial metrics from {last_date} ===")
-                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
-            else:
-                # If force refreshing or no last date, get the metrics from the day before start_date
-                day_before = start_date - datetime.timedelta(days=1)
-                previous_metrics = self.get_previous_day_metrics(start_date.strftime('%Y-%m-%d'))
-                print(f"\n=== Using metrics from {day_before} for calculation ===")
-                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
-            
             updated_count = 0
             
             for date in date_range:
@@ -225,7 +241,7 @@ class ChartUpdater:
                 existing_data = self.get_existing_data(date_str)
                 
                 # Get previous day's metrics
-                previous_metrics = self.get_previous_day_metrics(date_str)
+                previous_metrics = self.get_previous_metrics(date_str)
                 
                 # Get activities for this date
                 activities = self.get_activities_for_date(date)
@@ -255,7 +271,7 @@ class ChartUpdater:
                         activity_names = existing_data.get('activity').split(', ')
                 
                 # Calculate new metrics
-                new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                new_metrics = self.calculate_metrics(date_str, trimp_total, previous_metrics)
                 
                 # Determine activity string
                 activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
@@ -293,30 +309,6 @@ class ChartUpdater:
             return response.data[0] if isinstance(response.data, list) else response.data
         else:
             return None
-
-    def get_previous_day_metrics(self, date_str):
-        # Convert date_str to datetime and get previous day
-        current_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-        previous_date = current_date - datetime.timedelta(days=1)
-        previous_date_str = previous_date.strftime('%Y-%m-%d')
-        
-        response = self.client.table('garmin_data') \
-            .select('trimp, atl, ctl, tsb') \
-            .eq('user_id', self.user_id) \
-            .eq('date', previous_date_str) \
-            .execute()
-            
-        if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
-            data = response.data[0] if isinstance(response.data, list) else response.data
-            return {
-                'atl': float(data['atl']),
-                'ctl': float(data['ctl']),
-                'tsb': float(data['tsb'])
-            }
-        else:
-            # If no previous day data, use the initial metrics from find_last_existing_date
-            _, initial_metrics = self.find_last_existing_date()
-            return initial_metrics
 
     def get_activities_for_date(self, date):
         try:
@@ -562,6 +554,12 @@ class ChartUpdater:
             # Calculate total TRIMP
             total_trimp = garmin_trimp + manual_trimp
             
+            # Get previous day's metrics for calculations
+            previous_metrics = self.get_previous_metrics(date)
+            
+            # Calculate new metrics
+            new_metrics = self.calculate_metrics(date, total_trimp, previous_metrics)
+            
             # Combine activities, ensuring no duplicates
             all_activities = []
             if existing_data.data:
@@ -591,6 +589,7 @@ class ChartUpdater:
             print(f"  Manual TRIMP: {manual_trimp}")
             print(f"  Total TRIMP: {total_trimp}")
             print(f"  Activities: {activities_str}")
+            print(f"  New Metrics - ATL: {new_metrics['atl']}, CTL: {new_metrics['ctl']}, TSB: {new_metrics['tsb']}")
             
             # Convert date to ISO format with timezone
             date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
@@ -601,7 +600,10 @@ class ChartUpdater:
                 'user_id': user_id,
                 'date': date_iso,
                 'trimp': total_trimp,
-                'activity': activities_str
+                'activity': activities_str,
+                'atl': new_metrics['atl'],
+                'ctl': new_metrics['ctl'],
+                'tsb': new_metrics['tsb']
             }
             
             result = self.client.table('garmin_data').upsert(data, on_conflict='user_id,date').execute()
