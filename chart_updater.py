@@ -172,131 +172,66 @@ class ChartUpdater:
             }
 
     def update_chart_data(self, start_date=None, end_date=None, force_refresh=False):
+        """Update the chart data for a given date range."""
         try:
-            print(f"\nStarting chart update for user {self.user_id}")
-            print(f"Force refresh: {force_refresh}")
-            
-            # Initialize Garmin connection
-            print("Initializing Garmin connection...")
-            try:
-                self.initialize_garmin()
-                print("Garmin connection initialized successfully")
-            except Exception as e:
-                print(f"Failed to initialize Garmin connection: {e}")
-                raise
-
-            # Find the last existing date and its metrics
             print("Finding last existing date...")
             try:
                 last_date = self.find_last_existing_date()
                 print(f"Last date: {last_date}")
             except Exception as e:
                 print(f"Failed to find last existing date: {e}")
-                raise
+                last_date = None
 
-            # Set the end date to today if not specified
-            if not end_date:
-                end_date = datetime.date.today()
-            
-            # If no start_date provided, use the day after the last date in database
+            # If no start_date provided, use last date or default
             if not start_date:
-                if last_date:
-                    start_date = last_date + datetime.timedelta(days=1)
-                    print(f"Starting from day after last date in database: {start_date}")
+                if last_date and not force_refresh:
+                    # Convert string date to datetime
+                    start_date = datetime.datetime.strptime(last_date, '%Y-%m-%d').date()
                 else:
-                    # If no data exists, start from 180 days ago
-                    start_date = end_date - datetime.timedelta(days=180)
-                    print(f"No existing data found, starting from {start_date}")
-            
-            # If force refresh is enabled, we'll reprocess recent days
-            if force_refresh:
-                # When force refreshing, process at least the last 3 days
-                force_refresh_start = end_date - datetime.timedelta(days=3)
-                # Use the earlier of force_refresh_start and start_date
-                start_date = min(force_refresh_start, start_date)
-                print(f"Force refresh enabled, processing dates from {start_date} to {end_date}")
-            
-            # If start_date is after end_date, there's nothing to update
-            if start_date > end_date:
-                print("No new dates to process - data is up to date")
-                return {'success': True, 'updated': 0}
-            
-            # Create date range from start_date to today
-            date_range = [start_date + datetime.timedelta(days=i) 
-                         for i in range((end_date - start_date).days + 1)]
-            
-            if not date_range:
-                print("No new dates to process")
-                return {'success': True, 'updated': 0}
-            
+                    # Default to 180 days ago if no last date or force refresh
+                    start_date = datetime.datetime.now().date() - datetime.timedelta(days=180)
+
+            # If no end_date provided, use today
+            if not end_date:
+                end_date = datetime.datetime.now().date()
+
+            # Convert string dates to datetime.date objects if needed
+            if isinstance(start_date, str):
+                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+
             print(f"\nProcessing dates from {start_date} to {end_date}")
             
             updated_count = 0
-            
-            for date in date_range:
-                date_str = date.strftime('%Y-%m-%d')
-                logging.info(f"Processing date: {date_str}")
-                
-                # Get existing data for this date
-                existing_data = self.get_existing_data(date_str)
-                
-                # Get previous day's metrics
-                previous_metrics = self.get_previous_metrics(date_str)
+            current_date = start_date
+
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
                 
                 # Get activities for this date
-                activities = self.get_activities_for_date(date)
-                
-                # Calculate total TRIMP for all activities on this date
-                trimp_total = 0
-                activity_names = []
+                activities = self.get_activities_for_date(date_str)
                 
                 if activities:
-                    print(f"Found {len(activities)} activities for {date_str}")
-                    for activity in activities:
-                        activity_id = activity.get('activityId')
-                        trimp = activity.get('trimp', 0)
-                        trimp_total += float(trimp)
-                        activity_name = activity.get('activityName', 'Unknown Activity')
-                        activity_names.append(activity_name)
-                        print(f"Activity {activity_name} (ID: {activity_id}): TRIMP = {trimp}")
-                        self.processed_activity_ids.add(activity_id)
+                    trimp_total = sum(activity.get('trimp', 0) for activity in activities)
+                    activity_names = [activity.get('name', 'Unknown Activity') for activity in activities]
+                    activity_str = ','.join(activity_names) if activity_names else 'Rest Day'
                 else:
-                    print(f"No activities found for {date_str}")
-                
-                # If no new activities but we have existing data with TRIMP > 0, preserve it
-                if trimp_total == 0 and existing_data and existing_data.get('trimp', 0) > 0:
-                    print(f"Preserving existing data for {date_str} with TRIMP {existing_data.get('trimp')}")
-                    trimp_total = existing_data.get('trimp')
-                    if existing_data.get('activity') and existing_data.get('activity') != 'Rest Day':
-                        activity_names = existing_data.get('activity').split(', ')
-                
-                # Calculate new metrics
-                new_metrics = self.calculate_metrics(date_str, trimp_total, previous_metrics)
-                
-                # Determine activity string
-                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
-                
-                # Store the metrics we just calculated as they'll be needed for the next day
-                previous_metrics = new_metrics
+                    trimp_total = 0
+                    activity_str = 'Rest Day'
                 
                 # Update the database
-                self.update_database_entry(self.user_id, date_str, trimp_total, activity_str)
-                
-                print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
-                print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
+                self.update_database_entry(self.user_id, date_str, trimp_total, activity_str.split(',') if activity_str != 'Rest Day' else [])
                 
                 updated_count += 1
+                current_date += datetime.timedelta(days=1)
             
-            print(f"\n=== Update completed ===")
-            print(f"Total records processed: {updated_count}")
-            return {'success': True, 'updated': updated_count}
+            print(f"\nUpdated {updated_count} days of data")
+            return {'success': True, 'updated_count': updated_count}
             
         except Exception as e:
-            print(f"\nError in update_chart_data:")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
-            print("Traceback:")
-            traceback.print_exc()
+            error_message = f"Error in update_chart_data:\nError type: {type(e).__name__}\nError message: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+            print(error_message)
             return {'success': False, 'error': str(e)}
 
     def get_existing_data(self, date_str):
