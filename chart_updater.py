@@ -542,6 +542,9 @@ class ChartUpdater:
     def update_database_entry(self, user_id, date, garmin_trimp, garmin_activities):
         """Update or insert a new entry in the database for a specific date."""
         try:
+            # First check if we already have data for this date
+            existing_data = self.client.table('garmin_data').select('*').eq('user_id', user_id).eq('date', date).execute()
+            
             # Fetch manual data for this date
             manual_data = self.client.table('manual_data').select('*').eq('user_id', user_id).eq('date', date).execute()
             
@@ -561,21 +564,27 @@ class ChartUpdater:
             
             # Combine activities, ensuring no duplicates
             all_activities = []
+            if existing_data.data:
+                existing_activities = existing_data.data[0].get('activity', '').split(',')
+                existing_activities = [a.strip() for a in existing_activities if a.strip() and a.strip() != 'Rest Day']
+                all_activities.extend(existing_activities)
+            
             if garmin_activities:
-                all_activities.extend(garmin_activities)
+                all_activities.extend([a.strip() for a in garmin_activities if a.strip()])
             if manual_activities:
-                all_activities.extend(manual_activities)
+                all_activities.extend([a.strip() for a in manual_activities if a.strip()])
             
             # Remove duplicates while preserving order
             seen = set()
             unique_activities = []
             for activity in all_activities:
-                if activity not in seen:
+                activity = activity.strip()
+                if activity and activity != 'Rest Day' and activity not in seen:
                     seen.add(activity)
                     unique_activities.append(activity)
             
-            # Convert activities list to string
-            activities_str = ', '.join(unique_activities) if unique_activities else 'Rest Day'
+            # Convert activities list to string - no spaces after commas
+            activities_str = ','.join(unique_activities) if unique_activities else 'Rest Day'
             
             print(f"Updating database for {date}:")
             print(f"  Garmin TRIMP: {garmin_trimp}")
