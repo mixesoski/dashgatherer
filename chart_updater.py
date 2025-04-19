@@ -77,102 +77,72 @@ class ChartUpdater:
             raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
-        """Find the most recent date with data in the database."""
         try:
-            result = self.client.table('garmin_data') \
-                .select('date') \
+            # Get the most recent date with TRIMP > 0 for this user
+            response = self.client.table('garmin_data') \
+                .select('date, trimp, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
+                .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
             
-            if result.data and len(result.data) > 0:
-                return result.data[0]['date'].split('T')[0]  # Get just the date part
-            else:
-                print("No existing data found in the database")
-                return None
-                
+            if response.data:
+                data = response.data[0] if isinstance(response.data, list) else response.data
+                try:
+                    date = datetime.datetime.fromisoformat(data['date']).date()
+                    last_metrics = {
+                        'atl': float(data['atl']),
+                        'ctl': float(data['ctl']),
+                        'tsb': float(data['tsb'])
+                    }
+                    print(f"Found last existing date with TRIMP > 0: {date}")
+                    print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
+                    return date, last_metrics
+                except ValueError as e:
+                    print(f"Error converting metrics to float: {e}")
+                    return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
+            
+            print("No existing data found with TRIMP > 0")
+            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
+            
         except Exception as e:
             print(f"Error finding last existing date: {e}")
-            return None
+            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
 
-    def get_previous_metrics(self, date):
-        """Get metrics from the previous day for ATL/CTL/TSB calculations."""
-        try:
-            # Convert date string to datetime
-            date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
-            # Get previous day
-            prev_date = (date_obj - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-            
-            result = self.client.table('garmin_data') \
-                .select('*') \
-                .eq('user_id', self.user_id) \
-                .eq('date', prev_date) \
-                .execute()
-            
-            if result.data and len(result.data) > 0:
-                return result.data[0]
-            else:
-                # If no previous data exists, return default initial values
-                return {
-                    'atl': 0,
-                    'ctl': 0,
-                    'tsb': 0,
-                    'trimp': 0
-                }
-                
-        except Exception as e:
-            print(f"Error getting previous metrics: {e}")
-            # Return default initial values on error
-            return {
-                'atl': 0,
-                'ctl': 0,
-                'tsb': 0,
-                'trimp': 0
-            }
-
-    def calculate_metrics(self, date, trimp, previous_metrics=None):
-        """Calculate ATL, CTL, and TSB for a given date."""
-        if previous_metrics is None:
-            previous_metrics = {
-                'atl': 0,
-                'ctl': 0,
-                'tsb': 0,
-                'trimp': 0
-            }
+    def calculate_new_metrics(self, current_trimp, previous_metrics):
+        current_trimp = float(current_trimp)  # This might be 0 for rest days
         
-        try:
-            # Constants for ATL and CTL calculations
-            ATL_DAYS = 7  # Acute Training Load window
-            CTL_DAYS = 42  # Chronic Training Load window
-            
-            # Calculate new ATL
-            prev_atl = float(previous_metrics['atl'])
-            new_atl = prev_atl + (trimp - prev_atl) / ATL_DAYS
-            
-            # Calculate new CTL
-            prev_ctl = float(previous_metrics['ctl'])
-            new_ctl = prev_ctl + (trimp - prev_ctl) / CTL_DAYS
-            
-            # Calculate TSB (Training Stress Balance)
-            new_tsb = new_ctl - new_atl
-            
-            return {
-                'atl': round(new_atl, 1),
-                'ctl': round(new_ctl, 1),
-                'tsb': round(new_tsb, 1)
-            }
-            
-        except Exception as e:
-            print(f"Error calculating metrics: {e}")
-            return {
-                'atl': 0,
-                'ctl': 0,
-                'tsb': 0
-            }
+        if not previous_metrics:
+            return {'atl': current_trimp, 'ctl': current_trimp, 'tsb': 0}
+        
+        previous_atl = float(previous_metrics['atl'])
+        previous_ctl = float(previous_metrics['ctl'])
+        
+        # Calculate new ATL and CTL
+        new_atl = previous_atl + (current_trimp - previous_atl) / 7
+        new_ctl = previous_ctl + (current_trimp - previous_ctl) / 42
+        
+        # TSB is ALWAYS calculated using previous day's values
+        # TSB = previous day's CTL - previous day's ATL
+        new_tsb = previous_ctl - previous_atl
+        
+        # Round to 2 decimal places
+        metrics = {
+            'atl': round(new_atl, 2),
+            'ctl': round(new_ctl, 2),
+            'tsb': round(new_tsb, 2)
+        }
+        
+        print(f"\nMetrics calculation for TRIMP {current_trimp}:")
+        print(f"Previous day's metrics - ATL: {previous_atl}, CTL: {previous_ctl}")
+        print(f"New ATL: {metrics['atl']}")
+        print(f"New CTL: {metrics['ctl']}")
+        print(f"TSB: {metrics['tsb']} (previous CTL {previous_ctl} - previous ATL {previous_atl})")
+        
+        return metrics
 
     def update_chart_data(self, start_date=None, end_date=None, force_refresh=False):
-        """Update the chart data for a given date range."""
         try:
             print(f"\nStarting chart update for user {self.user_id}")
             print(f"Force refresh: {force_refresh}")
@@ -186,83 +156,129 @@ class ChartUpdater:
                 print(f"Failed to initialize Garmin connection: {e}")
                 raise
 
-            print("Finding last existing date...")
-            try:
-                last_date = self.find_last_existing_date()
-                print(f"Last date: {last_date}")
-            except Exception as e:
-                print(f"Failed to find last existing date: {e}")
-                last_date = None
-
-            # If no end_date provided, use today
-            if not end_date:
-                end_date = datetime.datetime.now().date()
-            elif isinstance(end_date, str):
-                end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-
-            # If no start_date provided, use appropriate default
-            if not start_date:
-                if last_date and not force_refresh:
-                    # Start from the day after the last date
-                    start_date = datetime.datetime.strptime(last_date, '%Y-%m-%d').date() + datetime.timedelta(days=1)
-                    print(f"Starting from day after last date: {start_date}")
+            # If force refresh is enabled, we'll reprocess recent days regardless
+            if force_refresh:
+                if not end_date:
+                    end_date = datetime.date.today()
+                if not start_date:
+                    # When force refreshing, just process the last 3 days by default
+                    start_date = end_date - datetime.timedelta(days=3)
+                print(f"Force refresh enabled, processing dates from {start_date} to {end_date}")
+            else:
+                # Find the last existing date and its metrics
+                print("Finding last existing date...")
+                try:
+                    last_date, previous_metrics = self.find_last_existing_date()
+                    print(f"Last date: {last_date}")
+                    print(f"Previous metrics: {previous_metrics}")
+                except Exception as e:
+                    print(f"Failed to find last existing date: {e}")
+                    raise
+                
+                if not last_date:
+                    # If no data exists, start from 180 days ago
+                    start_date = datetime.date.today() - datetime.timedelta(days=180)
+                    print(f"No existing data found, starting from {start_date}")
                 else:
-                    # If force refresh or no last date, start from 180 days ago
-                    start_date = end_date - datetime.timedelta(days=180)
-                    print(f"Starting from {start_date} (180 days before end date)")
-            elif isinstance(start_date, str):
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-
-            # If force refresh is enabled, extend start date
-            if force_refresh and last_date:
-                force_start = datetime.datetime.strptime(last_date, '%Y-%m-%d').date()
-                start_date = min(start_date, force_start)
-                print(f"Force refresh enabled, extended start date to: {start_date}")
-
-            # Ensure start_date is not after end_date
+                    # Start from the day AFTER the last date
+                    start_date = last_date + datetime.timedelta(days=1)
+                    print(f"Found existing data for {last_date}, starting from {start_date}")
+                
+                end_date = datetime.date.today()
+            
+            # If start_date is after end_date, there's nothing to update
             if start_date > end_date:
-                print("Start date is after end date, nothing to update")
-                return {'success': True, 'updated_count': 0}
-
+                print("No new dates to process - data is up to date")
+                return {'success': True, 'updated': 0}
+            
+            # Create date range from start_date to today
+            date_range = [start_date + datetime.timedelta(days=i) 
+                         for i in range((end_date - start_date).days + 1)]
+            
+            if not date_range:
+                print("No new dates to process")
+                return {'success': True, 'updated': 0}
+            
             print(f"\nProcessing dates from {start_date} to {end_date}")
             
+            # If we're not force refreshing, we need the previous metrics
+            if not force_refresh and last_date:
+                print(f"\n=== Initial metrics from {last_date} ===")
+                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
+            else:
+                # If force refreshing, get the metrics from the day before start_date
+                day_before = start_date - datetime.timedelta(days=1)
+                day_before_str = day_before.strftime('%Y-%m-%d')
+                previous_metrics = self.get_previous_day_metrics(start_date.strftime('%Y-%m-%d'))
+                print(f"\n=== Using metrics from {day_before} for calculation ===")
+                print(f"ATL: {previous_metrics['atl']}, CTL: {previous_metrics['ctl']}, TSB: {previous_metrics['tsb']}\n")
+            
             updated_count = 0
-            current_date = start_date
-
-            while current_date <= end_date:
-                date_str = current_date.strftime('%Y-%m-%d')
-                
-                # Get activities for this date
-                activities = self.get_activities_for_date(date_str)
+            
+            for date in date_range:
+                date_str = date.strftime('%Y-%m-%d')
+                logging.info(f"Processing date: {date_str}")
                 
                 # Get existing data for this date
-                existing_data = self.client.table('garmin_data').select('*').eq('user_id', self.user_id).eq('date', date_str).execute()
+                existing_data = self.get_existing_data(date_str)
+                
+                # Get previous day's metrics
+                previous_metrics = self.get_previous_day_metrics(date_str)
+                
+                # Get activities for this date - FIXED: Properly get and process activities
+                activities = self.get_activities_for_date(date)
+                
+                # Calculate total TRIMP for all activities on this date
+                trimp_total = 0
+                activity_names = []
                 
                 if activities:
-                    trimp_total = sum(activity.get('trimp', 0) for activity in activities)
-                    activity_names = [activity.get('name', 'Unknown Activity') for activity in activities]
-                    activity_str = ','.join(activity_names) if activity_names else 'Rest Day'
-                elif existing_data.data and len(existing_data.data) > 0:
-                    # Preserve existing data if no new activities found
-                    print(f"Preserving existing data for {date_str}")
-                    trimp_total = existing_data.data[0].get('trimp', 0)
-                    activity_str = existing_data.data[0].get('activity', 'Rest Day')
+                    print(f"Found {len(activities)} activities for {date_str}")
+                    for activity in activities:
+                        activity_id = activity.get('activityId')
+                        trimp = activity.get('trimp', 0)
+                        trimp_total += float(trimp)
+                        activity_name = activity.get('activityName', 'Unknown Activity')
+                        activity_names.append(activity_name)
+                        print(f"Activity {activity_name} (ID: {activity_id}): TRIMP = {trimp}")
+                        self.processed_activity_ids.add(activity_id)
                 else:
-                    trimp_total = 0
-                    activity_str = 'Rest Day'
+                    print(f"No activities found for {date_str}")
+                
+                # If no new activities but we have existing data with TRIMP > 0, preserve it
+                if trimp_total == 0 and existing_data and existing_data.get('trimp', 0) > 0:
+                    print(f"Preserving existing data for {date_str} with TRIMP {existing_data.get('trimp')}")
+                    trimp_total = existing_data.get('trimp')
+                    if existing_data.get('activity') and existing_data.get('activity') != 'Rest Day':
+                        activity_names = existing_data.get('activity').split(', ')
+                
+                # Calculate new metrics
+                new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                
+                # Determine activity string
+                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
+                
+                # Store the metrics we just calculated as they'll be needed for the next day
+                previous_metrics = new_metrics
                 
                 # Update the database
-                self.update_database_entry(self.user_id, date_str, trimp_total, activity_str.split(',') if activity_str != 'Rest Day' else [])
+                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
+                
+                print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
+                print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
                 
                 updated_count += 1
-                current_date += datetime.timedelta(days=1)
             
-            print(f"\nUpdated {updated_count} days of data")
-            return {'success': True, 'updated_count': updated_count}
+            print(f"\n=== Update completed ===")
+            print(f"Total records processed: {updated_count}")
+            return {'success': True, 'updated': updated_count}
             
         except Exception as e:
-            error_message = f"Error in update_chart_data:\nError type: {type(e).__name__}\nError message: {str(e)}\nTraceback:\n{traceback.format_exc()}"
-            print(error_message)
+            print(f"\nError in update_chart_data:")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print("Traceback:")
+            traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
     def get_existing_data(self, date_str):
@@ -276,134 +292,301 @@ class ChartUpdater:
         else:
             return None
 
-    def get_activities_for_date(self, date):
-        """Get activities for a specific date."""
-        try:
-            # Ensure date is in the correct string format
-            if isinstance(date, datetime.date):
-                date_str = date.strftime('%Y-%m-%d')
-            else:
-                # Validate the string format
-                try:
-                    datetime.datetime.strptime(date, '%Y-%m-%d')
-                    date_str = date
-                except ValueError as e:
-                    print(f"Invalid date format: {e}")
-                    return []
+    def get_previous_day_metrics(self, date_str):
+        # Convert date_str to datetime and get previous day
+        current_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+        previous_date = current_date - datetime.timedelta(days=1)
+        previous_date_str = previous_date.strftime('%Y-%m-%d')
+        
+        response = self.client.table('garmin_data') \
+            .select('trimp, atl, ctl, tsb') \
+            .eq('user_id', self.user_id) \
+            .eq('date', previous_date_str) \
+            .execute()
+            
+        if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
+            data = response.data[0] if isinstance(response.data, list) else response.data
+            return {
+                'atl': float(data['atl']),
+                'ctl': float(data['ctl']),
+                'tsb': float(data['tsb'])
+            }
+        else:
+            # If no previous day data, use the initial metrics from find_last_existing_date
+            _, initial_metrics = self.find_last_existing_date()
+            return initial_metrics
 
-            # Get activities from Garmin
-            activities = self.garmin.get_activities_for_date(date_str)
-            if activities:
-                print(f"Found {len(activities)} activities for {date_str}")
-                for activity in activities:
-                    activity_id = activity.get('activityId')
-                    trimp = activity.get('trimp', 0)
-                    activity_name = activity.get('activityName', 'Unknown Activity')
-                    print(f"Activity {activity_name} (ID: {activity_id}): TRIMP = {trimp}")
-                    self.processed_activity_ids.add(activity_id)
-            else:
-                print(f"No activities found for {date_str}")
+    def get_activities_for_date(self, date):
+        try:
+            date_str = date.strftime('%Y-%m-%d')
+            print(f"\nFetching activities for {date_str}")
             
-            return activities
+            # Make sure we're logged in
+            if not self.garmin:
+                print("Garmin client not initialized, initializing now...")
+                self.initialize_garmin()
             
+            # Try to get activities with multiple methods
+            activities = []
+            
+            # Method 1: Direct date query
+            print(f"Method 1: Calling get_activities_by_date for {date_str}")
+            try:
+                # Updated API call for garminconnect 0.2.25 - without activityType parameter
+                day_activities = self.garmin.get_activities_by_date(
+                    date_str,
+                    date_str
+                )
+                if day_activities:
+                    print(f"Method 1 found {len(day_activities)} activities")
+                    activities = day_activities
+                else:
+                    print("Method 1 found no activities")
+            except Exception as e:
+                print(f"Method 1 error: {e}")
+            
+            # Method 2: Get recent activities and filter
+            if not activities:
+                print(f"Method 2: Getting recent activities and filtering for {date_str}")
+                try:
+                    # Updated API call for garminconnect 0.2.25
+                    recent_activities = self.garmin.get_activities(0, 30)  # Get 30 most recent activities
+                    print(f"Method 2 found {len(recent_activities)} recent activities total")
+                    
+                    # Filter for the target date - fix date format check
+                    date_activities = []
+                    for activity in recent_activities:
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in activity:
+                            activity_date = activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in activity:
+                            activity_date = activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in activity:
+                            activity_date = activity['startTime'].split('T')[0]
+                        
+                        if activity_date == date_str:
+                            date_activities.append(activity)
+                    
+                    if date_activities:
+                        print(f"Method 2 found {len(date_activities)} activities for {date_str}")
+                        activities = date_activities
+                    else:
+                        print(f"Method 2 found no activities for {date_str}")
+                except Exception as e:
+                    print(f"Method 2 error: {e}")
+                    print(f"Method 2 error traceback: {traceback.format_exc()}")
+            
+            # Method 3: Try a week-based approach
+            if not activities:
+                print(f"Method 3: Getting a week of activities including {date_str}")
+                try:
+                    # Start from 3 days before the target date
+                    week_start = date - datetime.timedelta(days=3)
+                    # End 3 days after the target date
+                    week_end = date + datetime.timedelta(days=3)
+                    
+                    # Updated API call without activityType parameter
+                    week_activities = self.garmin.get_activities_by_date(
+                        week_start.strftime("%Y-%m-%d"),
+                        week_end.strftime("%Y-%m-%d")
+                    )
+                    
+                    print(f"Method 3 found {len(week_activities)} activities for the week")
+                    
+                    # Filter for the target date
+                    date_activities = []
+                    for activity in week_activities:
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in activity:
+                            activity_date = activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in activity:
+                            activity_date = activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in activity:
+                            activity_date = activity['startTime'].split('T')[0]
+                        
+                        if activity_date == date_str:
+                            date_activities.append(activity)
+                    
+                    if date_activities:
+                        print(f"Method 3 found {len(date_activities)} activities for {date_str}")
+                        activities = date_activities
+                    else:
+                        print(f"Method 3 found no activities for {date_str}")
+                except Exception as e:
+                    print(f"Method 3 error: {e}")
+                    print(f"Method 3 error traceback: {traceback.format_exc()}")
+            
+            # Method 4: Try a different API endpoint as a last resort
+            if not activities:
+                print(f"Method 4: Using get_last_activity and checking date {date_str}")
+                try:
+                    # Try to get the last activity and check its date
+                    last_activity = self.garmin.get_last_activity()
+                    if last_activity:
+                        # Check for different date formats based on 0.2.25 API
+                        activity_date = None
+                        if 'startTimeLocal' in last_activity:
+                            activity_date = last_activity['startTimeLocal'].split()[0]
+                        elif 'startTimeGMT' in last_activity:
+                            activity_date = last_activity['startTimeGMT'].split()[0]
+                        elif 'startTime' in last_activity:
+                            activity_date = last_activity['startTime'].split('T')[0]
+                        
+                        print(f"Last activity date: {activity_date}")
+                        
+                        if activity_date == date_str:
+                            print(f"Method 4 found activity for {date_str}")
+                            activities = [last_activity]
+                        else:
+                            print(f"Method 4 found activity but not for {date_str}")
+                except Exception as e:
+                    print(f"Method 4 error: {e}")
+                    print(f"Method 4 error traceback: {traceback.format_exc()}")
+            
+            if not activities:
+                print(f"No activities found for {date_str} with any method")
+                return []
+                
+            print(f"Found {len(activities)} total activities for {date_str}")
+            
+            # Fetch TRIMP values for each activity
+            activities_with_trimp = []
+            for activity in activities:
+                activity_id = activity.get('activityId')
+                activity_name = activity.get('activityName', 'Unknown Activity')
+                
+                # Get activity date based on various possible fields
+                activity_date = None
+                if 'startTimeLocal' in activity:
+                    activity_date = activity['startTimeLocal'].split()[0]
+                elif 'startTimeGMT' in activity:
+                    activity_date = activity['startTimeGMT'].split()[0]
+                elif 'startTime' in activity:
+                    activity_date = activity['startTime'].split('T')[0]
+                
+                print(f"Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
+                
+                try:
+                    # Get detailed activity data to find TRIMP
+                    print(f"Fetching details for activity {activity_id}")
+                    try:
+                        # Try get_activity to get details
+                        details = self.garmin.get_activity(activity_id)
+                        print("Successfully retrieved activity data with get_activity")
+                    except Exception as details_err:
+                        print(f"Error with get_activity: {details_err}")
+                        raise
+                    
+                    # Debug the returned keys
+                    detail_keys = list(details.keys())
+                    print(f"Activity details keys: {detail_keys}")
+                    
+                    trimp = 0.0
+                    trimp_method = "not found"
+                    
+                    # ONLY check connectIQMeasurements for TRIMP - no calculations
+                    if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
+                        print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
+                        
+                        # Print each measurement to inspect
+                        for i, item in enumerate(details['connectIQMeasurements']):
+                            print(f"Measurement {i+1}: {item}")
+                            
+                            # Look for TRIMP specifically in developer field 4
+                            if 'value' in item and item.get('developerFieldNumber') == 4:
+                                try:
+                                    trimp = round(float(item.get('value', 0)), 1)
+                                    trimp_method = "connectIQMeasurements"
+                                    print(f"FOUND TRIMP in measurements: {trimp}")
+                                    break
+                                except (ValueError, TypeError):
+                                    print(f"Failed to convert TRIMP value: {item.get('value')}")
+                    else:
+                        print("No connectIQMeasurements found, TRIMP remains 0")
+                    
+                    # Double TRIMP for strength training activities if TRIMP > 0
+                    activity_type = activity.get('activityType', {})
+                    if isinstance(activity_type, dict):
+                        activity_type = activity_type.get('typeKey', '')
+                    
+                    if trimp > 0 and ('strength' in str(activity_type).lower() or 
+                                      'siła' in activity_name.lower()):
+                        old_trimp = trimp
+                        trimp *= 2
+                        print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
+                    
+                    activity['trimp'] = trimp
+                    activities_with_trimp.append(activity)
+                    print(f"Added activity {activity_name} with TRIMP = {trimp} (method: {trimp_method})")
+                    
+                    # Add a small delay to avoid rate limiting
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    print(f"Error getting details for activity {activity_id}: {str(e)}")
+                    print(f"Traceback: {traceback.format_exc()}")
+                    # Still include the activity but with 0 TRIMP
+                    activity['trimp'] = 0
+                    activities_with_trimp.append(activity)
+            
+            return activities_with_trimp
         except Exception as e:
             print(f"Error fetching activities for {date}: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}")
             return []
 
-    def update_database_entry(self, user_id, date, garmin_trimp, garmin_activities):
-        """Update or insert a new entry in the database for a specific date."""
+    def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
         try:
-            # Ensure date is in the correct string format
-            if isinstance(date, datetime.date):
-                date_str = date.strftime('%Y-%m-%d')
-            else:
-                # Validate the string format
-                try:
-                    datetime.datetime.strptime(date, '%Y-%m-%d')
-                    date_str = date
-                except ValueError as e:
-                    print(f"Invalid date format: {e}")
-                    return
-
-            # First check if we already have data for this date
-            existing_data = self.client.table('garmin_data').select('*').eq('user_id', user_id).eq('date', date_str).execute()
-            
-            # Fetch manual data for this date
-            manual_data = self.client.table('manual_data').select('*').eq('user_id', user_id).eq('date', date_str).execute()
-            
-            # Initialize variables
-            manual_trimp = 0
-            manual_activities = []
-            
-            # Process manual data if it exists
-            if manual_data.data:
-                for entry in manual_data.data:
-                    manual_trimp += entry.get('trimp', 0)
-                    if entry.get('activity_name'):
-                        manual_activities.append(entry['activity_name'])
-            
-            # Calculate total TRIMP
-            total_trimp = garmin_trimp + manual_trimp
-            
-            # Get previous day's metrics for calculations
-            previous_metrics = self.get_previous_metrics(date_str)
-            
-            # Calculate new metrics
-            new_metrics = self.calculate_metrics(date_str, total_trimp, previous_metrics)
-            
-            # Combine activities, ensuring no duplicates
-            all_activities = []
-            if existing_data.data:
-                existing_activities = existing_data.data[0].get('activity', '').split(',')
-                existing_activities = [a.strip() for a in existing_activities if a.strip() and a.strip() != 'Rest Day']
-                all_activities.extend(existing_activities)
-            
-            if garmin_activities:
-                all_activities.extend([a.strip() for a in garmin_activities if a.strip()])
-            if manual_activities:
-                all_activities.extend([a.strip() for a in manual_activities if a.strip()])
-            
-            # Remove duplicates while preserving order
-            seen = set()
-            unique_activities = []
-            for activity in all_activities:
-                activity = activity.strip()
-                if activity and activity != 'Rest Day' and activity not in seen:
-                    seen.add(activity)
-                    unique_activities.append(activity)
-            
-            # Convert activities list to string - no spaces after commas
-            activities_str = ','.join(unique_activities) if unique_activities else 'Rest Day'
-            
-            print(f"Updating database for {date_str}:")
-            print(f"  Garmin TRIMP: {garmin_trimp}")
-            print(f"  Manual TRIMP: {manual_trimp}")
-            print(f"  Total TRIMP: {total_trimp}")
-            print(f"  Activities: {activities_str}")
-            print(f"  New Metrics - ATL: {new_metrics['atl']}, CTL: {new_metrics['ctl']}, TSB: {new_metrics['tsb']}")
-            
-            # Convert date to ISO format with timezone
+            # Convert date_str to datetime object and ensure consistent format
             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
-            # Upsert the data
-            data = {
-                'user_id': user_id,
+            # Get manual data for this date
+            manual_response = self.client.table('manual_data') \
+                .select('trimp, activity_name') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_str) \
+                .execute()
+            
+            manual_trimp = 0
+            manual_activities = []
+            
+            if manual_response.data:
+                for entry in manual_response.data:
+                    if entry.get('trimp'):
+                        manual_trimp += float(entry['trimp'])
+                    if entry.get('activity_name'):
+                        manual_activities.append(entry['activity_name'])
+            
+            # Combine Garmin and manual data
+            total_trimp = trimp_total + manual_trimp
+            all_activities = []
+            if activity_str != 'Rest Day':
+                all_activities.append(activity_str)
+            all_activities.extend(manual_activities)
+            combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
+            
+            print(f"Upserting data for {date_str}:")
+            print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
+            print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            
+            # Use upsert with on_conflict to handle duplicates
+            self.client.table('garmin_data').upsert({
                 'date': date_iso,
                 'trimp': total_trimp,
-                'activity': activities_str,
+                'activity': combined_activity_str,
+                'user_id': self.user_id,
                 'atl': new_metrics['atl'],
                 'ctl': new_metrics['ctl'],
                 'tsb': new_metrics['tsb']
-            }
+            }, on_conflict='user_id,date').execute()
             
-            result = self.client.table('garmin_data').upsert(data, on_conflict='user_id,date').execute()
-            print(f"Database update result: {result}")
-            
+            print(f"Successfully updated/inserted data for {date_str}")
         except Exception as e:
-            print(f"Error updating database entry: {e}")
-            raise
+            print(f"Error upserting metrics for {date_str}: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
 
     def process_activity(self, activity, date_str):
         """Process a single activity and extract TRIMP data"""
