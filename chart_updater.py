@@ -174,6 +174,18 @@ class ChartUpdater:
     def update_chart_data(self, start_date=None, end_date=None, force_refresh=False):
         """Update the chart data for a given date range."""
         try:
+            print(f"\nStarting chart update for user {self.user_id}")
+            print(f"Force refresh: {force_refresh}")
+            
+            # Initialize Garmin connection
+            print("Initializing Garmin connection...")
+            try:
+                self.initialize_garmin()
+                print("Garmin connection initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize Garmin connection: {e}")
+                raise
+
             print("Finding last existing date...")
             try:
                 last_date = self.find_last_existing_date()
@@ -182,24 +194,35 @@ class ChartUpdater:
                 print(f"Failed to find last existing date: {e}")
                 last_date = None
 
-            # If no start_date provided, use last date or default
-            if not start_date:
-                if last_date and not force_refresh:
-                    # Convert string date to datetime
-                    start_date = datetime.datetime.strptime(last_date, '%Y-%m-%d').date()
-                else:
-                    # Default to 180 days ago if no last date or force refresh
-                    start_date = datetime.datetime.now().date() - datetime.timedelta(days=180)
-
             # If no end_date provided, use today
             if not end_date:
                 end_date = datetime.datetime.now().date()
-
-            # Convert string dates to datetime.date objects if needed
-            if isinstance(start_date, str):
-                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-            if isinstance(end_date, str):
+            elif isinstance(end_date, str):
                 end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
+
+            # If no start_date provided, use appropriate default
+            if not start_date:
+                if last_date and not force_refresh:
+                    # Start from the day after the last date
+                    start_date = datetime.datetime.strptime(last_date, '%Y-%m-%d').date() + datetime.timedelta(days=1)
+                    print(f"Starting from day after last date: {start_date}")
+                else:
+                    # If force refresh or no last date, start from 180 days ago
+                    start_date = end_date - datetime.timedelta(days=180)
+                    print(f"Starting from {start_date} (180 days before end date)")
+            elif isinstance(start_date, str):
+                start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
+
+            # If force refresh is enabled, extend start date
+            if force_refresh and last_date:
+                force_start = datetime.datetime.strptime(last_date, '%Y-%m-%d').date()
+                start_date = min(start_date, force_start)
+                print(f"Force refresh enabled, extended start date to: {start_date}")
+
+            # Ensure start_date is not after end_date
+            if start_date > end_date:
+                print("Start date is after end date, nothing to update")
+                return {'success': True, 'updated_count': 0}
 
             print(f"\nProcessing dates from {start_date} to {end_date}")
             
@@ -212,10 +235,18 @@ class ChartUpdater:
                 # Get activities for this date
                 activities = self.get_activities_for_date(date_str)
                 
+                # Get existing data for this date
+                existing_data = self.client.table('garmin_data').select('*').eq('user_id', self.user_id).eq('date', date_str).execute()
+                
                 if activities:
                     trimp_total = sum(activity.get('trimp', 0) for activity in activities)
                     activity_names = [activity.get('name', 'Unknown Activity') for activity in activities]
                     activity_str = ','.join(activity_names) if activity_names else 'Rest Day'
+                elif existing_data.data and len(existing_data.data) > 0:
+                    # Preserve existing data if no new activities found
+                    print(f"Preserving existing data for {date_str}")
+                    trimp_total = existing_data.data[0].get('trimp', 0)
+                    activity_str = existing_data.data[0].get('activity', 'Rest Day')
                 else:
                     trimp_total = 0
                     activity_str = 'Rest Day'
