@@ -277,221 +277,35 @@ class ChartUpdater:
             return None
 
     def get_activities_for_date(self, date):
+        """Get activities for a specific date."""
         try:
-            date_str = date.strftime('%Y-%m-%d')
-            print(f"\nFetching activities for {date_str}")
-            
-            # Make sure we're logged in
-            if not self.garmin:
-                print("Garmin client not initialized, initializing now...")
-                self.initialize_garmin()
-            
-            # Try to get activities with multiple methods
-            activities = []
-            
-            # Method 1: Direct date query
-            print(f"Method 1: Calling get_activities_by_date for {date_str}")
-            try:
-                # Updated API call for garminconnect 0.2.25 - without activityType parameter
-                day_activities = self.garmin.get_activities_by_date(
-                    date_str,
-                    date_str
-                )
-                if day_activities:
-                    print(f"Method 1 found {len(day_activities)} activities")
-                    activities = day_activities
-                else:
-                    print("Method 1 found no activities")
-            except Exception as e:
-                print(f"Method 1 error: {e}")
-            
-            # Method 2: Get recent activities and filter
-            if not activities:
-                print(f"Method 2: Getting recent activities and filtering for {date_str}")
+            # Ensure date is in the correct string format
+            if isinstance(date, datetime.date):
+                date_str = date.strftime('%Y-%m-%d')
+            else:
+                # Validate the string format
                 try:
-                    # Updated API call for garminconnect 0.2.25
-                    recent_activities = self.garmin.get_activities(0, 30)  # Get 30 most recent activities
-                    print(f"Method 2 found {len(recent_activities)} recent activities total")
-                    
-                    # Filter for the target date - fix date format check
-                    date_activities = []
-                    for activity in recent_activities:
-                        # Check for different date formats based on 0.2.25 API
-                        activity_date = None
-                        if 'startTimeLocal' in activity:
-                            activity_date = activity['startTimeLocal'].split()[0]
-                        elif 'startTimeGMT' in activity:
-                            activity_date = activity['startTimeGMT'].split()[0]
-                        elif 'startTime' in activity:
-                            activity_date = activity['startTime'].split('T')[0]
-                        
-                        if activity_date == date_str:
-                            date_activities.append(activity)
-                    
-                    if date_activities:
-                        print(f"Method 2 found {len(date_activities)} activities for {date_str}")
-                        activities = date_activities
-                    else:
-                        print(f"Method 2 found no activities for {date_str}")
-                except Exception as e:
-                    print(f"Method 2 error: {e}")
-                    print(f"Method 2 error traceback: {traceback.format_exc()}")
+                    datetime.datetime.strptime(date, '%Y-%m-%d')
+                    date_str = date
+                except ValueError as e:
+                    print(f"Invalid date format: {e}")
+                    return []
+
+            # Get activities from Garmin
+            activities = self.garmin.get_activities_for_date(date_str)
+            if activities:
+                print(f"Found {len(activities)} activities for {date_str}")
+                for activity in activities:
+                    activity_id = activity.get('activityId')
+                    trimp = activity.get('trimp', 0)
+                    activity_name = activity.get('activityName', 'Unknown Activity')
+                    print(f"Activity {activity_name} (ID: {activity_id}): TRIMP = {trimp}")
+                    self.processed_activity_ids.add(activity_id)
+            else:
+                print(f"No activities found for {date_str}")
             
-            # Method 3: Try a week-based approach
-            if not activities:
-                print(f"Method 3: Getting a week of activities including {date_str}")
-                try:
-                    # Start from 3 days before the target date
-                    week_start = date - datetime.timedelta(days=3)
-                    # End 3 days after the target date
-                    week_end = date + datetime.timedelta(days=3)
-                    
-                    # Updated API call without activityType parameter
-                    week_activities = self.garmin.get_activities_by_date(
-                        week_start.strftime("%Y-%m-%d"),
-                        week_end.strftime("%Y-%m-%d")
-                    )
-                    
-                    print(f"Method 3 found {len(week_activities)} activities for the week")
-                    
-                    # Filter for the target date
-                    date_activities = []
-                    for activity in week_activities:
-                        # Check for different date formats based on 0.2.25 API
-                        activity_date = None
-                        if 'startTimeLocal' in activity:
-                            activity_date = activity['startTimeLocal'].split()[0]
-                        elif 'startTimeGMT' in activity:
-                            activity_date = activity['startTimeGMT'].split()[0]
-                        elif 'startTime' in activity:
-                            activity_date = activity['startTime'].split('T')[0]
-                        
-                        if activity_date == date_str:
-                            date_activities.append(activity)
-                    
-                    if date_activities:
-                        print(f"Method 3 found {len(date_activities)} activities for {date_str}")
-                        activities = date_activities
-                    else:
-                        print(f"Method 3 found no activities for {date_str}")
-                except Exception as e:
-                    print(f"Method 3 error: {e}")
-                    print(f"Method 3 error traceback: {traceback.format_exc()}")
+            return activities
             
-            # Method 4: Try a different API endpoint as a last resort
-            if not activities:
-                print(f"Method 4: Using get_last_activity and checking date {date_str}")
-                try:
-                    # Try to get the last activity and check its date
-                    last_activity = self.garmin.get_last_activity()
-                    if last_activity:
-                        # Check for different date formats based on 0.2.25 API
-                        activity_date = None
-                        if 'startTimeLocal' in last_activity:
-                            activity_date = last_activity['startTimeLocal'].split()[0]
-                        elif 'startTimeGMT' in last_activity:
-                            activity_date = last_activity['startTimeGMT'].split()[0]
-                        elif 'startTime' in last_activity:
-                            activity_date = last_activity['startTime'].split('T')[0]
-                        
-                        print(f"Last activity date: {activity_date}")
-                        
-                        if activity_date == date_str:
-                            print(f"Method 4 found activity for {date_str}")
-                            activities = [last_activity]
-                        else:
-                            print(f"Method 4 found activity but not for {date_str}")
-                except Exception as e:
-                    print(f"Method 4 error: {e}")
-                    print(f"Method 4 error traceback: {traceback.format_exc()}")
-            
-            if not activities:
-                print(f"No activities found for {date_str} with any method")
-                return []
-                
-            print(f"Found {len(activities)} total activities for {date_str}")
-            
-            # Fetch TRIMP values for each activity
-            activities_with_trimp = []
-            for activity in activities:
-                activity_id = activity.get('activityId')
-                activity_name = activity.get('activityName', 'Unknown Activity')
-                
-                # Get activity date based on various possible fields
-                activity_date = None
-                if 'startTimeLocal' in activity:
-                    activity_date = activity['startTimeLocal'].split()[0]
-                elif 'startTimeGMT' in activity:
-                    activity_date = activity['startTimeGMT'].split()[0]
-                elif 'startTime' in activity:
-                    activity_date = activity['startTime'].split('T')[0]
-                
-                print(f"Processing activity: {activity_name} (ID: {activity_id}, Date: {activity_date})")
-                
-                try:
-                    # Get detailed activity data to find TRIMP
-                    print(f"Fetching details for activity {activity_id}")
-                    try:
-                        # Try get_activity to get details
-                        details = self.garmin.get_activity(activity_id)
-                        print("Successfully retrieved activity data with get_activity")
-                    except Exception as details_err:
-                        print(f"Error with get_activity: {details_err}")
-                        raise
-                    
-                    # Debug the returned keys
-                    detail_keys = list(details.keys())
-                    print(f"Activity details keys: {detail_keys}")
-                    
-                    trimp = 0.0
-                    trimp_method = "not found"
-                    
-                    # ONLY check connectIQMeasurements for TRIMP - no calculations
-                    if 'connectIQMeasurements' in details and details['connectIQMeasurements']:
-                        print(f"Found connectIQMeasurements with {len(details['connectIQMeasurements'])} items")
-                        
-                        # Print each measurement to inspect
-                        for i, item in enumerate(details['connectIQMeasurements']):
-                            print(f"Measurement {i+1}: {item}")
-                            
-                            # Look for TRIMP specifically in developer field 4
-                            if 'value' in item and item.get('developerFieldNumber') == 4:
-                                try:
-                                    trimp = round(float(item.get('value', 0)), 1)
-                                    trimp_method = "connectIQMeasurements"
-                                    print(f"FOUND TRIMP in measurements: {trimp}")
-                                    break
-                                except (ValueError, TypeError):
-                                    print(f"Failed to convert TRIMP value: {item.get('value')}")
-                    else:
-                        print("No connectIQMeasurements found, TRIMP remains 0")
-                    
-                    # Double TRIMP for strength training activities if TRIMP > 0
-                    activity_type = activity.get('activityType', {})
-                    if isinstance(activity_type, dict):
-                        activity_type = activity_type.get('typeKey', '')
-                    
-                    if trimp > 0 and ('strength' in str(activity_type).lower() or 
-                                      'siła' in activity_name.lower()):
-                        old_trimp = trimp
-                        trimp *= 2
-                        print(f"Applied 2x multiplier for strength training: {old_trimp} -> {trimp}")
-                    
-                    activity['trimp'] = trimp
-                    activities_with_trimp.append(activity)
-                    print(f"Added activity {activity_name} with TRIMP = {trimp} (method: {trimp_method})")
-                    
-                    # Add a small delay to avoid rate limiting
-                    time.sleep(1)
-                    
-                except Exception as e:
-                    print(f"Error getting details for activity {activity_id}: {str(e)}")
-                    print(f"Traceback: {traceback.format_exc()}")
-                    # Still include the activity but with 0 TRIMP
-                    activity['trimp'] = 0
-                    activities_with_trimp.append(activity)
-            
-            return activities_with_trimp
         except Exception as e:
             print(f"Error fetching activities for {date}: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}")
@@ -500,11 +314,23 @@ class ChartUpdater:
     def update_database_entry(self, user_id, date, garmin_trimp, garmin_activities):
         """Update or insert a new entry in the database for a specific date."""
         try:
+            # Ensure date is in the correct string format
+            if isinstance(date, datetime.date):
+                date_str = date.strftime('%Y-%m-%d')
+            else:
+                # Validate the string format
+                try:
+                    datetime.datetime.strptime(date, '%Y-%m-%d')
+                    date_str = date
+                except ValueError as e:
+                    print(f"Invalid date format: {e}")
+                    return
+
             # First check if we already have data for this date
-            existing_data = self.client.table('garmin_data').select('*').eq('user_id', user_id).eq('date', date).execute()
+            existing_data = self.client.table('garmin_data').select('*').eq('user_id', user_id).eq('date', date_str).execute()
             
             # Fetch manual data for this date
-            manual_data = self.client.table('manual_data').select('*').eq('user_id', user_id).eq('date', date).execute()
+            manual_data = self.client.table('manual_data').select('*').eq('user_id', user_id).eq('date', date_str).execute()
             
             # Initialize variables
             manual_trimp = 0
@@ -521,10 +347,10 @@ class ChartUpdater:
             total_trimp = garmin_trimp + manual_trimp
             
             # Get previous day's metrics for calculations
-            previous_metrics = self.get_previous_metrics(date)
+            previous_metrics = self.get_previous_metrics(date_str)
             
             # Calculate new metrics
-            new_metrics = self.calculate_metrics(date, total_trimp, previous_metrics)
+            new_metrics = self.calculate_metrics(date_str, total_trimp, previous_metrics)
             
             # Combine activities, ensuring no duplicates
             all_activities = []
@@ -550,7 +376,7 @@ class ChartUpdater:
             # Convert activities list to string - no spaces after commas
             activities_str = ','.join(unique_activities) if unique_activities else 'Rest Day'
             
-            print(f"Updating database for {date}:")
+            print(f"Updating database for {date_str}:")
             print(f"  Garmin TRIMP: {garmin_trimp}")
             print(f"  Manual TRIMP: {manual_trimp}")
             print(f"  Total TRIMP: {total_trimp}")
@@ -558,7 +384,7 @@ class ChartUpdater:
             print(f"  New Metrics - ATL: {new_metrics['atl']}, CTL: {new_metrics['ctl']}, TSB: {new_metrics['tsb']}")
             
             # Convert date to ISO format with timezone
-            date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
             date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
             
             # Upsert the data
