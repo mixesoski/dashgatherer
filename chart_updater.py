@@ -78,11 +78,10 @@ class ChartUpdater:
 
     def find_last_existing_date(self):
         try:
-            # Get the most recent date with TRIMP > 0 for this user
+            # Get the most recent date for this user
             response = self.client.table('garmin_data') \
                 .select('date, trimp, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
@@ -96,14 +95,14 @@ class ChartUpdater:
                         'ctl': float(data['ctl']),
                         'tsb': float(data['tsb'])
                     }
-                    print(f"Found last existing date with TRIMP > 0: {date}")
+                    print(f"Found last existing date: {date}")
                     print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
                     return date, last_metrics
                 except ValueError as e:
                     print(f"Error converting metrics to float: {e}")
                     return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
-            print("No existing data found with TRIMP > 0")
+            print("No existing data found in database")
             return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
             
         except Exception as e:
