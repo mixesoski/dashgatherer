@@ -426,6 +426,23 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                     .eq('date', data['date'].isoformat())\
                     .execute()
                 
+                # Get manual data for this date
+                manual_data = supabase.table('manual_data')\
+                    .select('trimp, activity_name')\
+                    .eq('user_id', user_id)\
+                    .eq('date', date_str)\
+                    .execute()
+                
+                manual_trimp = 0
+                manual_activities = []
+                
+                if manual_data.data:
+                    for entry in manual_data.data:
+                        if entry.get('trimp'):
+                            manual_trimp += float(entry['trimp'])
+                        if entry.get('activity_name'):
+                            manual_activities.append(entry['activity_name'])
+                
                 # Track this date as processed
                 processed_dates.append(data['date'].isoformat())
                 
@@ -447,26 +464,39 @@ def sync_garmin_data(user_id, start_date=None, is_first_sync=False):
                             if 'Rest day' in combined_activities:
                                 combined_activities.remove('Rest day')
                             
-                            activity = ', '.join(combined_activities)
-                            trimp = float(existing_data.get('trimp', 0)) + float(data['trimp'])
+                            # Add manual activities
+                            combined_activities.extend(manual_activities)
+                            combined_activities = list(set(combined_activities))  # Remove duplicates
+                            
+                            activity = ', '.join(combined_activities) if combined_activities else 'Rest day'
+                            trimp = float(existing_data.get('trimp', 0)) + float(data['trimp']) + manual_trimp
                         elif existing_activities == 'Rest day' and data['activities'] != ['Rest day']:
                             # Replace 'Rest day' with actual activities
-                            activity = ', '.join(data['activities'])
-                            trimp = float(data['trimp'])
+                            all_activities = data['activities'] + manual_activities
+                            activity = ', '.join(all_activities) if all_activities else 'Rest day'
+                            trimp = float(data['trimp']) + manual_trimp
                         elif data['activities'] == ['Rest day'] and existing_activities != 'Rest day':
                             # Keep existing activities (don't replace with Rest day)
-                            activity = existing_activities
-                            trimp = float(existing_data.get('trimp', 0))
+                            all_activities = existing_activities.split(', ') + manual_activities
+                            activity = ', '.join(all_activities) if all_activities else 'Rest day'
+                            trimp = float(existing_data.get('trimp', 0)) + manual_trimp
                         else:
-                            activity = existing_activities
-                            trimp = float(existing_data.get('trimp', 0))
+                            activity = ', '.join(manual_activities) if manual_activities else 'Rest day'
+                            trimp = float(existing_data.get('trimp', 0)) + manual_trimp
                     else:
-                        activity = existing_activities
-                        trimp = float(existing_data.get('trimp', 0))
+                        activity = ', '.join(manual_activities) if manual_activities else 'Rest day'
+                        trimp = float(existing_data.get('trimp', 0)) + manual_trimp
                 else:
                     # No existing data, use new activity data
-                    activity = ', '.join(data['activities'])
-                    trimp = float(data['trimp'])
+                    all_activities = data['activities'] + manual_activities
+                    activity = ', '.join(all_activities) if all_activities else 'Rest day'
+                    trimp = float(data['trimp']) + manual_trimp
+                
+                print(f"Combined data for {date_str}:")
+                print(f"- Garmin TRIMP: {data['trimp']}")
+                print(f"- Manual TRIMP: {manual_trimp}")
+                print(f"- Total TRIMP: {trimp}")
+                print(f"- Activities: {activity}")
                 
                 # Calculate metrics for this date
                 # Look for previous day's metrics in our DataFrame
