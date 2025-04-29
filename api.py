@@ -84,11 +84,11 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def home():
-    # Check if the request is from a browser
-    if request.headers.get('Accept', '').find('text/html') != -1:
+    # Only redirect if coming from the old domain
+    if request.headers.get('Host') == 'dashgatherer.lovable.app':
         return redirect('https://trimpbara.space')
     
-    # Return API status for non-browser requests
+    # For all other requests, just return API status
     return jsonify({
         'status': 'ok',
         'message': 'API is running'
@@ -207,8 +207,10 @@ def auth_callback():
         # Store the tokens in the database
         store_tokens_in_db(tokens)
         
-        # Redirect to the frontend
-        return redirect('https://trimpbara.space')
+        # Only redirect if coming from the old domain
+        if request.headers.get('Host') == 'dashgatherer.lovable.app':
+            return redirect('https://trimpbara.space')
+        return redirect('/')
         
     except Exception as e:
         print(f"Error in auth callback: {e}")
