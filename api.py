@@ -18,7 +18,7 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "https://trimpbara.space",
+            "https://dashgatherer.lovable.app",
             "http://localhost:5173",
             "http://localhost:3000"
         ],
@@ -48,7 +48,7 @@ def log_request_info():
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ["https://trimpbara.space", "http://localhost:5173", "http://localhost:3000"]:
+    if origin in ["https://dashgatherer.lovable.app", "http://localhost:5173", "http://localhost:3000"]:
         response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cache-Control')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
@@ -84,11 +84,11 @@ def log_error(error_message, exception=None):
 
 @app.route('/')
 def home():
-    # Only redirect if coming from the old domain
-    if request.headers.get('Host') == 'dashgatherer.lovable.app':
-        return redirect('https://trimpbara.space')
+    # Check if the request is from a browser
+    if request.headers.get('Accept', '').find('text/html') != -1:
+        return redirect('https://dashgatherer.lovable.app')
     
-    # For all other requests, just return API status
+    # Return API status for non-browser requests
     return jsonify({
         'status': 'ok',
         'message': 'API is running'
@@ -207,10 +207,8 @@ def auth_callback():
         # Store the tokens in the database
         store_tokens_in_db(tokens)
         
-        # Only redirect if coming from the old domain
-        if request.headers.get('Host') == 'dashgatherer.lovable.app':
-            return redirect('https://trimpbara.space')
-        return redirect('/')
+        # Redirect to the frontend
+        return redirect('https://dashgatherer.lovable.app')
         
     except Exception as e:
         print(f"Error in auth callback: {e}")
