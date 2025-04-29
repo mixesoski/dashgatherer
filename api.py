@@ -19,11 +19,14 @@ CORS(app, resources={
     r"/api/*": {
         "origins": [
             "https://trimpbara.space",
-            "http://localhost:5173",  # For local development
-            "http://localhost:3000"   # Alternative local development port
+            "http://localhost:5173",
+            "http://localhost:3000"
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+        "max_age": 3600
     }
 })
 
@@ -44,14 +47,13 @@ def log_request_info():
 
 @app.after_request
 def after_request(response):
-    """Log response information for debugging"""
-    print(f"\n{'='*50}")
-    print(f"Response: {response.status}")
-    print(f"Headers: {dict(response.headers)}")
-    print(f"{'='*50}\n")
-    response.headers.add('Access-Control-Allow-Origin', 'https://trimpbara.space')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    origin = request.headers.get('Origin')
+    if origin in ["https://trimpbara.space", "http://localhost:5173", "http://localhost:3000"]:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cache-Control')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Max-Age', '3600')
     return response
 
 def verify_auth_token(auth_header):
@@ -81,23 +83,15 @@ def log_error(error_message, exception=None):
     print("="*50 + "\n")
 
 @app.route('/')
-def root():
-    """Root endpoint that shows API status or redirects to frontend"""
+def home():
     # Check if the request is from a browser
     if request.headers.get('Accept', '').find('text/html') != -1:
         return redirect('https://trimpbara.space')
     
     # Return API status for non-browser requests
     return jsonify({
-        'status': 'online',
-        'message': 'DashGatherer API is running',
-        'version': '1.0.0',
-        'endpoints': {
-            'health': '/api/health',
-            'sync_garmin': '/api/sync-garmin',
-            'update_chart': '/api/update-chart'
-        },
-        'timestamp': datetime.utcnow().isoformat()
+        'status': 'ok',
+        'message': 'API is running'
     })
 
 @app.route('/api/sync-garmin', methods=['POST'])
@@ -144,65 +138,37 @@ def sync_garmin():
         print(traceback_str)
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/api/update-chart', methods=['POST'])
+@app.route('/api/update-chart', methods=['POST', 'OPTIONS'])
 def update_chart():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
-        # Verify authentication
+        # Get user_id from Authorization header
         auth_header = request.headers.get('Authorization')
-        print(f"\nReceived request to /api/update-chart")
-        print(f"Auth header present: {bool(auth_header)}")
-        print(f"Request method: {request.method}")
-        print(f"Content-Type: {request.headers.get('Content-Type')}")
-        print(f"Request data: {request.get_data(as_text=True)}")
-        
-        user = verify_auth_token(auth_header)
-        if not user:
-            print("Authentication failed - invalid or missing token")
-            print(f"Auth header: {auth_header[:15]}... (truncated)")
-            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+        if not auth_header:
+            return jsonify({
+                'success': False,
+                'error': 'No Authorization header'
+            }), 401
 
-        try:
-            data = request.json
-            print(f"Parsed request JSON data: {data}")
-        except Exception as json_err:
-            print(f"Failed to parse JSON from request: {str(json_err)}")
-            print(f"Raw request data: {request.get_data(as_text=True)}")
-            return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
-        
-        if not data:
-            print("No data provided in request body")
-            return jsonify({'success': False, 'error': 'No data provided'}), 400
-            
-        user_id = data.get('userId')
+        user_id = auth_header.split(' ')[1] if len(auth_header.split(' ')) > 1 else None
         if not user_id:
-            print("No user ID provided in request")
-            return jsonify({'success': False, 'error': 'No user ID provided'}), 400
-            
-        print(f"User ID from request: {user_id}")
-        print(f"User ID from token: {user.user.id}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid Authorization header'
+            }), 401
+
+        # Get force_refresh parameter
+        force_refresh = request.args.get('force', 'false').lower() == 'true'
         
-        if user_id != user.user.id:
-            print(f"User ID mismatch. Expected: {user.user.id}, Got: {user_id}")
-            return jsonify({'success': False, 'error': 'Invalid user ID'}), 403
-        
-        # Check if force refresh is requested
-        force_refresh = data.get('forceRefresh', False)
-        print(f"Force refresh requested: {force_refresh}")
-        
-        print(f"\nStarting chart update for user: {user_id}")
-        
-        # Pass the force_refresh parameter to the chart updater
+        # Update chart data
         result = update_chart_data(user_id, force_refresh=force_refresh)
-        print(f"Chart update completed with result: {result}")
         
         return jsonify(result)
         
     except Exception as e:
-        print(f"\nError in update chart endpoint:")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("Traceback:")
-        traceback.print_exc()
+        print(f"Error in update_chart: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
