@@ -18,7 +18,7 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "https://dashgatherer.lovable.app",
+            "https://trimpbara.space",
             "http://localhost:5173",  # For local development
             "http://localhost:3000"   # Alternative local development port
         ],
@@ -49,10 +49,9 @@ def after_request(response):
     print(f"Response: {response.status}")
     print(f"Headers: {dict(response.headers)}")
     print(f"{'='*50}\n")
-    response.headers.add('Access-Control-Allow-Origin', 'https://dashgatherer.lovable.app')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cache-Control')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Allow-Origin', 'https://trimpbara.space')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
 
 def verify_auth_token(auth_header):
@@ -86,7 +85,7 @@ def root():
     """Root endpoint that shows API status or redirects to frontend"""
     # Check if the request is from a browser
     if request.headers.get('Accept', '').find('text/html') != -1:
-        return redirect('https://dashgatherer.lovable.app')
+        return redirect('https://trimpbara.space')
     
     # Return API status for non-browser requests
     return jsonify({
@@ -225,6 +224,29 @@ def health_check():
             'status': 'unhealthy',
             'error': str(e)
         }), 500
+
+@app.route('/auth/callback')
+def auth_callback():
+    # Handle the callback from Garmin auth
+    code = request.args.get('code')
+    if not code:
+        return "No code provided", 400
+    
+    try:
+        # Exchange the code for tokens
+        tokens = exchange_code_for_tokens(code)
+        if not tokens:
+            return "Failed to exchange code for tokens", 400
+            
+        # Store the tokens in the database
+        store_tokens_in_db(tokens)
+        
+        # Redirect to the frontend
+        return redirect('https://trimpbara.space')
+        
+    except Exception as e:
+        print(f"Error in auth callback: {e}")
+        return str(e), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
