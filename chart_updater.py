@@ -10,6 +10,7 @@ import traceback
 import logging
 import time
 import math
+from datetime import timedelta
 
 load_dotenv()
 
@@ -100,37 +101,56 @@ class ChartUpdater:
             raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
+        """Find the last date with TRIMP > 0 in the database, looking back at least 7 days."""
+        print("Finding last existing date...")
         try:
-            # Get the most recent date for this user
-            response = self.client.table('garmin_data') \
-                .select('date, trimp, atl, ctl, tsb') \
+            # First, get the most recent date with TRIMP > 0
+            result = self.client.table('garmin_data') \
+                .select('date') \
                 .eq('user_id', self.user_id) \
+                .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
             
-            if response.data:
-                data = response.data[0] if isinstance(response.data, list) else response.data
-                try:
-                    date = datetime.datetime.fromisoformat(data['date']).date()
-                    last_metrics = {
-                        'atl': float(data['atl']),
-                        'ctl': float(data['ctl']),
-                        'tsb': float(data['tsb'])
-                    }
-                    print(f"Found last existing date: {date}")
-                    print(f"Last metrics: ATL: {last_metrics['atl']}, CTL: {last_metrics['ctl']}, TSB: {last_metrics['tsb']}")
-                    return date, last_metrics
-                except ValueError as e:
-                    print(f"Error converting metrics to float: {e}")
-                    return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
-            
-            print("No existing data found in database")
-            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
-            
+            if result.data:
+                last_date = datetime.strptime(result.data[0]['date'], '%Y-%m-%d').date()
+                print(f"Found last date with TRIMP > 0: {last_date}")
+                
+                # Get the date 7 days before today
+                seven_days_ago = datetime.now().date() - timedelta(days=7)
+                
+                # If the last date is more than 7 days ago, use 7 days ago instead
+                if last_date < seven_days_ago:
+                    print(f"Last date is more than 7 days old, using {seven_days_ago} instead")
+                    last_date = seven_days_ago
+                
+                # Get the metrics for the last date
+                metrics_result = self.client.table('garmin_data') \
+                    .select('atl', 'ctl', 'tsb') \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', last_date.strftime('%Y-%m-%d')) \
+                    .execute()
+                
+                if metrics_result.data:
+                    print(f"Last metrics: ATL: {metrics_result.data[0]['atl']}, CTL: {metrics_result.data[0]['ctl']}, TSB: {metrics_result.data[0]['tsb']}")
+                    print(f"Last date: {last_date}")
+                    return last_date, metrics_result.data[0]
+                else:
+                    print("No metrics found for last date")
+                    return last_date, {'atl': 0, 'ctl': 0, 'tsb': 0}
+            else:
+                print("No existing data found with TRIMP > 0")
+                # If no data found, return 7 days ago
+                seven_days_ago = datetime.now().date() - timedelta(days=7)
+                print(f"Using {seven_days_ago} as start date")
+                return seven_days_ago, {'atl': 0, 'ctl': 0, 'tsb': 0}
         except Exception as e:
             print(f"Error finding last existing date: {e}")
-            return None, {'atl': 0, 'ctl': 0, 'tsb': 0}
+            # If error occurs, return 7 days ago
+            seven_days_ago = datetime.now().date() - timedelta(days=7)
+            print(f"Error occurred, using {seven_days_ago} as start date")
+            return seven_days_ago, {'atl': 0, 'ctl': 0, 'tsb': 0}
 
     def calculate_new_metrics(self, current_trimp, previous_metrics):
         current_trimp = float(current_trimp)  # This might be 0 for rest days
