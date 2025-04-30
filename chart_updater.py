@@ -264,10 +264,15 @@ class ChartUpdater:
                 # Get existing data for this date
                 existing_data = self.get_existing_data(date_str)
                 
+                # Skip if data already exists and we're not force refreshing
+                if existing_data and not force_refresh:
+                    print(f"Data already exists for {date_str}, skipping...")
+                    continue
+                
                 # Get previous day's metrics
                 previous_metrics = self.get_previous_day_metrics(date_str)
                 
-                # Get activities for this date - FIXED: Properly get and process activities
+                # Get activities for this date
                 activities = self.get_activities_for_date(date)
                 
                 # Calculate total TRIMP for all activities on this date
