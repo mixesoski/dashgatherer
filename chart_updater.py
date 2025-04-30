@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import datetime
+import json
+import base64
 from garminconnect import Garmin
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -14,7 +16,28 @@ load_dotenv()
 class ChartUpdater:
     def __init__(self, user_id):
         self.client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-        self.user_id = user_id
+        # Extract user ID from JWT token if it's a token
+        if user_id.startswith('eyJ'):
+            try:
+                # Split the JWT token and decode the payload
+                parts = user_id.split('.')
+                if len(parts) == 3:
+                    payload = parts[1]
+                    # Add padding if needed
+                    padding = '=' * (4 - len(payload) % 4)
+                    payload += padding
+                    # Decode the payload
+                    decoded = base64.b64decode(payload)
+                    user_data = json.loads(decoded)
+                    self.user_id = user_data.get('sub')
+                    print(f"Extracted user ID from JWT: {self.user_id}")
+                else:
+                    self.user_id = user_id
+            except Exception as e:
+                print(f"Error extracting user ID from JWT: {e}")
+                self.user_id = user_id
+        else:
+            self.user_id = user_id
         self.garmin = None
         self.processed_activity_ids = set()
 
