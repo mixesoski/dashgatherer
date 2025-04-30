@@ -329,14 +329,18 @@ class ChartUpdater:
             return {'success': False, 'error': str(e)}
 
     def get_existing_data(self, date_str):
-        response = self.client.table('garmin_data') \
-            .select('trimp, activity, atl, ctl, tsb') \
-            .eq('user_id', self.user_id) \
-            .eq('date', date_str) \
-            .execute()
-        if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
-            return response.data[0] if isinstance(response.data, list) else response.data
-        else:
+        try:
+            response = self.client.table('garmin_data') \
+                .select('trimp, activity, atl, ctl, tsb') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_str) \
+                .execute()
+            
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return None
+        except Exception as e:
+            print(f"Error getting existing data for {date_str}: {e}")
             return None
 
     def get_previous_day_metrics(self, date_str):
@@ -618,6 +622,12 @@ class ChartUpdater:
             print(f"Upserting data for {date_str}:")
             print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
+            
+            # First check if data exists
+            existing_data = self.get_existing_data(date_str)
+            if existing_data and not force_refresh:
+                print(f"Data already exists for {date_str}, skipping update")
+                return
             
             # Use upsert with on_conflict to handle duplicates
             self.client.table('garmin_data').upsert({
