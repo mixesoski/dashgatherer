@@ -114,11 +114,11 @@ class ChartUpdater:
                 .execute()
             
             if result.data:
-                last_date = datetime.strptime(result.data[0]['date'], '%Y-%m-%d').date()
+                last_date = datetime.datetime.strptime(result.data[0]['date'], '%Y-%m-%d').date()
                 print(f"Found last date with TRIMP > 0: {last_date}")
                 
                 # Get the date 7 days before today
-                seven_days_ago = datetime.now().date() - timedelta(days=7)
+                seven_days_ago = datetime.datetime.now().date() - datetime.timedelta(days=7)
                 
                 # If the last date is more than 7 days ago, use 7 days ago instead
                 if last_date < seven_days_ago:
@@ -142,13 +142,13 @@ class ChartUpdater:
             else:
                 print("No existing data found with TRIMP > 0")
                 # If no data found, return 7 days ago
-                seven_days_ago = datetime.now().date() - timedelta(days=7)
+                seven_days_ago = datetime.datetime.now().date() - datetime.timedelta(days=7)
                 print(f"Using {seven_days_ago} as start date")
                 return seven_days_ago, {'atl': 0, 'ctl': 0, 'tsb': 0}
         except Exception as e:
             print(f"Error finding last existing date: {e}")
             # If error occurs, return 7 days ago
-            seven_days_ago = datetime.now().date() - timedelta(days=7)
+            seven_days_ago = datetime.datetime.now().date() - datetime.timedelta(days=7)
             print(f"Error occurred, using {seven_days_ago} as start date")
             return seven_days_ago, {'atl': 0, 'ctl': 0, 'tsb': 0}
 
