@@ -309,7 +309,7 @@ class ChartUpdater:
                 previous_metrics = new_metrics
                 
                 # Update the database
-                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str)
+                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str, force_refresh)
                 
                 print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
                 print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
@@ -588,7 +588,7 @@ class ChartUpdater:
             print(f"Traceback: {traceback.format_exc()}")
             return []
 
-    def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str):
+    def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str, force_refresh=False):
         try:
             # Convert date_str to datetime object and ensure consistent format
             date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
@@ -629,8 +629,19 @@ class ChartUpdater:
                 print(f"Data already exists for {date_str}, skipping update")
                 return
             
-            # Use upsert with on_conflict to handle duplicates
-            self.client.table('garmin_data').upsert({
+            # Delete existing data for this date if it exists (to prevent duplicates)
+            try:
+                self.client.table('garmin_data') \
+                    .delete() \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', date_iso) \
+                    .execute()
+                print(f"Deleted existing data for {date_str}")
+            except Exception as e:
+                print(f"Error deleting existing data: {e}")
+            
+            # Insert new data
+            self.client.table('garmin_data').insert({
                 'date': date_iso,
                 'trimp': total_trimp,
                 'activity': combined_activity_str,
@@ -638,7 +649,7 @@ class ChartUpdater:
                 'atl': new_metrics['atl'],
                 'ctl': new_metrics['ctl'],
                 'tsb': new_metrics['tsb']
-            }, on_conflict='user_id,date').execute()
+            }).execute()
             
             print(f"Successfully updated/inserted data for {date_str}")
         except Exception as e:
