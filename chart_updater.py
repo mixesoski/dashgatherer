@@ -114,7 +114,15 @@ class ChartUpdater:
                 .execute()
             
             if result.data:
-                last_date = datetime.datetime.strptime(result.data[0]['date'], '%Y-%m-%d').date()
+                # Parse the date string, handling timezone information
+                date_str = result.data[0]['date']
+                try:
+                    # First try parsing with timezone
+                    last_date = datetime.datetime.fromisoformat(date_str).date()
+                except ValueError:
+                    # If that fails, try parsing just the date part
+                    last_date = datetime.datetime.strptime(date_str.split('T')[0], '%Y-%m-%d').date()
+                
                 print(f"Found last date with TRIMP > 0: {last_date}")
                 
                 # Get the date 7 days before today
@@ -330,11 +338,24 @@ class ChartUpdater:
 
     def get_existing_data(self, date_str):
         try:
+            # Convert date_str to datetime and ensure consistent ISO format
+            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
+            
+            # Try first with ISO format
             response = self.client.table('garmin_data') \
                 .select('trimp, activity, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .eq('date', date_str) \
+                .eq('date', date_iso) \
                 .execute()
+            
+            if not response.data or len(response.data) == 0:
+                # If no results, try with just the date part
+                response = self.client.table('garmin_data') \
+                    .select('trimp, activity, atl, ctl, tsb') \
+                    .eq('user_id', self.user_id) \
+                    .eq('date', date_str) \
+                    .execute()
             
             if response.data and len(response.data) > 0:
                 return response.data[0]
