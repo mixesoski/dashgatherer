@@ -611,27 +611,18 @@ class ChartUpdater:
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str, force_refresh=False):
         try:
-            # Convert date_str to datetime object and ensure consistent format
-            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
-            
-            # Get manual data for this date
+            # Always use plain date (YYYY-MM-DD) for upsert
+            date_key = date_str  # already in YYYY-MM-DD format
+
+            # Fetch manual data
             manual_response = self.client.table('manual_data') \
                 .select('trimp, activity_name') \
                 .eq('user_id', self.user_id) \
-                .eq('date', date_str) \
+                .eq('date', date_key) \
                 .execute()
-            
-            manual_trimp = 0
-            manual_activities = []
-            
-            if manual_response.data:
-                for entry in manual_response.data:
-                    if entry.get('trimp'):
-                        manual_trimp += float(entry['trimp'])
-                    if entry.get('activity_name'):
-                        manual_activities.append(entry['activity_name'])
-            
+            manual_trimp = sum(float(entry['trimp']) for entry in (manual_response.data or []) if entry.get('trimp'))
+            manual_activities = [entry['activity_name'] for entry in (manual_response.data or []) if entry.get('activity_name')]
+
             # Combine Garmin and manual data
             total_trimp = trimp_total + manual_trimp
             all_activities = []
@@ -639,40 +630,22 @@ class ChartUpdater:
                 all_activities.append(activity_str)
             all_activities.extend(manual_activities)
             combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
-            
-            print(f"Upserting data for {date_str}:")
+
+            print(f"Upserting data for {date_key}:")
             print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
-            
-            # First check if data exists
-            existing_data = self.get_existing_data(date_str)
-            if existing_data and not force_refresh:
-                print(f"Data already exists for {date_str}, skipping update")
-                return
-            
-            # Delete existing data for this date if it exists (to prevent duplicates)
-            try:
-                self.client.table('garmin_data') \
-                    .delete() \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', date_iso) \
-                    .execute()
-                print(f"Deleted existing data for {date_str}")
-            except Exception as e:
-                print(f"Error deleting existing data: {e}")
-            
-            # Insert new data
-            self.client.table('garmin_data').insert({
-                'date': date_iso,
+
+            # Upsert (update or insert) using on_conflict if available
+            self.client.table('garmin_data').upsert({
+                'date': date_key,
                 'trimp': total_trimp,
                 'activity': combined_activity_str,
                 'user_id': self.user_id,
                 'atl': new_metrics['atl'],
                 'ctl': new_metrics['ctl'],
                 'tsb': new_metrics['tsb']
-            }).execute()
-            
-            print(f"Successfully updated/inserted data for {date_str}")
+            }, on_conflict=['user_id', 'date']).execute()
+            print(f"Successfully upserted data for {date_key}")
         except Exception as e:
             print(f"Error upserting metrics for {date_str}: {e}")
             print(f"Traceback: {traceback.format_exc()}")
