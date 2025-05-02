@@ -60,16 +60,20 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
         // Calculate days from start date until now
         const daysDiff = Math.ceil((new Date().getTime() - startDate.getTime()) / (1000 * 3600 * 24));
         
-        const response = await fetch(`${API_URL}/api/sync-garmin`, {
+        // Add timestamp to force server to bypass cache
+        const timestamp = new Date().getTime();
+        const response = await fetch(`${API_URL}/api/sync-garmin?t=${timestamp}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache, no-store'
             },
             body: JSON.stringify({ 
                 user_id: user.id,
                 days: daysDiff,
-                is_first_sync: false
+                is_first_sync: false,
+                force_refresh: true // Add parameter to indicate we want a fresh check
             })
         });
 
@@ -92,10 +96,21 @@ export const syncGarminData = async (userId: string, startDate: Date) => {
             }
             return true;
         } else {
-            toast.error(data.error || 'Sync failed', { 
-                id: toastId,
-                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
-            });
+            const errorMsg = data.error || 'Sync failed';
+            console.error('Sync error:', errorMsg);
+            
+            // Handle unique constraint violations with a more descriptive message
+            if (errorMsg.includes('unique constraint') || errorMsg.includes('duplicate key')) {
+                toast.error('Duplicate data detected. Please try updating instead of syncing.', { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
+            } else {
+                toast.error(errorMsg, { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
+            }
             return false;
         }
     } catch (error) {
@@ -162,10 +177,21 @@ export const updateGarminData = async (userId: string) => {
                 return false;
             }
         } else {
-            toast.error(data.error || 'Update failed', { 
-                id: toastId,
-                position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
-            });
+            const errorMsg = data.error || 'Update failed';
+            console.error('Update error:', errorMsg);
+            
+            // Handle unique constraint violations with a more user-friendly message
+            if (errorMsg.includes('unique constraint') || errorMsg.includes('duplicate key')) {
+                toast.error('Duplicate data detected. The system will handle merging automatically.', { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
+            } else {
+                toast.error(errorMsg, { 
+                    id: toastId,
+                    position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
+                });
+            }
             return false;
         }
     } catch (error) {

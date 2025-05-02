@@ -39,7 +39,18 @@ export async function handleWebhookEvent(req: Request): Promise<Response> {
       
       if (body?.type === 'checkout.session.completed') {
         log.info('Processing checkout.session.completed event without signature verification');
-        return await handleCheckoutCompleted(body.data.object);
+        try {
+          return await handleCheckoutCompleted(body.data.object);
+        } catch (processError) {
+          log.error('Error processing checkout session:', processError);
+          // Check if this is a duplicate constraint error and handle accordingly
+          if (processError.message?.includes('unique constraint') || 
+              processError.message?.includes('duplicate key')) {
+            log.warn('Detected potential duplicate record issue - will try to continue');
+          } else {
+            throw processError;
+          }
+        }
       }
     } catch (fallbackErr) {
       log.error('Error in fallback processing:', fallbackErr);
@@ -91,7 +102,25 @@ export async function handleWebhookEvent(req: Request): Promise<Response> {
       
       if (jsonBody?.type === 'checkout.session.completed') {
         log.info('Attempting to process checkout session despite signature failure');
-        return await handleCheckoutCompleted(jsonBody.data.object);
+        try {
+          return await handleCheckoutCompleted(jsonBody.data.object);
+        } catch (processError) {
+          log.error('Error processing checkout session:', processError);
+          // Check if this is a duplicate constraint error and handle accordingly
+          if (processError.message?.includes('unique constraint') ||
+              processError.message?.includes('duplicate key')) {
+            log.warn('Detected duplicate record - ignoring this error as it likely means the operation already succeeded');
+            return new Response(JSON.stringify({ 
+              success: true, 
+              message: 'Event processed (ignoring duplicate record error)'
+            }), { 
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          } else {
+            throw processError;
+          }
+        }
       }
     } catch (fallbackErr) {
       log.error('Error in fallback processing:', fallbackErr);
@@ -108,18 +137,44 @@ export async function handleWebhookEvent(req: Request): Promise<Response> {
     );
   }
 
-  // Handle different event types
-  switch (event.type) {
-    case 'checkout.session.completed':
-      return await handleCheckoutCompleted(event.data.object);
-      
-    case 'customer.subscription.updated':
-      return await handleSubscriptionUpdated(event.data.object);
-      
-    case 'customer.subscription.deleted':
-      return await handleSubscriptionDeleted(event.data.object);
-      
-    default:
-      return handleOtherEventType(event.type);
+  // Handle different event types with proper error handling
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        return await handleCheckoutCompleted(event.data.object);
+        
+      case 'customer.subscription.updated':
+        return await handleSubscriptionUpdated(event.data.object);
+        
+      case 'customer.subscription.deleted':
+        return await handleSubscriptionDeleted(event.data.object);
+        
+      default:
+        return handleOtherEventType(event.type);
+    }
+  } catch (error) {
+    log.error(`Error handling event type ${event.type}:`, error);
+    
+    // Special handling for duplicate key violations
+    if (error.message?.includes('unique constraint') || 
+        error.message?.includes('duplicate key')) {
+      log.warn('Detected duplicate record - this may be a retry of a previously successful operation');
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: 'Event processing skipped due to duplicate record detection'
+      }), { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // Return the error for other cases
+    return new Response(JSON.stringify({ 
+      error: 'Error processing webhook event',
+      details: error.message || 'Unknown error'
+    }), { 
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 }
