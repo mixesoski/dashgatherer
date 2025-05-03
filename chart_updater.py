@@ -334,25 +334,12 @@ class ChartUpdater:
 
     def get_existing_data(self, date_str):
         try:
-            # Convert date_str to datetime and ensure consistent ISO format
-            date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-            date_iso = date_obj.replace(tzinfo=datetime.timezone.utc).isoformat()
-            
-            # Try first with ISO format
+            # Always use 'YYYY-MM-DD' format for date
             response = self.client.table('garmin_data') \
                 .select('trimp, activity, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .eq('date', date_iso) \
+                .eq('date', date_str) \
                 .execute()
-            
-            if not response.data or len(response.data) == 0:
-                # If no results, try with just the date part
-                response = self.client.table('garmin_data') \
-                    .select('trimp, activity, atl, ctl, tsb') \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', date_str) \
-                    .execute()
-            
             if response.data and len(response.data) > 0:
                 return response.data[0]
             return None
@@ -626,7 +613,7 @@ class ChartUpdater:
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str, force_refresh=False):
         try:
-            date_key = date_str  # YYYY-MM-DD
+            date_key = date_str  # Always 'YYYY-MM-DD'
 
             # Fetch manual data
             manual_response = self.client.table('manual_data') \
