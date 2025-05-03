@@ -611,8 +611,7 @@ class ChartUpdater:
 
     def update_database_entry(self, date_str, trimp_total, new_metrics, activity_str, force_refresh=False):
         try:
-            # Always use plain date (YYYY-MM-DD) for upsert
-            date_key = date_str  # already in YYYY-MM-DD format
+            date_key = date_str  # YYYY-MM-DD
 
             # Fetch manual data
             manual_response = self.client.table('manual_data') \
@@ -631,23 +630,41 @@ class ChartUpdater:
             all_activities.extend(manual_activities)
             combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
 
-            print(f"Upserting data for {date_key}:")
+            print(f"Preparing to update/insert data for {date_key}:")
             print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
 
-            # Upsert (update or insert) using on_conflict if available
-            self.client.table('garmin_data').upsert({
-                'date': date_key,
-                'trimp': total_trimp,
-                'activity': combined_activity_str,
-                'user_id': self.user_id,
-                'atl': new_metrics['atl'],
-                'ctl': new_metrics['ctl'],
-                'tsb': new_metrics['tsb']
-            }, on_conflict=['user_id', 'date']).execute()
-            print(f"Successfully upserted data for {date_key}")
+            # Check if row exists
+            existing = self.client.table('garmin_data') \
+                .select('id') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_key) \
+                .execute()
+            if existing.data and len(existing.data) > 0:
+                # Update
+                self.client.table('garmin_data').update({
+                    'trimp': total_trimp,
+                    'activity': combined_activity_str,
+                    'atl': new_metrics['atl'],
+                    'ctl': new_metrics['ctl'],
+                    'tsb': new_metrics['tsb']
+                }).eq('user_id', self.user_id).eq('date', date_key).execute()
+                print(f"Updated existing row for {date_key}")
+            else:
+                # Insert
+                self.client.table('garmin_data').insert({
+                    'date': date_key,
+                    'trimp': total_trimp,
+                    'activity': combined_activity_str,
+                    'user_id': self.user_id,
+                    'atl': new_metrics['atl'],
+                    'ctl': new_metrics['ctl'],
+                    'tsb': new_metrics['tsb']
+                }).execute()
+                print(f"Inserted new row for {date_key}")
+
         except Exception as e:
-            print(f"Error upserting metrics for {date_str}: {e}")
+            print(f"Error updating/inserting metrics for {date_str}: {e}")
             print(f"Traceback: {traceback.format_exc()}")
 
     def process_activity(self, activity, date_str):
