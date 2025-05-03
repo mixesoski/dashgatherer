@@ -104,17 +104,18 @@ class ChartUpdater:
         """Find the last date with any data in the database, looking back at least 7 days."""
         print("Finding last existing date...")
         try:
-            # Get the most recent date with any data
+            # Get the most recent date with any data and its metrics
             result = self.client.table('garmin_data') \
-                .select('date, atl, ctl, tsb') \
+                .select('date, atl, ctl, tsb, trimp') \
                 .eq('user_id', self.user_id) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
             
-            if result.data:
+            if result.data and len(result.data) > 0:
                 # Parse the date string, handling timezone information
-                date_str = result.data[0]['date']
+                data = result.data[0]
+                date_str = data['date']
                 try:
                     # First try parsing with timezone
                     last_date = datetime.datetime.fromisoformat(date_str).date()
@@ -131,22 +132,17 @@ class ChartUpdater:
                 if last_date < seven_days_ago:
                     print(f"Last date is more than 7 days old, using {seven_days_ago} instead")
                     last_date = seven_days_ago
-                
-                # Get the metrics for the last date
-                metrics_result = self.client.table('garmin_data') \
-                    .select('atl', 'ctl', 'tsb') \
-                    .eq('user_id', self.user_id) \
-                    .eq('date', last_date.strftime('%Y-%m-%d')) \
-                    .execute()
-                
-                if metrics_result.data:
-                    metrics = metrics_result.data[0]
-                    print(f"Last metrics: ATL: {metrics['atl']}, CTL: {metrics['ctl']}, TSB: {metrics['tsb']}")
-                    print(f"Last date: {last_date}")
-                    return last_date, metrics
-                else:
-                    print("No metrics found for last date")
                     return last_date, {'atl': 0, 'ctl': 0, 'tsb': 0}
+                
+                # Return the metrics from the last date
+                metrics = {
+                    'atl': float(data['atl']),
+                    'ctl': float(data['ctl']),
+                    'tsb': float(data['tsb'])
+                }
+                print(f"Last metrics: ATL: {metrics['atl']}, CTL: {metrics['ctl']}, TSB: {metrics['tsb']}")
+                print(f"Last date: {last_date}")
+                return last_date, metrics
             else:
                 print("No existing data found")
                 # If no data found, return 7 days ago
