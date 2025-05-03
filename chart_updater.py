@@ -370,6 +370,7 @@ class ChartUpdater:
         previous_date = current_date - datetime.timedelta(days=1)
         previous_date_str = previous_date.strftime('%Y-%m-%d')
         
+        # First try to get the previous day's metrics
         response = self.client.table('garmin_data') \
             .select('trimp, atl, ctl, tsb') \
             .eq('user_id', self.user_id) \
@@ -384,9 +385,27 @@ class ChartUpdater:
                 'tsb': float(data['tsb'])
             }
         else:
-            # If no previous day data, use the initial metrics from find_last_existing_date
-            _, initial_metrics = self.find_last_existing_date()
-            return initial_metrics
+            # If no previous day data, look for the most recent metrics before this date
+            response = self.client.table('garmin_data') \
+                .select('trimp, atl, ctl, tsb') \
+                .eq('user_id', self.user_id) \
+                .lt('date', date_str) \
+                .order('date', desc=True) \
+                .limit(1) \
+                .execute()
+                
+            if response.data and len(response.data) > 0:
+                data = response.data[0]
+                print(f"Found metrics from {data.get('date')} to use for {date_str}")
+                return {
+                    'atl': float(data['atl']),
+                    'ctl': float(data['ctl']),
+                    'tsb': float(data['tsb'])
+                }
+            else:
+                # If no data found at all, use zeros
+                print(f"No previous metrics found for {date_str}, using zeros")
+                return {'atl': 0, 'ctl': 0, 'tsb': 0}
 
     def get_activities_for_date(self, date):
         try:
