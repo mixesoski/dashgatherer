@@ -101,14 +101,13 @@ class ChartUpdater:
             raise Exception(f"Failed to initialize Garmin client: {str(e)}")
 
     def find_last_existing_date(self):
-        """Find the last date with TRIMP > 0 in the database, looking back at least 7 days."""
+        """Find the last date with any data in the database, looking back at least 7 days."""
         print("Finding last existing date...")
         try:
-            # First, get the most recent date with TRIMP > 0
+            # Get the most recent date with any data
             result = self.client.table('garmin_data') \
-                .select('date') \
+                .select('date, atl, ctl, tsb') \
                 .eq('user_id', self.user_id) \
-                .gt('trimp', 0) \
                 .order('date', desc=True) \
                 .limit(1) \
                 .execute()
@@ -123,7 +122,7 @@ class ChartUpdater:
                     # If that fails, try parsing just the date part
                     last_date = datetime.datetime.strptime(date_str.split('T')[0], '%Y-%m-%d').date()
                 
-                print(f"Found last date with TRIMP > 0: {last_date}")
+                print(f"Found last date with data: {last_date}")
                 
                 # Get the date 7 days before today
                 seven_days_ago = datetime.datetime.now().date() - datetime.timedelta(days=7)
@@ -141,14 +140,15 @@ class ChartUpdater:
                     .execute()
                 
                 if metrics_result.data:
-                    print(f"Last metrics: ATL: {metrics_result.data[0]['atl']}, CTL: {metrics_result.data[0]['ctl']}, TSB: {metrics_result.data[0]['tsb']}")
+                    metrics = metrics_result.data[0]
+                    print(f"Last metrics: ATL: {metrics['atl']}, CTL: {metrics['ctl']}, TSB: {metrics['tsb']}")
                     print(f"Last date: {last_date}")
-                    return last_date, metrics_result.data[0]
+                    return last_date, metrics
                 else:
                     print("No metrics found for last date")
                     return last_date, {'atl': 0, 'ctl': 0, 'tsb': 0}
             else:
-                print("No existing data found with TRIMP > 0")
+                print("No existing data found")
                 # If no data found, return 7 days ago
                 seven_days_ago = datetime.datetime.now().date() - datetime.timedelta(days=7)
                 print(f"Using {seven_days_ago} as start date")
