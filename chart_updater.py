@@ -651,27 +651,18 @@ class ChartUpdater:
             print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
 
-            # Update if exists, else insert
-            if existing_response.data and len(existing_response.data) > 0:
-                self.client.table('garmin_data').update({
-                    'trimp': total_trimp,
-                    'activity': combined_activity_str,
-                    'atl': new_metrics['atl'],
-                    'ctl': new_metrics['ctl'],
-                    'tsb': new_metrics['tsb']
-                }).eq('user_id', self.user_id).eq('date', date_key).execute()
-                print(f"Updated existing row for {date_key}")
-            else:
-                self.client.table('garmin_data').insert({
-                    'date': date_key,
-                    'trimp': total_trimp,
-                    'activity': combined_activity_str,
-                    'user_id': self.user_id,
-                    'atl': new_metrics['atl'],
-                    'ctl': new_metrics['ctl'],
-                    'tsb': new_metrics['tsb']
-                }).execute()
-                print(f"Inserted new row for {date_key}")
+            # Use upsert to ensure only one row per user/date
+            upsert_data = {
+                'date': date_key,
+                'trimp': total_trimp,
+                'activity': combined_activity_str,
+                'user_id': self.user_id,
+                'atl': new_metrics['atl'],
+                'ctl': new_metrics['ctl'],
+                'tsb': new_metrics['tsb']
+            }
+            self.client.table('garmin_data').upsert(upsert_data, on_conflict=['user_id', 'date']).execute()
+            print(f"Upserted row for {date_key}")
 
         except Exception as e:
             print(f"Error updating/inserting metrics for {date_str}: {e}")
