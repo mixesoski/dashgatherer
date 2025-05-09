@@ -624,26 +624,35 @@ class ChartUpdater:
             manual_trimp = sum(float(entry['trimp']) for entry in (manual_response.data or []) if entry.get('trimp'))
             manual_activities = [entry['activity_name'] for entry in (manual_response.data or []) if entry.get('activity_name')]
 
-            # Combine Garmin and manual data
+            # Fetch existing Garmin data for this date (if any)
+            existing_response = self.client.table('garmin_data') \
+                .select('trimp, activity') \
+                .eq('user_id', self.user_id) \
+                .eq('date', date_key) \
+                .execute()
+            existing_trimp = 0
+            existing_activities = []
+            if existing_response.data and len(existing_response.data) > 0:
+                existing = existing_response.data[0]
+                existing_trimp = float(existing.get('trimp', 0))
+                if existing.get('activity') and existing.get('activity') != 'Rest Day':
+                    existing_activities = existing.get('activity').split(', ')
+
+            # Combine all TRIMP and activities (Garmin, manual, existing)
             total_trimp = trimp_total + manual_trimp
             all_activities = []
             if activity_str != 'Rest Day':
                 all_activities.append(activity_str)
             all_activities.extend(manual_activities)
+            all_activities.extend([a for a in existing_activities if a not in all_activities])
             combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
 
             print(f"Preparing to update/insert data for {date_key}:")
             print(f"Garmin TRIMP: {trimp_total} | Manual TRIMP: {manual_trimp} | Total TRIMP: {total_trimp}")
             print(f"ATL: {new_metrics['atl']} | CTL: {new_metrics['ctl']} | TSB: {new_metrics['tsb']}")
 
-            # Check if row exists
-            existing = self.client.table('garmin_data') \
-                .select('id') \
-                .eq('user_id', self.user_id) \
-                .eq('date', date_key) \
-                .execute()
-            if existing.data and len(existing.data) > 0:
-                # Update
+            # Update if exists, else insert
+            if existing_response.data and len(existing_response.data) > 0:
                 self.client.table('garmin_data').update({
                     'trimp': total_trimp,
                     'activity': combined_activity_str,
@@ -653,7 +662,6 @@ class ChartUpdater:
                 }).eq('user_id', self.user_id).eq('date', date_key).execute()
                 print(f"Updated existing row for {date_key}")
             else:
-                # Insert
                 self.client.table('garmin_data').insert({
                     'date': date_key,
                     'trimp': total_trimp,
