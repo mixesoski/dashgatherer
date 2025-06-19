@@ -3,6 +3,7 @@ from flask_cors import CORS
 from direct_garmin_sync import sync_garmin_data
 from sync_metrics_calculator import calculate_sync_metrics
 from chart_updater import update_chart_data
+from manual_data_processor import add_manual_entry, update_manual_entry, delete_manual_entry
 from supabase import create_client, Client
 import os
 import traceback
@@ -77,11 +78,14 @@ def log_error(error_message, exception=None):
     """Funkcja do szczegółowego logowania błędów w terminalu"""
     print("\n" + "="*50)
     print(f"ERROR: {error_message}")
+    print(f"TIMESTAMP: {datetime.now().isoformat()}")
     if exception:
         print(f"EXCEPTION TYPE: {type(exception).__name__}")
         print(f"EXCEPTION MESSAGE: {str(exception)}")
         print("\nTRACEBACK:")
         traceback.print_exc(file=sys.stdout)
+        if hasattr(exception, 'cause'):
+            print(f"\nCAUSE: {exception.cause}")
     print("="*50 + "\n")
 
 @app.route('/')
@@ -176,6 +180,114 @@ def update_chart():
             'error': str(e)
         }), 500
 
+@app.route('/api/manual-entry', methods=['POST'])
+def manual_entry():
+    try:
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        user = verify_auth_token(auth_header)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+
+        data = request.json
+        user_id = user.user.id
+        date_str = data.get('date')
+        trimp_value = data.get('trimp')
+        activity_name = data.get('activity_name')
+        
+        # Validate required fields
+        if not date_str or not trimp_value or not activity_name:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+            
+        # Validate TRIMP value
+        try:
+            trimp_value = float(trimp_value)
+            if trimp_value < 0:
+                return jsonify({'success': False, 'error': 'TRIMP value must be positive'}), 400
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid TRIMP value'}), 400
+        
+        # Add manual entry
+        result = add_manual_entry(user_id, date_str, trimp_value, activity_name)
+        
+        if result.get('success', False):
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        log_error("Error in manual_entry endpoint", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/manual-entry/<int:entry_id>', methods=['PUT'])
+def update_manual_entry_endpoint(entry_id):
+    try:
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        user = verify_auth_token(auth_header)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+
+        data = request.json
+        date_str = data.get('date')
+        trimp_value = data.get('trimp')
+        activity_name = data.get('activity_name')
+        
+        # Validate required fields
+        if not date_str or not trimp_value or not activity_name:
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+            
+        # Validate TRIMP value
+        try:
+            trimp_value = float(trimp_value)
+            if trimp_value < 0:
+                return jsonify({'success': False, 'error': 'TRIMP value must be positive'}), 400
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid TRIMP value'}), 400
+        
+        # Verify ownership of the entry
+        entry = get_manual_entry_by_id(entry_id)
+        if not entry or entry.get('user_id') != user.user.id:
+            return jsonify({'success': False, 'error': 'Entry not found or not owned by user'}), 404
+        
+        # Update manual entry
+        result = update_manual_entry(entry_id, date_str, trimp_value, activity_name)
+        
+        if result.get('success', False):
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        log_error("Error in update_manual_entry endpoint", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/manual-entry/<int:entry_id>', methods=['DELETE'])
+def delete_manual_entry_endpoint(entry_id):
+    try:
+        # Verify authentication
+        auth_header = request.headers.get('Authorization')
+        user = verify_auth_token(auth_header)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or missing authentication token'}), 401
+        
+        # Verify ownership of the entry
+        entry = get_manual_entry_by_id(entry_id)
+        if not entry or entry.get('user_id') != user.user.id:
+            return jsonify({'success': False, 'error': 'Entry not found or not owned by user'}), 404
+        
+        # Delete manual entry
+        result = delete_manual_entry(entry_id)
+        
+        if result.get('success', False):
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        log_error("Error in delete_manual_entry endpoint", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint for Render"""
@@ -215,6 +327,21 @@ def auth_callback():
     except Exception as e:
         print(f"Error in auth callback: {e}")
         return str(e), 500
+
+def get_manual_entry_by_id(entry_id):
+    """Get a manual entry by ID - helper function for API endpoints"""
+    try:
+        response = supabase.table('manual_data') \
+            .select('*') \
+            .eq('id', entry_id) \
+            .execute()
+            
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"Error getting manual entry {entry_id}: {e}")
+        return None
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))

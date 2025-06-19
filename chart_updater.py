@@ -11,6 +11,7 @@ import logging
 import time
 import math
 from datetime import timedelta
+from manual_data_processor import batch_fetch_garmin_data, batch_fetch_manual_data
 
 load_dotenv()
 
@@ -41,6 +42,11 @@ class ChartUpdater:
             self.user_id = user_id
         self.garmin = None
         self.processed_activity_ids = set()
+        # Cache for data to reduce database calls
+        self.data_cache = {
+            'garmin_data': {},
+            'manual_data': {}
+        }
 
     def get_garmin_credentials(self):
         try:
@@ -247,6 +253,29 @@ class ChartUpdater:
             
             print(f"\nProcessing dates from {start_date} to {end_date}")
             
+            # Batch fetch all garmin_data and manual_data for the date range to reduce database calls
+            # This is a key optimization to reduce API usage
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Get all garmin_data for the date range
+            garmin_data_list = batch_fetch_garmin_data(self.user_id, start_date_str, end_date_str)
+            
+            # Get all manual_data for the date range
+            manual_data_list = batch_fetch_manual_data(self.user_id, start_date_str, end_date_str)
+            
+            # Organize data by date for faster lookup
+            for item in garmin_data_list:
+                date_str = item['date'].split('T')[0] if 'T' in item['date'] else item['date']
+                self.data_cache['garmin_data'][date_str] = item
+                
+            # Group manual data by date
+            for item in manual_data_list:
+                date_str = item['date'].split('T')[0] if 'T' in item['date'] else item['date']
+                if date_str not in self.data_cache['manual_data']:
+                    self.data_cache['manual_data'][date_str] = []
+                self.data_cache['manual_data'][date_str].append(item)
+            
             # If we're not force refreshing, we need the previous metrics
             if not force_refresh and last_date:
                 print(f"\n=== Initial metrics from {last_date} ===")
@@ -265,8 +294,8 @@ class ChartUpdater:
                 date_str = date.strftime('%Y-%m-%d')
                 logging.info(f"Processing date: {date_str}")
                 
-                # Get existing data for this date
-                existing_data = self.get_existing_data(date_str)
+                # Get existing data for this date from cache
+                existing_data = self.data_cache['garmin_data'].get(date_str)
                 
                 # Skip if data already exists and we're not force refreshing
                 if existing_data and not force_refresh:
@@ -303,19 +332,31 @@ class ChartUpdater:
                     if existing_data.get('activity') and existing_data.get('activity') != 'Rest Day':
                         activity_names = existing_data.get('activity').split(', ')
                 
-                # Calculate new metrics
-                new_metrics = self.calculate_new_metrics(trimp_total, previous_metrics)
+                # Get manual data for this date from cache
+                manual_data = self.data_cache['manual_data'].get(date_str, [])
                 
-                # Determine activity string
-                activity_str = ', '.join(activity_names) if activity_names else 'Rest Day'
+                # Add manual TRIMP and activities
+                manual_trimp = sum(float(entry.get('trimp', 0)) for entry in manual_data)
+                manual_activities = [entry.get('activity_name') for entry in manual_data if entry.get('activity_name')]
+                
+                # Combine Garmin and manual data
+                combined_trimp = trimp_total + manual_trimp
+                combined_activities = activity_names + manual_activities
+                
+                # Remove duplicates and filter out empty strings
+                combined_activities = list(set(filter(None, combined_activities)))
+                activity_str = ', '.join(combined_activities) if combined_activities else 'Rest Day'
+                
+                # Calculate new metrics
+                new_metrics = self.calculate_new_metrics(combined_trimp, previous_metrics)
                 
                 # Store the metrics we just calculated as they'll be needed for the next day
                 previous_metrics = new_metrics
                 
                 # Update the database
-                self.update_database_entry(date_str, trimp_total, new_metrics, activity_str, force_refresh)
+                self.update_database_entry(date_str, combined_trimp, new_metrics, activity_str, force_refresh)
                 
-                print(f"Updated metrics for {date_str}: TRIMP={trimp_total}, Activity={activity_str}")
+                print(f"Updated metrics for {date_str}: TRIMP={combined_trimp}, Activity={activity_str}")
                 print(f"Metrics: ATL={new_metrics['atl']}, CTL={new_metrics['ctl']}, TSB={new_metrics['tsb']}")
                 
                 updated_count += 1
@@ -333,6 +374,10 @@ class ChartUpdater:
             return {'success': False, 'error': str(e)}
 
     def get_existing_data(self, date_str):
+        # First check the cache
+        if date_str in self.data_cache['garmin_data']:
+            return self.data_cache['garmin_data'][date_str]
+            
         try:
             # Always use 'YYYY-MM-DD' format for date
             response = self.client.table('garmin_data') \
@@ -341,6 +386,8 @@ class ChartUpdater:
                 .eq('date', date_str) \
                 .execute()
             if response.data and len(response.data) > 0:
+                # Update cache
+                self.data_cache['garmin_data'][date_str] = response.data[0]
                 return response.data[0]
             return None
         except Exception as e:
@@ -353,7 +400,17 @@ class ChartUpdater:
         previous_date = current_date - datetime.timedelta(days=1)
         previous_date_str = previous_date.strftime('%Y-%m-%d')
         
-        # First try to get the previous day's metrics
+        # First check the cache for the previous day
+        if previous_date_str in self.data_cache['garmin_data']:
+            data = self.data_cache['garmin_data'][previous_date_str]
+            if data.get('atl') is not None:
+                return {
+                    'atl': float(data['atl']),
+                    'ctl': float(data['ctl']),
+                    'tsb': float(data['tsb'])
+                }
+        
+        # If not in cache, query the database
         response = self.client.table('garmin_data') \
             .select('trimp, atl, ctl, tsb') \
             .eq('user_id', self.user_id) \
@@ -362,6 +419,8 @@ class ChartUpdater:
             
         if response.data and ((isinstance(response.data, list) and len(response.data) > 0) or (not isinstance(response.data, list))):
             data = response.data[0] if isinstance(response.data, list) else response.data
+            # Update cache
+            self.data_cache['garmin_data'][previous_date_str] = data
             return {
                 'atl': float(data['atl']),
                 'ctl': float(data['ctl']),
@@ -615,34 +674,25 @@ class ChartUpdater:
         try:
             date_key = date_str  # Always 'YYYY-MM-DD'
 
-            # Fetch manual data
-            manual_response = self.client.table('manual_data') \
-                .select('trimp, activity_name') \
-                .eq('user_id', self.user_id) \
-                .eq('date', date_key) \
-                .execute()
-            manual_trimp = sum(float(entry['trimp']) for entry in (manual_response.data or []) if entry.get('trimp'))
-            manual_activities = [entry['activity_name'] for entry in (manual_response.data or []) if entry.get('activity_name')]
+            # Get manual data from cache
+            manual_data = self.data_cache['manual_data'].get(date_key, [])
+            manual_trimp = sum(float(entry['trimp']) for entry in manual_data if entry.get('trimp'))
+            manual_activities = [entry['activity_name'] for entry in manual_data if entry.get('activity_name')]
 
-            # Fetch existing Garmin data for this date (if any)
-            existing_response = self.client.table('garmin_data') \
-                .select('trimp, activity') \
-                .eq('user_id', self.user_id) \
-                .eq('date', date_key) \
-                .execute()
+            # Get existing Garmin data from cache
+            existing_data = self.data_cache['garmin_data'].get(date_key)
             existing_trimp = 0
             existing_activities = []
-            if existing_response.data and len(existing_response.data) > 0:
-                existing = existing_response.data[0]
-                existing_trimp = float(existing.get('trimp', 0))
-                if existing.get('activity') and existing.get('activity') != 'Rest Day':
-                    existing_activities = existing.get('activity').split(', ')
+            if existing_data:
+                existing_trimp = float(existing_data.get('trimp', 0))
+                if existing_data.get('activity') and existing_data.get('activity') != 'Rest Day':
+                    existing_activities = existing_data.get('activity').split(', ')
 
             # Combine all TRIMP and activities (Garmin, manual, existing)
             total_trimp = trimp_total + manual_trimp
             all_activities = []
             if activity_str != 'Rest Day':
-                all_activities.append(activity_str)
+                all_activities.extend(activity_str.split(', '))
             all_activities.extend(manual_activities)
             all_activities.extend([a for a in existing_activities if a not in all_activities])
             combined_activity_str = ', '.join(all_activities) if all_activities else 'Rest Day'
@@ -661,179 +711,18 @@ class ChartUpdater:
                 'ctl': new_metrics['ctl'],
                 'tsb': new_metrics['tsb']
             }
+            
+            # Update the database
             self.client.table('garmin_data').upsert(upsert_data, on_conflict=['user_id', 'date']).execute()
+            
+            # Update the cache
+            self.data_cache['garmin_data'][date_key] = upsert_data
+            
             print(f"Upserted row for {date_key}")
 
         except Exception as e:
             print(f"Error updating/inserting metrics for {date_str}: {e}")
             print(f"Traceback: {traceback.format_exc()}")
-
-    def process_activity(self, activity, date_str):
-        """Process a single activity and extract TRIMP data"""
-        try:
-            activity_id = activity.get('activityId')
-            activity_name = activity.get('activityName', 'Unknown')
-            activity_type = activity.get('activityType', {}).get('typeKey', 'unknown')
-            
-            print(f"Processing activity: {activity_name} (ID: {activity_id}, Type: {activity_type})")
-            
-            # For strength training, we'll use a different approach
-            if activity_type == 'strength_training':
-                return self.process_strength_training(activity, date_str)
-            
-            # Try to get detailed activity data to extract TRIMP
-            try:
-                activity_details = self.garmin.get_activity_details(activity_id)
-                
-                # Look for connectIQMeasurements which contains TRIMP data
-                if 'connectIQMeasurements' in activity_details:
-                    measurements = activity_details['connectIQMeasurements']
-                    print(f"Found connectIQMeasurements with {len(measurements)} items")
-                    
-                    # The TRIMP value is typically in the measurement with developerFieldNumber 4
-                    for measurement in measurements:
-                        if measurement.get('developerFieldNumber') == 4:
-                            trimp_value = float(measurement.get('value', 0))
-                            print(f"FOUND TRIMP: {trimp_value}")
-                            
-                            # Update the current date's data
-                            if date_str in self.data:
-                                self.data[date_str]['trimp'] += trimp_value
-                                self.data[date_str]['activity_count'] += 1
-                            else:
-                                self.data[date_str] = {
-                                    'trimp': trimp_value,
-                                    'activity_count': 1
-                                }
-                            
-                            return True
-                
-                # Fallback to calculated TRIMP if no connectIQ measurements found
-                return self.calculate_trimp_from_activity(activity, date_str)
-                
-            except Exception as e:
-                print(f"Error getting activity details: {e}")
-                # Fallback to calculated TRIMP
-                return self.calculate_trimp_from_activity(activity, date_str)
-            
-        except Exception as e:
-            print(f"Error processing activity: {e}")
-            return False
-
-    def calculate_trimp_from_activity(self, activity, date_str):
-        """Calculate TRIMP from activity data as a fallback method"""
-        try:
-            # Extract relevant data
-            duration_minutes = activity.get('duration', 0) / 60  # Convert to minutes
-            avg_hr = activity.get('averageHR', 0)
-            
-            if duration_minutes <= 0 or avg_hr <= 0:
-                print("Activity missing duration or heart rate data, can't calculate TRIMP")
-                return False
-            
-            # Get user profile to determine max HR
-            try:
-                today = datetime.date.today().strftime("%Y-%m-%d")
-                user_profile = self.garmin.get_user_summary(cdate=today)
-                max_hr = user_profile.get('userMetrics', {}).get('maxHeartRate', 220)
-                if not max_hr or max_hr <= 0:
-                    max_hr = 220  # Default max HR if not available
-            except:
-                # Use a default calculation if profile not available
-                max_hr = 220
-            
-            # Calculate heart rate reserve
-            hr_reserve_percent = (avg_hr - 60) / (max_hr - 60)
-            
-            # Calculate TRIMP using Banister's formula
-            gender_factor = 1.92  # For males, use 1.67 for females
-            trimp = duration_minutes * hr_reserve_percent * 0.64 * math.exp(gender_factor * hr_reserve_percent)
-            
-            print(f"Calculated TRIMP: {trimp:.2f} for activity {activity.get('activityName')}")
-            
-            # Update the current date's data
-            if date_str in self.data:
-                self.data[date_str]['trimp'] += trimp
-                self.data[date_str]['activity_count'] += 1
-            else:
-                self.data[date_str] = {
-                    'trimp': trimp,
-                    'activity_count': 1
-                }
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error calculating TRIMP: {e}")
-            return False
-
-    def process_strength_training(self, activity, date_str):
-        """Process strength training activity and estimate TRIMP"""
-        try:
-            activity_id = activity.get('activityId')
-            
-            # First try to get TRIMP from connectIQMeasurements
-            try:
-                activity_details = self.garmin.get_activity_details(activity_id)
-                
-                # Look for connectIQMeasurements which contains TRIMP data
-                if 'connectIQMeasurements' in activity_details:
-                    measurements = activity_details['connectIQMeasurements']
-                    
-                    # The TRIMP value is typically in the measurement with developerFieldNumber 4
-                    for measurement in measurements:
-                        if measurement.get('developerFieldNumber') == 4:
-                            trimp_value = float(measurement.get('value', 0))
-                            print(f"FOUND TRIMP for strength training: {trimp_value}")
-                            
-                            # Update the current date's data
-                            if date_str in self.data:
-                                self.data[date_str]['trimp'] += trimp_value
-                                self.data[date_str]['activity_count'] += 1
-                            else:
-                                self.data[date_str] = {
-                                    'trimp': trimp_value,
-                                    'activity_count': 1
-                                }
-                            
-                            return True
-            except Exception as e:
-                print(f"Error getting strength training details: {e}")
-            
-            # Fallback to estimation based on duration and HR
-            duration_minutes = activity.get('duration', 0) / 60
-            avg_hr = activity.get('averageHR', 0)
-            
-            if duration_minutes <= 0:
-                print("Strength training missing duration data")
-                return False
-            
-            # Apply a simplified formula for strength training
-            # Strength training typically has lower continuous cardiovascular load
-            if avg_hr > 0:
-                # If we have HR data, use a simplified TRIMP calculation
-                estimated_trimp = duration_minutes * (avg_hr / 180) * 1.2
-            else:
-                # Without HR data, estimate based on duration only
-                estimated_trimp = duration_minutes * 0.8  # Conservative estimate
-            
-            print(f"Estimated TRIMP for strength training: {estimated_trimp:.2f}")
-            
-            # Update the current date's data
-            if date_str in self.data:
-                self.data[date_str]['trimp'] += estimated_trimp
-                self.data[date_str]['activity_count'] += 1
-            else:
-                self.data[date_str] = {
-                    'trimp': estimated_trimp,
-                    'activity_count': 1
-                }
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error processing strength training: {e}")
-            return False
 
 def update_chart_data(user_id, force_refresh=False):
     updater = ChartUpdater(user_id)

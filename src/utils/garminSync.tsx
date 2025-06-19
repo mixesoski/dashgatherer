@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ProgressToast } from "@/components/ui/ProgressToast";
@@ -199,6 +198,117 @@ export const updateGarminData = async (userId: string) => {
         toast.error('Error syncing data', {
             position: window.innerWidth < 768 ? 'bottom-center' : 'top-right'
         });
+        return false;
+    }
+};
+
+// New function to handle manual training entries
+export const addManualTraining = async (date: string, trimp: number, activityName: string) => {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData.session?.access_token;
+        
+        console.log('Adding manual training:', { date, trimp, activityName });
+        
+        const response = await fetch(`${API_URL}/api/manual-entry`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache, no-store'
+            },
+            body: JSON.stringify({ 
+                date,
+                trimp,
+                activity_name: activityName
+            })
+        });
+        
+        const data = await response.json();
+        console.log('Manual entry response:', data);
+        
+        if (data.success) {
+            toast.success('Training added successfully!');
+            return true;
+        } else {
+            toast.error(data.error || 'Failed to add training');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error adding manual training:', error);
+        toast.error('Error adding training data');
+        return false;
+    }
+};
+
+// Function to update an existing manual entry
+export const updateManualTraining = async (entryId: number, date: string, trimp: number, activityName: string) => {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData.session?.access_token;
+        
+        console.log('Updating manual training:', { entryId, date, trimp, activityName });
+        
+        const response = await fetch(`${API_URL}/api/manual-entry/${entryId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache, no-store'
+            },
+            body: JSON.stringify({ 
+                date,
+                trimp,
+                activity_name: activityName
+            })
+        });
+        
+        const data = await response.json();
+        console.log('Update manual entry response:', data);
+        
+        if (data.success) {
+            toast.success('Training updated successfully!');
+            return true;
+        } else {
+            toast.error(data.error || 'Failed to update training');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error updating manual training:', error);
+        toast.error('Error updating training data');
+        return false;
+    }
+};
+
+// Function to delete a manual entry
+export const deleteManualTraining = async (entryId: number) => {
+    try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const authToken = sessionData.session?.access_token;
+        
+        console.log('Deleting manual training:', { entryId });
+        
+        const response = await fetch(`${API_URL}/api/manual-entry/${entryId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache, no-store'
+            }
+        });
+        
+        const data = await response.json();
+        console.log('Delete manual entry response:', data);
+        
+        if (data.success) {
+            toast.success('Training deleted successfully!');
+            return true;
+        } else {
+            toast.error(data.error || 'Failed to delete training');
+            return false;
+        }
+    } catch (error) {
+        console.error('Error deleting manual training:', error);
+        toast.error('Error deleting training data');
         return false;
     }
 };
