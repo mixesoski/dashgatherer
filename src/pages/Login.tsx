@@ -106,7 +106,7 @@ const Login = () => {
       
       if (sessionError) {
         console.error("Session check error:", sessionError);
-        setError("Nieprawidłowe dane logowania");
+        setError("Session check failed. Please try again.");
         return;
       }
       
@@ -141,7 +141,7 @@ const Login = () => {
       }
       
       if (event === 'TOKEN_REFRESHED') {
-        console.log('Token odświeżony pomyślnie');
+        console.log('Token refreshed successfully');
       }
     });
     
@@ -171,6 +171,7 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null); // Clear previous errors
     
     try {
       if (view === "sign_up") {
@@ -189,7 +190,14 @@ const Login = () => {
         
         if (signUpError) {
           console.error('Error signing up:', signUpError);
-          setError(signUpError.message);
+          // Provide more specific error messages
+          if (signUpError.message.includes('already registered')) {
+            setError('An account with this email already exists. Please try logging in instead.');
+          } else if (signUpError.message.includes('password')) {
+            setError('Password must be at least 6 characters long.');
+          } else {
+            setError(signUpError.message);
+          }
         } else {
           // Add profile entry directly from the client side
           if (data.user) {
@@ -237,7 +245,16 @@ const Login = () => {
         
         if (signInError) {
           console.error('Error logging in:', signInError);
-          setError(signInError.message);
+          // Provide more helpful error messages
+          if (signInError.message.includes('Invalid login credentials')) {
+            setError('Invalid email or password. Please check your credentials and try again.');
+          } else if (signInError.message.includes('Email not confirmed')) {
+            setError('Please check your email and click the confirmation link before logging in.');
+          } else if (signInError.message.includes('Too many requests')) {
+            setError('Too many login attempts. Please wait a few minutes before trying again.');
+          } else {
+            setError(signInError.message);
+          }
         } else {
           toast({
             title: "Welcome back!",
@@ -293,6 +310,7 @@ const Login = () => {
                 value={formData.email} 
                 onChange={handleInputChange} 
                 className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" 
+                required
               />
             </div>
 
@@ -304,6 +322,8 @@ const Login = () => {
                 value={formData.password} 
                 onChange={handleInputChange} 
                 className="w-full bg-white text-black placeholder:text-gray-500 border-gray-300" 
+                required
+                minLength={6}
               />
             </div>
 
@@ -337,7 +357,10 @@ const Login = () => {
                   Don't have an account yet?{" "}
                   <button 
                     type="button" 
-                    onClick={() => setView("sign_up")} 
+                    onClick={() => {
+                      setView("sign_up");
+                      setError(null); // Clear errors when switching views
+                    }} 
                     className="text-black underline hover:text-gray-700"
                   >
                     Sign up
@@ -348,7 +371,10 @@ const Login = () => {
                   Already have an account?{" "}
                   <button 
                     type="button" 
-                    onClick={() => setView("sign_in")} 
+                    onClick={() => {
+                      setView("sign_in");
+                      setError(null); // Clear errors when switching views
+                    }} 
                     className="text-black underline hover:text-gray-700"
                   >
                     Login

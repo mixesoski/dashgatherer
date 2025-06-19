@@ -14,13 +14,14 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configure CORS
+# Configure CORS - Added localhost:8080 to allowed origins
 CORS(app, resources={
     r"/api/*": {
         "origins": [
             "https://dashgatherer.lovable.app",
             "http://localhost:5173",
-            "http://localhost:3000"
+            "http://localhost:3000",
+            "http://localhost:8080"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Cache-Control"],
@@ -48,7 +49,8 @@ def log_request_info():
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin in ["https://dashgatherer.lovable.app", "http://localhost:5173", "http://localhost:3000"]:
+    # Added localhost:8080 to allowed origins
+    if origin in ["https://dashgatherer.lovable.app", "http://localhost:5173", "http://localhost:3000", "http://localhost:8080"]:
         response.headers.add('Access-Control-Allow-Origin', origin)
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Cache-Control')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
